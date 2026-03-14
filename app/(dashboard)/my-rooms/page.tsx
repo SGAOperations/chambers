@@ -142,20 +142,24 @@ export default function MyRoomsPage() {
 
   const filteredUpcoming = all.filter(b => isWithinDays(b.date, filter))
 
-  if (loading) return <div className="text-gray-500">Loading...</div>
+  if (loading) return <div className="text-slate-500 text-sm">Loading...</div>
 
   return (
     <div className="space-y-10">
       {/* My Upcoming Spaces */}
       <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold">My Upcoming Spaces</h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-bold text-[#0f172a]">My Upcoming Spaces</h2>
           <div className="flex gap-2">
             {([1, 3, 7] as Filter[]).map(d => (
               <button
                 key={d}
                 onClick={() => setFilter(d)}
-                className={`px-3 py-1 rounded text-sm border ${filter === d ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300 hover:bg-gray-100'}`}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                  filter === d
+                    ? 'bg-[#0a1628] text-white border-[#0a1628]'
+                    : 'border-[#e2e8f0] text-slate-600 hover:border-slate-400 bg-white'
+                }`}
               >
                 Next {d} Day{d > 1 ? 's' : ''}
               </button>
@@ -164,21 +168,21 @@ export default function MyRoomsPage() {
         </div>
 
         {filteredUpcoming.length === 0 ? (
-          <p className="text-gray-400 text-sm">No upcoming spaces in this range.</p>
+          <p className="text-slate-400 text-sm">No upcoming spaces in this range.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredUpcoming.map(b => (
-              <div key={b.id} className={`border-l-4 rounded-lg p-4 shadow-sm ${statusColors[b.status] || 'bg-gray-100 border-gray-400'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{b.type}</span>
-                  <span className={`text-xs font-semibold ${statusTextColors[b.status] || 'text-gray-600'}`}>{b.status}</span>
+              <div key={b.id} className={`rounded-xl p-5 shadow-sm border ${statusColors[b.status] || 'bg-gray-100 border-gray-400'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{b.type}</span>
+                  <span className={`text-xs font-semibold ${statusTextColors[b.status] || 'text-slate-600'}`}>{b.status}</span>
                 </div>
-                <p className="font-bold text-gray-900">{b.bodyName}</p>
-                <p className="text-sm text-gray-700">{b.location}</p>
-                <p className="text-sm text-gray-600">{formatDate(b.date)}</p>
-                <p className="text-sm text-gray-600">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                <p className="font-semibold text-[#0f172a]">{b.bodyName}</p>
+                <p className="text-sm text-slate-600 mt-0.5">{b.location}</p>
+                <p className="text-sm text-slate-500 mt-1">{formatDate(b.date)}</p>
+                <p className="text-sm text-slate-500">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                 {b.reservationCode && (
-                  <p className="text-xs text-gray-500 mt-1">Code: {b.reservationCode}</p>
+                  <p className="text-xs text-slate-400 mt-2">Code: {b.reservationCode}</p>
                 )}
               </div>
             ))}
@@ -188,20 +192,20 @@ export default function MyRoomsPage() {
 
       {/* All Bookings */}
       <section>
-        <h2 className="text-xl font-bold mb-4">All Bookings</h2>
+        <h2 className="text-xl font-bold text-[#0f172a] mb-5">All Bookings</h2>
         {all.length === 0 ? (
-          <p className="text-gray-400 text-sm">No bookings found.</p>
+          <p className="text-slate-400 text-sm">No bookings found.</p>
         ) : (
-          <div className="divide-y border rounded-lg overflow-hidden">
+          <div className="divide-y divide-[#e2e8f0] border border-[#e2e8f0] rounded-xl overflow-hidden bg-white">
             {all.map(b => (
-              <div key={b.id} className="flex items-center gap-4 px-4 py-3 bg-white hover:bg-gray-50">
-                <div className={`w-2 h-10 rounded-full flex-shrink-0 ${statusColors[b.status]?.split(' ')[0] || 'bg-gray-300'}`} />
+              <div key={b.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors">
+                <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusColors[b.status]?.split(' ')[0] || 'bg-slate-300'}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">{b.bodyName} — {b.location}</p>
-                  <p className="text-sm text-gray-500">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                  <p className="font-semibold text-slate-800 truncate">{b.bodyName} — {b.location}</p>
+                  <p className="text-sm text-slate-500">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                 </div>
-                <span className="text-xs text-gray-400 flex-shrink-0">{b.type}</span>
-                <span className={`text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-gray-600'}`}>{b.status}</span>
+                <span className="text-xs text-slate-400 flex-shrink-0">{b.type}</span>
+                <span className={`text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-slate-600'}`}>{b.status}</span>
               </div>
             ))}
           </div>
