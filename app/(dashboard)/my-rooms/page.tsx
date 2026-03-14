@@ -133,7 +133,12 @@ export default function MyRoomsPage() {
 
       flat.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
 
-      setAll(flat)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const futureOnly = flat.filter(b => new Date(b.date + 'T00:00:00') >= today)
+
+      setAll(futureOnly)
       setLoading(false)
     }
 
