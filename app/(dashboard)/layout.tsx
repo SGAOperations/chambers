@@ -10,20 +10,29 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const [isAdmin, setIsAdmin] = useState(false)
-  const router = useRouter()
-  const pathname = usePathname()
-  const supabase = createClient()
 
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user?.app_metadata?.is_admin) {
-        setIsAdmin(true)
-      }
-    }
-    checkUser()
-  }, [])
+const [isAdmin, setIsAdmin] = useState(false)
+const [isLeadership, setIsLeadership] = useState(false)
+const router = useRouter()
+const pathname = usePathname()
+const supabase = createClient()
+
+useEffect(() => {
+  const checkUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user?.app_metadata?.is_admin) setIsAdmin(true)
+
+    const { data: memberships } = await supabase
+      .from('board_memberships')
+      .select('role')
+      .eq('user_id', user?.id)
+      .eq('role', 'Leadership')
+      .limit(1)
+
+    if (memberships && memberships.length > 0) setIsLeadership(true)
+  }
+  checkUser()
+}, [])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -57,12 +66,13 @@ export default function DashboardLayout({
               <span className="text-white/70 text-sm font-medium">Space Manager</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">Northeastern University</p>
-            <p className="text-slate-600 text-xs mt-1">v1.2.0-alpha</p>
+            <p className="text-slate-600 text-xs mt-1">v1.3.0-alpha</p>
           </div>
 
           {/* Nav links */}
           <div className="flex flex-col gap-1 px-3 py-4 flex-1">
             {navLink('/my-rooms', 'My Rooms')}
+            {(isLeadership || isAdmin) && navLink('/request', 'Request a Booking')}
             {isAdmin && navLink('/management', 'Management')}
           </div>
 

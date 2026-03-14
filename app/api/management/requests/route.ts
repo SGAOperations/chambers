@@ -1,5 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+
+const adminSupabase = createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function GET() {
   const supabase = await createClient()
@@ -12,7 +18,7 @@ export async function GET() {
   const { data: requests } = await supabase
     .from('room_requests')
     .select(`
-      id, type, purpose, status, notes, created_at,
+      id, type, purpose, status, notes, created_at, body_id,
       bodies(name),
       users(full_name),
       room_request_details(room_name, start_date, start_time, end_time, end_date),
@@ -31,14 +37,25 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { id, status } = await request.json()
+  const { id, status, booking_id, notes } = await request.json()
 
-  const { error } = await supabase
+  // Update request status and notes
+  const { error: requestError } = await adminSupabase
     .from('room_requests')
-    .update({ status })
+    .update({ status, notes: notes || null })
     .eq('id', id)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (requestError) return NextResponse.json({ error: requestError.message }, { status: 500 })
+
+  // Link booking if fulfilling
+  if (status === 'Fulfilled' && booking_id) {
+    const { error: bookingError } = await adminSupabase
+      .from('bookings')
+      .update({ request_id: id })
+      .eq('id', booking_id)
+
+    if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 })
+  }
 
   return NextResponse.json({ success: true })
 }

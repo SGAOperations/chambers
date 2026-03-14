@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import FulfillModal from './fulfill-modal'
 
 type RequestStatus = 'Pending' | 'Fulfilled' | 'Denied'
 
 interface RoomRequest {
   id: string
+  body_id: string
   type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
   purpose: string
   status: RequestStatus
@@ -51,6 +53,12 @@ export default function RequestsTab() {
   const [requests, setRequests] = useState<RoomRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
+  const [fulfillingRequest, setFulfillingRequest] = useState<{
+  id: string
+  type: string
+  purpose: string
+  body_id: string
+} | null>(null)
 
   const fetchRequests = async () => {
     const res = await fetch('/api/management/requests')
@@ -130,9 +138,9 @@ export default function RequestsTab() {
           {r.status === 'Pending' && (
             <div className="flex gap-2 pt-1">
               <button
-                onClick={() => updateStatus(r.id, 'Fulfilled')}
+                onClick={() => setFulfillingRequest({ id: r.id, type: r.type, purpose: r.purpose, body_id: r.body_id })}
                 disabled={updating === r.id}
-                className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium transition-colors"
+                className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
               >
                 Fulfill
               </button>
@@ -143,6 +151,13 @@ export default function RequestsTab() {
               >
                 Deny
               </button>
+              {fulfillingRequest && (
+                <FulfillModal
+                    request={fulfillingRequest}
+                    onClose={() => setFulfillingRequest(null)}
+                    onSuccess={fetchRequests}
+                />
+              )}
             </div>
           )}
         </div>
