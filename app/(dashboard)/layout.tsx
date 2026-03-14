@@ -73,7 +73,7 @@ export default function DashboardLayout({
 
   return (
     <AuthGuard>
-      <div className="flex min-h-screen">
+      <div className="flex h-screen">
         <nav className="w-56 bg-[#0a1628] flex flex-col flex-shrink-0">
           {/* Brand */}
           <div className="px-5 py-5 border-b border-white/10">
@@ -82,7 +82,7 @@ export default function DashboardLayout({
               <span className="text-white/70 text-sm font-medium">Space Manager</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">Northeastern University</p>
-            <p className="text-slate-600 text-xs mt-1">v1.0.0 (Unreleased)</p>
+            <p className="text-slate-600 text-xs mt-1">v1.0.1 (SGA Unreleased)</p>
           </div>
 
           {/* Nav links */}
@@ -111,7 +111,7 @@ export default function DashboardLayout({
           </div>
         </nav>
 
-        <main className="flex-1 bg-[#f4f6f9] p-8 min-h-screen">
+        <main className="flex-1 bg-[#f4f6f9] p-8 overflow-y-auto">
           {children}
         </main>
       </div>
