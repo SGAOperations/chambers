@@ -49,10 +49,15 @@ const statusColors: Record<RequestStatus, string> = {
   Denied: 'bg-red-100 text-red-800',
 }
 
-export default function RequestsTab() {
+interface RequestsTabProps {
+    onCountChange: () => void
+}
+
+export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   const [requests, setRequests] = useState<RoomRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
+  const [confirmingDenial, setConfirmingDenial] = useState<string | null>(null)
   const [fulfillingRequest, setFulfillingRequest] = useState<{
   id: string
   type: string
@@ -79,6 +84,7 @@ export default function RequestsTab() {
       body: JSON.stringify({ id, status }),
     })
     await fetchRequests()
+    onCountChange()
     setUpdating(null)
   }
 
@@ -136,32 +142,54 @@ export default function RequestsTab() {
 
           {/* Actions */}
           {r.status === 'Pending' && (
-            <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => setFulfillingRequest({ id: r.id, type: r.type, purpose: r.purpose, body_id: r.body_id })}
-                disabled={updating === r.id}
-                className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-              >
-                Fulfill
-              </button>
-              <button
-                onClick={() => updateStatus(r.id, 'Denied')}
-                disabled={updating === r.id}
-                className="px-3 py-1.5 text-sm bg-[#c8102e] text-white rounded-lg hover:bg-[#a00d24] disabled:opacity-50 font-medium transition-colors"
-              >
-                Deny
-              </button>
-              {fulfillingRequest && (
-                <FulfillModal
-                    request={fulfillingRequest}
-                    onClose={() => setFulfillingRequest(null)}
-                    onSuccess={fetchRequests}
-                />
-              )}
-            </div>
+            confirmingDenial === r.id ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-slate-600">Are you sure?</span>
+                <button
+                  onClick={() => {
+                    updateStatus(r.id, 'Denied')
+                    setConfirmingDenial(null)
+                  }}
+                  disabled={updating === r.id}
+                  className="px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  Yes, Deny
+                </button>
+                <button
+                  onClick={() => setConfirmingDenial(null)}
+                  className="px-3 py-1 text-sm border border-[#e2e8f0] text-slate-700 rounded-lg hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setFulfillingRequest({ id: r.id, type: r.type, purpose: r.purpose, body_id: r.body_id })}
+                  disabled={updating === r.id}
+                  className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  Fulfill
+                </button>
+                <button
+                  onClick={() => setConfirmingDenial(r.id)}
+                  disabled={updating === r.id}
+                  className="px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  Deny
+                </button>
+              </div>
+            )
           )}
         </div>
       ))}
+      {fulfillingRequest && (
+        <FulfillModal
+          request={fulfillingRequest}
+          onClose={() => setFulfillingRequest(null)}
+          onSuccess={fetchRequests}
+        />
+      )}
     </div>
   )
 }

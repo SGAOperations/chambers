@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import CancelModal from './cancel-modal'
 
 type Filter = 1 | 3 | 7
 
@@ -28,6 +29,7 @@ const statusTextColors: Record<string, string> = {
 
 interface FlatBooking {
   id: string
+  bookingId: string //parent booking id
   type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
   bodyName: string
   purpose: string
@@ -63,22 +65,30 @@ function isWithinDays(dateStr: string, days: number) {
 
 export default function MyRoomsPage() {
   const [filter, setFilter] = useState<Filter>(7)
-  const [upcoming, setUpcoming] = useState<FlatBooking[]>([])
   const [all, setAll] = useState<FlatBooking[]>([])
   const [loading, setLoading] = useState(true)
+  const [cancellingBooking, setCancellingBooking] = useState<{
+    id: string
+    type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
+    bodyName: string
+    purpose: string
+    location: string
+    date: string
+    occurrenceId?: string
+  } | null>(null)
 
-  useEffect(() => {
-    const fetchBookings = async () => {
+  const fetchBookings = async () => {
+      setLoading(true)
       const res = await fetch('/api/my-rooms')
       const data = await res.json()
       const flat: FlatBooking[] = []
 
-      // One-time rooms
       for (const b of data.oneTimeBookings || []) {
         const d = b.one_time_room_bookings?.[0]
         if (!d) continue
         flat.push({
           id: b.id,
+          bookingId: b.id,
           type: 'One-Time Room',
           bodyName: b.bodies?.name || '',
           purpose: b.purpose,
@@ -91,58 +101,58 @@ export default function MyRoomsPage() {
         })
       }
 
-      // Weekly rooms — use occurrences, fall back to parent values
       for (const b of data.weeklyBookings || []) {
         const w = b.weekly_room_bookings?.[0]
         if (!w) continue
         for (const occ of w.weekly_room_occurrences || []) {
           flat.push({
-            id: occ.id,
-            type: 'Weekly Room',
-            bodyName: b.bodies?.name || '',
-            purpose: b.purpose,
-            location: occ.room_name || w.room_name,
-            date: occ.occurrence_date,
-            startTime: occ.start_time || w.start_time,
-            endTime: occ.end_time || w.end_time,
-            status: occ.status || w.status,
-            reservationCode: occ.reservation_code || w.reservation_code,
-          })
-        }
+          id: occ.id,
+          bookingId: b.id,
+          type: 'Weekly Room',
+          bodyName: b.bodies?.name || '',
+          purpose: b.purpose,
+          location: occ.room_name || w.room_name,
+          date: occ.occurrence_date,
+          startTime: occ.start_time || w.start_time,
+          endTime: occ.end_time || w.end_time,
+          status: occ.status || w.status,
+          reservationCode: occ.reservation_code || w.reservation_code,
+        })
       }
-
-      // Tabling — one entry per session
-      for (const b of data.tablingBookings || []) {
-        const t = b.tabling_bookings?.[0]
-        if (!t) continue
-        for (const s of t.tabling_sessions || []) {
-          flat.push({
-            id: s.id,
-            type: 'Tabling',
-            bodyName: b.bodies?.name || '',
-            purpose: b.purpose,
-            location: s.location,
-            date: s.session_date,
-            startTime: s.start_time,
-            endTime: s.end_time,
-            status: s.status,
-            reservationCode: s.reservation_code,
-          })
-        }
-      }
-
-      flat.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
-
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-
-      const futureOnly = flat.filter(b => new Date(b.date + 'T00:00:00') >= today)
-
-      setAll(futureOnly)
-      setLoading(false)
     }
 
+    for (const b of data.tablingBookings || []) {
+      const t = b.tabling_bookings?.[0]
+      if (!t) continue
+      for (const s of t.tabling_sessions || []) {
+        flat.push({
+          id: s.id,
+          bookingId: b.id,
+          type: 'Tabling',
+          bodyName: b.bodies?.name || '',
+          purpose: b.purpose,
+          location: s.location,
+          date: s.session_date,
+          startTime: s.start_time,
+          endTime: s.end_time,
+          status: s.status,
+          reservationCode: s.reservation_code,
+        })
+      }
+    }
+
+    flat.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const futureOnly = flat.filter(b => new Date(b.date + 'T00:00:00') >= today)
+    setAll(futureOnly)
+    setLoading(false)
+  }
+
+  useEffect(() => {
     fetchBookings()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const filteredUpcoming = all.filter(b => isWithinDays(b.date, filter))
@@ -211,11 +221,36 @@ export default function MyRoomsPage() {
                 </div>
                 <span className="text-xs text-slate-400 flex-shrink-0">{b.type}</span>
                 <span className={`text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-slate-600'}`}>{b.status}</span>
+                <button
+                  onClick={() => setCancellingBooking({
+                    id: b.bookingId,
+                    type: b.type,
+                    bodyName: b.bodyName,
+                    purpose: b.purpose,
+                    location: b.location,
+                    date: b.date,
+                    occurrenceId: b.type === 'Weekly Room' ? b.id : undefined,
+                  })}
+                  className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors flex-shrink-0"
+                >
+                  Cancel
+                </button>
               </div>
             ))}
           </div>
         )}
       </section>
+      {cancellingBooking && (
+        <CancelModal
+          booking={cancellingBooking}
+          onClose={() => setCancellingBooking(null)}
+          onSuccess={() => {
+            setCancellingBooking(null)
+            // Refetch bookings
+            fetchBookings()
+          }}
+        />
+      )}
     </div>
   )
 }

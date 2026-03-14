@@ -10,47 +10,63 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isLeadership, setIsLeadership] = useState(false)
+  const [counts, setCounts] = useState({ requests: 0, cancellations: 0, total: 0 })
+  const router = useRouter()
+  const pathname = usePathname()
+  const supabase = createClient()
 
-const [isAdmin, setIsAdmin] = useState(false)
-const [isLeadership, setIsLeadership] = useState(false)
-const router = useRouter()
-const pathname = usePathname()
-const supabase = createClient()
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.app_metadata?.is_admin) {
+        setIsAdmin(true)
+        fetchCounts()
+      }
 
-useEffect(() => {
-  const checkUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user?.app_metadata?.is_admin) setIsAdmin(true)
+      const { data: memberships } = await supabase
+        .from('board_memberships')
+        .select('role')
+        .eq('user_id', user?.id)
+        .eq('role', 'Leadership')
+        .limit(1)
 
-    const { data: memberships } = await supabase
-      .from('board_memberships')
-      .select('role')
-      .eq('user_id', user?.id)
-      .eq('role', 'Leadership')
-      .limit(1)
+      if (memberships && memberships.length > 0) setIsLeadership(true)
+    }
+    checkUser()
+  }, [])
 
-    if (memberships && memberships.length > 0) setIsLeadership(true)
+  const fetchCounts = async () => {
+    const res = await fetch('/api/management/counts')
+    if (res.ok) {
+      const data = await res.json()
+      setCounts(data)
+    }
   }
-  checkUser()
-}, [])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
     router.push('/')
   }
 
-  const navLink = (href: string, label: string) => {
-    const isActive = pathname === href || pathname.startsWith(href + '/')
+  const navLink = (href: string, label: string, badge?: number) => {
+  const isActive = pathname === href || pathname.startsWith(href + '/')
     return (
       <a
         href={href}
-        className={`flex items-center px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+        className={`flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
           isActive
             ? 'bg-white/15 text-white'
             : 'text-slate-400 hover:bg-white/10 hover:text-white'
-        }`}
+          }`}
       >
-        {label}
+        <span>{label}</span>
+        {badge ? (
+          <span className="bg-[#c8102e] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+            {badge}
+          </span>
+        ) : null}
       </a>
     )
   }
@@ -66,7 +82,7 @@ useEffect(() => {
               <span className="text-white/70 text-sm font-medium">Space Manager</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">Northeastern University</p>
-            <p className="text-slate-600 text-xs mt-1">v1.4.0-alpha</p>
+            <p className="text-slate-600 text-xs mt-1">v1.0.0</p>
           </div>
 
           {/* Nav links */}
@@ -76,8 +92,16 @@ useEffect(() => {
             {isAdmin && navLink('/management', 'Management')}
           </div>
 
-          {/* Sign out */}
-          <div className="px-3 py-4 border-t border-white/10">
+          {/* Total badge + Sign out */}
+          <div className="px-3 py-4 border-t border-white/10 space-y-1">
+            {isAdmin && counts.total > 0 && (
+              <div className="flex items-center justify-between px-4 py-2">
+                <span className="text-xs text-slate-500">Pending Actions</span>
+                <span className="bg-[#c8102e] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                  {counts.total}
+                </span>
+              </div>
+            )}
             <button
               onClick={handleLogout}
               className="w-full flex items-center px-4 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-white/10 hover:text-white transition-all text-left"
