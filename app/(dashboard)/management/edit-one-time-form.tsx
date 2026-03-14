@@ -19,25 +19,46 @@ interface Body {
   name: string
 }
 
-interface OneTimeFormProps {
+interface EditOneTimeFormProps {
+  booking: {
+    id: string
+    body_id: string
+    purpose: string
+    one_time_room_bookings: {
+      id: string
+      room_name: string
+      booking_date: string
+      start_time: string
+      end_time: string
+      status: string
+      reservation_code: string | null
+    }[] | null
+  }
   bodies: Body[]
   onClose: () => void
   onSuccess: () => void
 }
 
-export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormProps) {
+const inputCls = "w-full border border-[#e2e8f0] rounded-lg px-3 py-2.5 text-sm text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition"
+const labelCls = "block text-xs font-medium text-slate-500 mb-1"
+
+export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }: EditOneTimeFormProps) {
+  const d = booking.one_time_room_bookings?.[0]
+
   const [form, setForm] = useState({
-    body_id: '',
-    purpose: '',
-    room_name: '',
-    booking_date: '',
-    start_time: '',
-    end_time: '',
-    reservation_code: '',
-    status: 'Reserved',
+    body_id: booking.body_id,
+    purpose: booking.purpose,
+    room_name: d?.room_name ?? '',
+    booking_date: d?.booking_date ?? '',
+    start_time: d?.start_time.slice(0, 5) ?? '',
+    end_time: d?.end_time.slice(0, 5) ?? '',
+    reservation_code: d?.reservation_code ?? '',
+    status: d?.status ?? '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  if (!d) return null
 
   const handleSubmit = async () => {
     if (!form.body_id || !form.purpose || !form.room_name || !form.booking_date || !form.start_time || !form.end_time) {
@@ -47,9 +68,13 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
 
     setSaving(true)
     const res = await fetch('/api/management/bookings/one-time', {
-      method: 'POST',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({
+        booking_id: booking.id,
+        detail_id: d.id,
+        ...form,
+      }),
     })
 
     if (res.ok) {
@@ -61,9 +86,6 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
     }
     setSaving(false)
   }
-
-  const inputCls = "w-full border border-[#e2e8f0] rounded-lg px-3 py-2.5 text-sm text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition"
-  const labelCls = "block text-xs font-medium text-slate-500 mb-1"
 
   return (
     <div className="space-y-3">
@@ -85,7 +107,6 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
         <label className={labelCls}>Purpose *</label>
         <input
           type="text"
-          placeholder="e.g. Club Meeting"
           value={form.purpose}
           onChange={e => setForm({ ...form, purpose: e.target.value })}
           className={inputCls}
@@ -96,7 +117,6 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
         <label className={labelCls}>Room Name *</label>
         <input
           type="text"
-          placeholder="e.g. Curry 318"
           value={form.room_name}
           onChange={e => setForm({ ...form, room_name: e.target.value })}
           className={inputCls}
@@ -156,7 +176,7 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
           disabled={saving}
           className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
         >
-          {saving ? 'Saving...' : 'Create Booking'}
+          {saving ? 'Saving...' : 'Save Changes'}
         </button>
         <button
           onClick={onClose}

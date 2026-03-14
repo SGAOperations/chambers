@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import TimePicker from './time-picker'
 
 const STATUSES = [
   'Reserved',
@@ -132,21 +133,11 @@ export default function WeeklyForm({ bodies, onClose, onSuccess }: WeeklyFormPro
       <div className="flex gap-3">
         <div className="flex-1">
           <label className={labelCls}>Start Time *</label>
-          <input
-            type="time"
-            value={form.start_time}
-            onChange={e => setForm({ ...form, start_time: e.target.value })}
-            className={inputCls}
-          />
+          <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
         </div>
         <div className="flex-1">
           <label className={labelCls}>End Time *</label>
-          <input
-            type="time"
-            value={form.end_time}
-            onChange={e => setForm({ ...form, end_time: e.target.value })}
-            className={inputCls}
-          />
+          <TimePicker value={form.end_time} onChange={v => setForm({ ...form, end_time: v })} />
         </div>
       </div>
 

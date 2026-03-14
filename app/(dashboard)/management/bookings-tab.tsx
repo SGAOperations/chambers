@@ -5,6 +5,9 @@ import BookingModal from './booking-modal'
 import OneTimeForm from './one-time-form'
 import WeeklyForm from './weekly-form'
 import TablingForm from './tabling-form'
+import EditOneTimeForm from './edit-one-time-form'
+import EditWeeklyForm from './edit-weekly-form'
+import EditTablingForm from './edit-tabling-form'
 
 type BookingSubTab = 'One-Time Rooms' | 'Weekly Rooms' | 'Tables'
 
@@ -15,9 +18,11 @@ interface Body {
 
 interface OneTimeBooking {
   id: string
+  body_id: string
   purpose: string
   bodies: { name: string } | null
   one_time_room_bookings: {
+    id: string
     room_name: string
     booking_date: string
     start_time: string
@@ -29,9 +34,11 @@ interface OneTimeBooking {
 
 interface WeeklyBooking {
   id: string
+  body_id: string
   purpose: string
   bodies: { name: string } | null
   weekly_room_bookings: {
+    id: string
     room_name: string
     start_date: string
     end_date: string
@@ -39,14 +46,26 @@ interface WeeklyBooking {
     end_time: string
     status: string
     reservation_code: string | null
+    weekly_room_occurrences: {
+        id: string
+        occurrence_date: string
+        room_name: string | null
+        start_time: string | null
+        end_time: string | null
+        status: string | null
+        reservation_code: string | null
+    }[]
   }[] | null
 }
 
 interface TablingBooking {
   id: string
+  body_id: string
   purpose: string
   bodies: { name: string } | null
   tabling_bookings: {
+    id: string
+    reservation_code: string | null
     tabling_sessions: {
       location: string
       session_date: string
@@ -91,6 +110,9 @@ export default function BookingsTab() {
   const [bodies, setBodies] = useState<Body[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editingBooking, setEditingBooking] = useState<OneTimeBooking | null>(null)
+  const [editingWeekly, setEditingWeekly] = useState<WeeklyBooking | null>(null)
+  const [editingTabling, setEditingTabling] = useState<TablingBooking | null>(null)
 
   const fetchBookings = async () => {
     const res = await fetch('/api/management/bookings')
@@ -172,6 +194,47 @@ export default function BookingsTab() {
           )}
         </BookingModal>
       )}
+      {editingBooking && (
+        <BookingModal
+            title="Edit One-Time Room Booking"
+            onClose={() => setEditingBooking(null)}
+        >
+            <EditOneTimeForm
+                booking={editingBooking}
+                bodies={bodies}
+                onClose={() => setEditingBooking(null)}
+                onSuccess={fetchBookings}
+            />
+        </BookingModal>
+      )}
+
+      {editingWeekly && (
+        <BookingModal
+            title="Edit Weekly Room Booking"
+            onClose={() => setEditingWeekly(null)}
+        >
+            <EditWeeklyForm
+                booking={editingWeekly}
+                bodies={bodies}
+                onClose={() => setEditingWeekly(null)}
+                onSuccess={fetchBookings}
+            />
+        </BookingModal>
+      )}
+
+      {editingTabling && (
+        <BookingModal
+            title="Edit Tabling Booking"
+            onClose={() => setEditingTabling(null)}
+        >
+            <EditTablingForm
+                booking={editingTabling}
+                bodies={bodies}
+                onClose={() => setEditingTabling(null)}
+                onSuccess={fetchBookings}
+            />
+        </BookingModal>
+      )}
 
       {/* One-Time Rooms */}
       {subTab === 'One-Time Rooms' && (
@@ -189,9 +252,17 @@ export default function BookingsTab() {
                       <p className="font-semibold text-[#0f172a]">{b.bodies?.name}</p>
                       <p className="text-sm text-slate-500">{b.purpose}</p>
                     </div>
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[d.status] || 'bg-slate-100 text-slate-700'}`}>
-                      {d.status}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[d.status] || 'bg-slate-100 text-slate-700'}`}>
+                        {d.status}
+                      </span>
+                      <button
+                        onClick={() => setEditingBooking(b)}
+                        className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-3 text-sm text-slate-600 space-y-0.5">
                     <p><span className="font-medium text-slate-700">Room:</span> {d.room_name}</p>
@@ -222,9 +293,17 @@ export default function BookingsTab() {
                       <p className="font-semibold text-[#0f172a]">{b.bodies?.name}</p>
                       <p className="text-sm text-slate-500">{b.purpose}</p>
                     </div>
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-slate-100 text-slate-700'}`}>
-                      {w.status}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-slate-100 text-slate-700'}`}>
+                        {w.status}
+                      </span>
+                      <button
+                        onClick={() => setEditingWeekly(b)}
+                        className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </div>
                   <div className="mt-3 text-sm text-slate-600 space-y-0.5">
                     <p><span className="font-medium text-slate-700">Room:</span> {w.room_name}</p>
@@ -250,7 +329,15 @@ export default function BookingsTab() {
               if (!t) return null
               return (
                 <div key={b.id} className="border border-[#e2e8f0] rounded-xl p-5 bg-white shadow-sm">
-                  <p className="font-semibold text-[#0f172a]">{b.bodies?.name}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-[#0f172a]">{b.bodies?.name}</p>
+                    <button
+                      onClick={() => setEditingTabling(b)}
+                      className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+                    >
+                      Edit
+                    </button>
+                  </div>
                   <p className="text-sm text-slate-500 mb-3">{b.purpose}</p>
                   <div className="space-y-2">
                     {t.tabling_sessions.map((s, i) => (

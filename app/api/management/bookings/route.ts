@@ -12,9 +12,9 @@ export async function GET() {
   const { data: oneTime } = await supabase
     .from('bookings')
     .select(`
-      id, purpose,
+      id, purpose, body_id,
       bodies(name),
-      one_time_room_bookings(room_name, booking_date, start_time, end_time, status, reservation_code)
+      one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
     `)
     .eq('type', 'One-Time Room')
     .order('created_at', { ascending: false })
@@ -22,9 +22,11 @@ export async function GET() {
   const { data: weekly } = await supabase
     .from('bookings')
     .select(`
-      id, purpose,
+      id, purpose, body_id,
       bodies(name),
-      weekly_room_bookings(room_name, start_date, end_date, start_time, end_time, status, reservation_code)
+      weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
+        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code)
+      )
     `)
     .eq('type', 'Weekly Room')
     .order('created_at', { ascending: false })
@@ -32,9 +34,9 @@ export async function GET() {
   const { data: tabling } = await supabase
     .from('bookings')
     .select(`
-      id, purpose,
+      id, purpose, body_id,
       bodies(name),
-      tabling_bookings(
+      tabling_bookings(id, reservation_code,
         tabling_sessions(location, session_date, start_time, end_time, status, reservation_code)
       )
     `)

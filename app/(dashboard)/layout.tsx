@@ -57,6 +57,7 @@ export default function DashboardLayout({
               <span className="text-white/70 text-sm font-medium">Space Manager</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">Northeastern University</p>
+            <p className="text-slate-600 text-xs mt-1">v1.2.0-alpha</p>
           </div>
 
           {/* Nav links */}

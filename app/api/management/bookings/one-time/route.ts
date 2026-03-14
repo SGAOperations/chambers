@@ -35,3 +35,30 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ success: true })
 }
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || !user.app_metadata?.is_admin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { booking_id, detail_id, body_id, purpose, room_name, booking_date, start_time, end_time, reservation_code, status } = await request.json()
+
+  const { error: bookingError } = await adminSupabase
+    .from('bookings')
+    .update({ body_id, purpose })
+    .eq('id', booking_id)
+
+  if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 })
+
+  const { error: detailError } = await adminSupabase
+    .from('one_time_room_bookings')
+    .update({ room_name, booking_date, start_time, end_time, reservation_code: reservation_code || null, status })
+    .eq('id', detail_id)
+
+  if (detailError) return NextResponse.json({ error: detailError.message }, { status: 500 })
+
+  return NextResponse.json({ success: true })
+}

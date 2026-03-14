@@ -20,14 +20,27 @@ interface Body {
 }
 
 interface Session {
+  id?: string
   location: string
   session_date: string
   start_time: string
   end_time: string
   status: string
+  reservation_code: string | null
+  isNew?: boolean
 }
 
-interface TablingFormProps {
+interface EditTablingFormProps {
+  booking: {
+    id: string
+    body_id: string
+    purpose: string
+    tabling_bookings: {
+      id: string
+      reservation_code: string | null
+      tabling_sessions: Session[]
+    }[] | null
+  }
   bodies: Body[]
   onClose: () => void
   onSuccess: () => void
@@ -42,19 +55,29 @@ const emptySession = (): Session => ({
   start_time: '09:00',
   end_time: '10:00',
   status: 'Reserved',
+  reservation_code: null,
+  isNew: true,
 })
 
-export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormProps) {
+export default function EditTablingForm({ booking, bodies, onClose, onSuccess }: EditTablingFormProps) {
+  const t = booking.tabling_bookings?.[0]
+
   const [form, setForm] = useState({
-    body_id: '',
-    purpose: '',
-    reservation_code: '',
+    body_id: booking.body_id,
+    purpose: booking.purpose,
+    reservation_code: t?.reservation_code ?? '',
   })
-  const [sessions, setSessions] = useState<Session[]>([emptySession()])
+
+  const [sessions, setSessions] = useState<Session[]>(
+    t?.tabling_sessions.map(s => ({ ...s, start_time: s.start_time.slice(0, 5), end_time: s.end_time.slice(0, 5) })) || []
+  )
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const updateSession = (index: number, field: keyof Session, value: string) => {
+  if (!t) return null
+
+  const updateSession = (index: number, field: keyof Session, value: string | null) => {
     setSessions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
   }
 
@@ -71,6 +94,8 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
       return
     }
 
+console.log('sessions before validation:', JSON.stringify(sessions))
+
     for (const s of sessions) {
       if (!s.location || !s.session_date || !s.start_time || !s.end_time) {
         setError('Please fill out all required session fields.')
@@ -80,9 +105,14 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
 
     setSaving(true)
     const res = await fetch('/api/management/bookings/tabling', {
-      method: 'POST',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, sessions }),
+      body: JSON.stringify({
+        booking_id: booking.id,
+        tabling_id: t.id,
+        ...form,
+        sessions,
+      }),
     })
 
     if (res.ok) {
@@ -99,27 +129,15 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
     <div className="space-y-4">
       <div>
         <label className={labelCls}>Body *</label>
-        <select
-          value={form.body_id}
-          onChange={e => setForm({ ...form, body_id: e.target.value })}
-          className={inputCls}
-        >
+        <select value={form.body_id} onChange={e => setForm({ ...form, body_id: e.target.value })} className={inputCls}>
           <option value="">Select Body</option>
-          {bodies.map(b => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
+          {bodies.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
       </div>
 
       <div>
         <label className={labelCls}>Purpose *</label>
-        <input
-          type="text"
-          placeholder="e.g. Involvement Fair"
-          value={form.purpose}
-          onChange={e => setForm({ ...form, purpose: e.target.value })}
-          className={inputCls}
-        />
+        <input type="text" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} className={inputCls} />
       </div>
 
       <div>
@@ -148,7 +166,9 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
         {sessions.map((s, i) => (
           <div key={i} className="border border-[#e2e8f0] rounded-xl p-4 space-y-3 bg-[#f4f6f9]">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Session {i + 1}</span>
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                Session {i + 1} {s.isNew && <span className="text-[#c8102e]">· New</span>}
+              </span>
               {sessions.length > 1 && (
                 <button
                   onClick={() => removeSession(i)}
@@ -198,9 +218,7 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
                 onChange={e => updateSession(i, 'status', e.target.value)}
                 className={inputCls}
               >
-                {STATUSES.map(st => (
-                  <option key={st} value={st}>{st}</option>
-                ))}
+                {STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
               </select>
             </div>
           </div>
@@ -215,7 +233,7 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
           disabled={saving}
           className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
         >
-          {saving ? 'Saving...' : 'Create Booking'}
+          {saving ? 'Saving...' : 'Save Changes'}
         </button>
         <button
           onClick={onClose}

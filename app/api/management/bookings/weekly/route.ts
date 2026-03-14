@@ -63,3 +63,58 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ success: true })
 }
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || !user.app_metadata?.is_admin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { booking_id, weekly_id, body_id, purpose, room_name, start_date, end_date, start_time, end_time, reservation_code, status, occurrences } = await request.json()
+
+  // Update parent booking
+  const { error: bookingError } = await adminSupabase
+    .from('bookings')
+    .update({ body_id, purpose })
+    .eq('id', booking_id)
+
+  if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 })
+
+  // Update weekly booking base fields
+  const { error: weeklyError } = await adminSupabase
+    .from('weekly_room_bookings')
+    .update({ room_name, start_date, end_date, start_time, end_time, reservation_code: reservation_code || null, status })
+    .eq('id', weekly_id)
+
+  if (weeklyError) return NextResponse.json({ error: weeklyError.message }, { status: 500 })
+
+  // Regenerate occurrences — delete all and reinsert
+  await adminSupabase
+    .from('weekly_room_occurrences')
+    .delete()
+    .eq('weekly_booking_id', weekly_id)
+
+  const dates = getWeeklyDates(start_date, end_date)
+  const newOccurrences = dates.map(date => {
+    const existing = occurrences.find((o: { occurrence_date: string; room_name: string | null; start_time: string | null; end_time: string | null; status: string | null; reservation_code: string | null }) => o.occurrence_date === date)
+    return {
+      weekly_booking_id: weekly_id,
+      occurrence_date: date,
+      room_name: existing?.room_name || null,
+      start_time: existing?.start_time || null,
+      end_time: existing?.end_time || null,
+      status: existing?.status || null,
+      reservation_code: existing?.reservation_code || null,
+    }
+  })
+
+  const { error: occError } = await adminSupabase
+    .from('weekly_room_occurrences')
+    .insert(newOccurrences)
+
+  if (occError) return NextResponse.json({ error: occError.message }, { status: 500 })
+
+  return NextResponse.json({ success: true })
+}
