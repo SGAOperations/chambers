@@ -106,9 +106,9 @@ export default function UsersTab() {
     await fetchUsers()
   }
 
-  if (loading) return <div className="text-slate-500 text-sm">Loading...</div>
+  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
 
-  const inputCls = "w-full border border-[#e2e8f0] rounded-lg px-3 py-2.5 text-sm text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition"
+  const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 
   return (
     <div className="space-y-4">
@@ -124,8 +124,8 @@ export default function UsersTab() {
 
       {/* Create user form */}
       {showCreateForm && (
-        <div className="border border-[#e2e8f0] rounded-xl p-5 bg-slate-50 space-y-3">
-          <h3 className="font-semibold text-[#0f172a]">Create New User</h3>
+        <div className="border border-[#1e5080] rounded-xl p-5 bg-[#0f2a4a] space-y-3">
+          <h3 className="font-semibold text-[#f0f6ff]">Create New User</h3>
           <input
             type="text"
             placeholder="Full Name"
@@ -160,7 +160,7 @@ export default function UsersTab() {
             </button>
             <button
               onClick={() => setShowCreateForm(false)}
-              className="px-4 py-2 border border-[#e2e8f0] text-slate-700 text-sm rounded-lg hover:bg-white transition-colors"
+              className="px-4 py-2 border border-[#1e5080] text-[#f0f6ff] text-sm rounded-lg hover:bg-[#1a4d8a] transition-colors"
             >
               Cancel
             </button>
@@ -170,50 +170,50 @@ export default function UsersTab() {
 
       {/* Users list */}
       {users.length === 0 ? (
-        <p className="text-slate-400 text-sm">No users found.</p>
+        <p className="text-[#6a96bb] text-sm">No users found.</p>
       ) : (
         users.map(u => (
-          <div key={u.id} className="border border-[#e2e8f0] rounded-xl bg-white shadow-sm">
+          <div key={u.id} className="border border-[#1e5080] rounded-xl bg-[#184073] shadow-sm">
             {/* User row */}
             <div
-              className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50 rounded-xl transition-colors"
+              className="flex items-center justify-between p-4 cursor-pointer hover:bg-[#1a4d8a] rounded-xl transition-colors"
               onClick={() => setExpandedUser(expandedUser === u.id ? null : u.id)}
             >
               <div>
-                <p className="font-semibold text-[#0f172a]">{u.full_name}</p>
-                <p className="text-sm text-slate-500">{u.email}</p>
+                <p className="font-semibold text-[#f0f6ff]">{u.full_name}</p>
+                <p className="text-sm text-[#93b8d8]">{u.email}</p>
                 {u.admin_role && (
                   <p className="text-xs text-[#c8102e] font-medium mt-0.5">{u.admin_role}</p>
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <span className={`text-xs px-2 py-1 rounded-full font-medium ${u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${u.is_active ? 'bg-[#0f3d20] text-[#4ade80]' : 'bg-[#3d0f0f] text-[#f87171]'}`}>
                   {u.is_active ? 'Active' : 'Inactive'}
                 </span>
-                <span className="text-slate-400 text-xs">{expandedUser === u.id ? '▲' : '▼'}</span>
+                <span className="text-[#6a96bb] text-xs">{expandedUser === u.id ? '▲' : '▼'}</span>
               </div>
             </div>
 
             {/* Expanded section */}
             {expandedUser === u.id && (
-              <div className="border-t border-[#e2e8f0] px-4 py-4 space-y-4 bg-slate-50/50 rounded-b-xl">
+              <div className="border-t border-[#1e5080] px-4 py-4 space-y-4 bg-[#0f2a4a]/50 rounded-b-xl">
                 {/* Body memberships */}
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2">Body Memberships</h4>
+                  <h4 className="text-sm font-semibold text-[#f0f6ff] mb-2">Body Memberships</h4>
                   {u.board_memberships.length === 0 ? (
-                    <p className="text-sm text-slate-400">No memberships assigned.</p>
+                    <p className="text-sm text-[#6a96bb]">No memberships assigned.</p>
                   ) : (
                     <div className="space-y-2">
                       {u.board_memberships.map(m => (
                         <div key={m.id} className="flex items-center justify-between text-sm">
-                          <span className="text-slate-700">{m.bodies?.name}</span>
+                          <span className="text-[#93b8d8]">{m.bodies?.name}</span>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => toggleMembershipRole(m.id, m.role)}
                               className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${
                                 m.role === 'Leadership'
-                                  ? 'bg-[#0a1628]/10 text-[#0a1628] hover:bg-[#0a1628]/20'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                  ? 'bg-white/15 text-[#f0f6ff] hover:bg-white/25'
+                                  : 'bg-[#1e5080]/40 text-[#93b8d8] hover:bg-[#1e5080]/60'
                               }`}
                             >
                               {m.role}
@@ -236,7 +236,7 @@ export default function UsersTab() {
                       <select
                         value={newMembership.body_id}
                         onChange={e => setNewMembership({ ...newMembership, body_id: e.target.value })}
-                        className="flex-1 border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#c8102e] focus:border-[#c8102e]"
+                        className="flex-1 bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-2 py-1.5 text-sm text-[#f0f6ff] focus:outline-none focus:ring-1 focus:ring-[#c8102e] focus:border-[#c8102e]"
                       >
                         <option value="">Select Body</option>
                         {bodies
@@ -248,7 +248,7 @@ export default function UsersTab() {
                       <select
                         value={newMembership.role}
                         onChange={e => setNewMembership({ ...newMembership, role: e.target.value })}
-                        className="border border-[#e2e8f0] rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[#c8102e] focus:border-[#c8102e]"
+                        className="bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-2 py-1.5 text-sm text-[#f0f6ff] focus:outline-none focus:ring-1 focus:ring-[#c8102e] focus:border-[#c8102e]"
                       >
                         <option value="Member">Member</option>
                         <option value="Leadership">Leadership</option>
@@ -262,7 +262,7 @@ export default function UsersTab() {
                       </button>
                       <button
                         onClick={() => setAddingMembership(null)}
-                        className="px-3 py-1.5 border border-[#e2e8f0] text-slate-700 text-sm rounded-lg hover:bg-white transition-colors"
+                        className="px-3 py-1.5 border border-[#1e5080] text-[#f0f6ff] text-sm rounded-lg hover:bg-[#1a4d8a] transition-colors"
                       >
                         Cancel
                       </button>
@@ -270,7 +270,7 @@ export default function UsersTab() {
                   ) : (
                     <button
                       onClick={() => setAddingMembership(u.id)}
-                      className="mt-2 text-sm text-[#0a1628] hover:text-[#c8102e] font-medium transition-colors"
+                      className="mt-2 text-sm text-[#93b8d8] hover:text-[#c8102e] font-medium transition-colors"
                     >
                       + Add Membership
                     </button>

@@ -59,37 +59,37 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
     setUpdating(null)
   }
 
-  if (loading) return <div className="text-slate-500 text-sm">Loading...</div>
+  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
 
   if (cancellations.length === 0) return (
-    <p className="text-slate-400 text-sm">No cancellation requests found.</p>
+    <p className="text-[#6a96bb] text-sm">No cancellation requests found.</p>
   )
 
   return (
     <div className="space-y-4">
       {cancellations.map(c => (
-        <div key={c.id} className="border border-[#e2e8f0] rounded-xl p-5 bg-white shadow-sm">
+        <div key={c.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-semibold text-[#0f172a]">{c.bookings?.bodies?.name}</p>
-              <p className="text-sm text-slate-500">{c.bookings?.purpose} · {c.bookings?.type}</p>
+              <p className="font-semibold text-[#f0f6ff]">{c.bookings?.bodies?.name}</p>
+              <p className="text-sm text-[#93b8d8]">{c.bookings?.purpose} · {c.bookings?.type}</p>
             </div>
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
               c.status === 'Pending'
-                ? 'bg-orange-100 text-orange-700'
-                : 'bg-green-100 text-green-700'
+                ? 'bg-[#3d2200] text-[#fb923c]'
+                : 'bg-[#0f3d20] text-[#4ade80]'
             }`}>
               {c.status}
             </span>
           </div>
 
-          <div className="mt-3 text-sm text-slate-600 space-y-0.5">
-            <p><span className="font-medium text-slate-700">Requested by:</span> {c.users?.full_name}</p>
-            <p><span className="font-medium text-slate-700">Scope:</span> {c.scope === 'occurrence' ? 'Single occurrence' : 'Entire series'}</p>
+          <div className="mt-3 text-sm text-[#93b8d8] space-y-0.5">
+            <p><span className="font-medium text-[#f0f6ff]">Requested by:</span> {c.users?.full_name}</p>
+            <p><span className="font-medium text-[#f0f6ff]">Scope:</span> {c.scope === 'occurrence' ? 'Single occurrence' : 'Entire series'}</p>
             {c.scope === 'occurrence' && c.weekly_room_occurrences?.occurrence_date && (
-              <p><span className="font-medium text-slate-700">Date:</span> {formatDate(c.weekly_room_occurrences.occurrence_date)}</p>
+              <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(c.weekly_room_occurrences.occurrence_date)}</p>
             )}
-            <p><span className="font-medium text-slate-700">Submitted:</span> {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+            <p><span className="font-medium text-[#f0f6ff]">Submitted:</span> {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
           </div>
 
           {c.status === 'Pending' && (

@@ -1,6 +1,6 @@
 'use client'
 
-const inputCls = "border border-[#e2e8f0] rounded-lg px-2 py-2.5 text-sm text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition w-full min-w-0"
+const inputCls = "bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-2 py-2.5 text-sm text-[#f0f6ff] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition w-full min-w-0"
 
 const hours = Array.from({ length: 12 }, (_, i) => i + 1)
 const minutes = Array.from({ length: 12 }, (_, i) => i * 5)

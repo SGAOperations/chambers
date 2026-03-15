@@ -20,8 +20,8 @@ interface FulfillModalProps {
   onSuccess: () => void
 }
 
-const inputCls = "w-full border border-[#e2e8f0] rounded-lg px-3 py-2.5 text-sm text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition"
-const labelCls = "block text-xs font-medium text-slate-500 mb-1"
+const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
+const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
 export default function FulfillModal({ request, onClose, onSuccess }: FulfillModalProps) {
   const [bookings, setBookings] = useState<Booking[]>([])
@@ -73,19 +73,19 @@ export default function FulfillModal({ request, onClose, onSuccess }: FulfillMod
     <BookingModal title="Fulfill Request" onClose={onClose}>
       <div className="space-y-4">
         {/* Request summary */}
-        <div className="bg-[#f4f6f9] rounded-lg px-4 py-3 space-y-1">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Request</p>
-          <p className="text-sm font-semibold text-[#0f172a]">{request.purpose}</p>
-          <p className="text-xs text-slate-500">{request.type}</p>
+        <div className="bg-[#0f2a4a] rounded-lg px-4 py-3 space-y-1">
+          <p className="text-xs font-medium text-[#93b8d8] uppercase tracking-wide">Request</p>
+          <p className="text-sm font-semibold text-[#f0f6ff]">{request.purpose}</p>
+          <p className="text-xs text-[#93b8d8]">{request.type}</p>
         </div>
 
         {/* Booking dropdown */}
         <div>
           <label className={labelCls}>Link to Booking *</label>
           {loading ? (
-            <p className="text-sm text-slate-400">Loading bookings...</p>
+            <p className="text-sm text-[#6a96bb]">Loading bookings...</p>
           ) : bookings.length === 0 ? (
-            <p className="text-sm text-slate-400">No unlinked {request.type} bookings found. Create one in the Bookings tab first.</p>
+            <p className="text-sm text-[#6a96bb]">No unlinked {request.type} bookings found. Create one in the Bookings tab first.</p>
           ) : (
             <select
               value={booking_id}
@@ -126,7 +126,7 @@ export default function FulfillModal({ request, onClose, onSuccess }: FulfillMod
           </button>
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-[#e2e8f0] text-slate-700 text-sm rounded-lg hover:bg-slate-50 transition-colors"
+            className="px-4 py-2 border border-[#1e5080] text-[#f0f6ff] text-sm rounded-lg hover:bg-[#1a4d8a] transition-colors"
           >
             Cancel
           </button>

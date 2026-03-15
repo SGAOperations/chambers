@@ -44,9 +44,9 @@ function formatDate(date: string) {
 }
 
 const statusColors: Record<RequestStatus, string> = {
-  Pending: 'bg-yellow-100 text-yellow-800',
-  Fulfilled: 'bg-green-100 text-green-800',
-  Denied: 'bg-red-100 text-red-800',
+  Pending: 'bg-[#3d2200] text-[#fb923c]',
+  Fulfilled: 'bg-[#0f3d20] text-[#4ade80]',
+  Denied: 'bg-[#3d0f0f] text-[#f87171]',
 }
 
 interface RequestsTabProps {
@@ -88,20 +88,20 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
     setUpdating(null)
   }
 
-  if (loading) return <div className="text-slate-500 text-sm">Loading...</div>
+  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
 
-  if (requests.length === 0) return <div className="text-slate-400 text-sm">No requests found.</div>
+  if (requests.length === 0) return <div className="text-[#6a96bb] text-sm">No requests found.</div>
 
   return (
     <div className="space-y-4">
       {requests.map(r => (
-        <div key={r.id} className="border border-[#e2e8f0] rounded-xl p-5 bg-white shadow-sm space-y-3">
+        <div key={r.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm space-y-3">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <span className="font-semibold text-[#0f172a]">{r.bodies?.name || 'Unknown Body'}</span>
-              <span className="mx-2 text-slate-300">·</span>
-              <span className="text-sm text-slate-500">{r.type}</span>
+              <span className="font-semibold text-[#f0f6ff]">{r.bodies?.name || 'Unknown Body'}</span>
+              <span className="mx-2 text-[#1e5080]">·</span>
+              <span className="text-sm text-[#93b8d8]">{r.type}</span>
             </div>
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[r.status]}`}>
               {r.status}
@@ -109,20 +109,20 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
           </div>
 
           {/* Details */}
-          <div className="text-sm text-slate-600 space-y-1">
-            <p><span className="font-medium text-slate-700">Requested by:</span> {r.users?.full_name || 'Unknown'}</p>
-            <p><span className="font-medium text-slate-700">Purpose:</span> {r.purpose}</p>
+          <div className="text-sm text-[#93b8d8] space-y-1">
+            <p><span className="font-medium text-[#f0f6ff]">Requested by:</span> {r.users?.full_name || 'Unknown'}</p>
+            <p><span className="font-medium text-[#f0f6ff]">Purpose:</span> {r.purpose}</p>
 
             {/* One-Time & Weekly details */}
             {r.room_request_details && r.room_request_details.length > 0 && (
               <div>
                 {r.room_request_details[0].room_name && (
-                  <p><span className="font-medium text-slate-700">Preferred Room:</span> {r.room_request_details[0].room_name}</p>
+                  <p><span className="font-medium text-[#f0f6ff]">Preferred Room:</span> {r.room_request_details[0].room_name}</p>
                 )}
-                <p><span className="font-medium text-slate-700">Date:</span> {formatDate(r.room_request_details[0].start_date)}</p>
-                <p><span className="font-medium text-slate-700">Time:</span> {formatTime(r.room_request_details[0].start_time)} – {formatTime(r.room_request_details[0].end_time)}</p>
+                <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(r.room_request_details[0].start_date)}</p>
+                <p><span className="font-medium text-[#f0f6ff]">Time:</span> {formatTime(r.room_request_details[0].start_time)} – {formatTime(r.room_request_details[0].end_time)}</p>
                 {r.room_request_details[0].end_date && (
-                  <p><span className="font-medium text-slate-700">Until:</span> {formatDate(r.room_request_details[0].end_date)}</p>
+                  <p><span className="font-medium text-[#f0f6ff]">Until:</span> {formatDate(r.room_request_details[0].end_date)}</p>
                 )}
               </div>
             )}
@@ -130,7 +130,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
             {/* Tabling sessions */}
             {r.tabling_request_sessions && r.tabling_request_sessions.length > 0 && (
               <div>
-                <p className="font-medium text-slate-700">Sessions:</p>
+                <p className="font-medium text-[#f0f6ff]">Sessions:</p>
                 <ul className="ml-4 space-y-0.5">
                   {r.tabling_request_sessions.map((s, i) => (
                     <li key={i}>{formatDate(s.session_date)} · {formatTime(s.start_time)} – {formatTime(s.end_time)}</li>
@@ -144,7 +144,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
           {r.status === 'Pending' && (
             confirmingDenial === r.id ? (
               <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-600">Are you sure?</span>
+                <span className="text-sm text-[#93b8d8]">Are you sure?</span>
                 <button
                   onClick={() => {
                     updateStatus(r.id, 'Denied')
@@ -157,7 +157,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
                 </button>
                 <button
                   onClick={() => setConfirmingDenial(null)}
-                  className="px-3 py-1 text-sm border border-[#e2e8f0] text-slate-700 rounded-lg hover:bg-slate-50"
+                  className="px-3 py-1 text-sm border border-[#1e5080] text-[#f0f6ff] rounded-lg hover:bg-[#1a4d8a]"
                 >
                   Cancel
                 </button>

@@ -34,17 +34,17 @@ export default function ManagementPage() {
   return (
     <AdminGuard>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-[#0f172a]">Management</h1>
+        <h1 className="text-2xl font-bold text-[#f0f6ff]">Management</h1>
 
-        <div className="flex gap-1 border-b border-[#e2e8f0]">
+        <div className="flex gap-1 border-b border-[#1e5080]">
           {(['Requests', 'Cancellations', 'Bookings', 'Users', 'Bodies'] as Tab[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab
-                  ? 'border-[#c8102e] text-[#0a1628] font-semibold'
-                  : 'border-transparent text-slate-500 hover:text-slate-700'
+                  ? 'border-[#c8102e] text-[#f0f6ff] font-semibold'
+                  : 'border-transparent text-[#93b8d8] hover:text-[#f0f6ff]'
               }`}
             >
               {tab}

@@ -49,22 +49,22 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 space-y-5">
+      <div className="bg-[#184073] rounded-2xl shadow-2xl w-full max-w-md p-8 space-y-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-[#0f172a]">Request Cancellation</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-lg leading-none transition-colors">✕</button>
+          <h2 className="text-xl font-bold text-[#f0f6ff]">Request Cancellation</h2>
+          <button onClick={onClose} className="text-[#6a96bb] hover:text-[#f0f6ff] text-lg leading-none transition-colors">✕</button>
         </div>
 
         {/* Booking summary */}
-        <div className="bg-[#f4f6f9] rounded-lg px-4 py-3 space-y-1">
-          <p className="text-sm font-semibold text-[#0f172a]">{booking.bodyName} — {booking.location}</p>
-          <p className="text-xs text-slate-500">{booking.purpose} · {booking.type}</p>
+        <div className="bg-[#0f2a4a] rounded-lg px-4 py-3 space-y-1">
+          <p className="text-sm font-semibold text-[#f0f6ff]">{booking.bodyName} — {booking.location}</p>
+          <p className="text-xs text-[#93b8d8]">{booking.purpose} · {booking.type}</p>
         </div>
 
         {/* Weekly scope selector */}
         {isWeekly && (
           <div className="space-y-2">
-            <p className="text-xs font-medium text-slate-500">Cancellation Scope</p>
+            <p className="text-xs font-medium text-[#93b8d8]">Cancellation Scope</p>
             <div className="flex flex-col gap-2">
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -75,7 +75,7 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
                   onChange={() => setScope('occurrence')}
                   className="accent-[#c8102e]"
                 />
-                <span className="text-sm text-[#0f172a]">This occurrence only</span>
+                <span className="text-sm text-[#f0f6ff]">This occurrence only</span>
               </label>
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -86,7 +86,7 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
                   onChange={() => setScope('series')}
                   className="accent-[#c8102e]"
                 />
-                <span className="text-sm text-[#0f172a]">Entire series</span>
+                <span className="text-sm text-[#f0f6ff]">Entire series</span>
               </label>
             </div>
           </div>
@@ -94,9 +94,9 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
 
         {/* Series warning */}
         {scope === 'series' && (
-          <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3">
-            <p className="text-sm font-semibold text-orange-700">Warning</p>
-            <p className="text-sm text-orange-600 mt-0.5">
+          <div className="bg-[#3d2200] border border-[#f97316] rounded-lg px-4 py-3">
+            <p className="text-sm font-semibold text-[#fb923c]">Warning</p>
+            <p className="text-sm text-[#fdba74] mt-0.5">
               {isWeekly
                 ? 'This will request cancellation of all occurrences in this series.'
                 : 'This will request cancellation of this booking.'}
@@ -117,7 +117,7 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
           </button>
           <button
             onClick={onClose}
-            className="px-4 py-2 border border-[#e2e8f0] text-slate-700 text-sm rounded-lg hover:bg-slate-50 transition-colors"
+            className="px-4 py-2 border border-[#1e5080] text-[#f0f6ff] text-sm rounded-lg hover:bg-[#1a4d8a] transition-colors"
           >
             Cancel
           </button>

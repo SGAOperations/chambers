@@ -70,9 +70,9 @@ export default function BodiesTab() {
     setEditValues({ name: body.name, division: body.division, is_active: body.is_active })
   }
 
-  if (loading) return <div className="text-slate-500 text-sm">Loading...</div>
+  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
 
-  const inputCls = "w-full border border-[#e2e8f0] rounded-lg px-3 py-2.5 text-sm text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition"
+  const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 
   return (
     <div className="space-y-4">
@@ -88,8 +88,8 @@ export default function BodiesTab() {
 
       {/* Create form */}
       {showCreateForm && (
-        <div className="border border-[#e2e8f0] rounded-xl p-5 bg-slate-50 space-y-3">
-          <h3 className="font-semibold text-[#0f172a]">Create New Body</h3>
+        <div className="border border-[#1e5080] rounded-xl p-5 bg-[#0f2a4a] space-y-3">
+          <h3 className="font-semibold text-[#f0f6ff]">Create New Body</h3>
           <input
             type="text"
             placeholder="Body Name"
@@ -117,7 +117,7 @@ export default function BodiesTab() {
             </button>
             <button
               onClick={() => setShowCreateForm(false)}
-              className="px-4 py-2 border border-[#e2e8f0] text-slate-700 text-sm rounded-lg hover:bg-white transition-colors"
+              className="px-4 py-2 border border-[#1e5080] text-[#f0f6ff] text-sm rounded-lg hover:bg-[#1a4d8a] transition-colors"
             >
               Cancel
             </button>
@@ -127,11 +127,11 @@ export default function BodiesTab() {
 
       {/* Bodies list */}
       {bodies.length === 0 ? (
-        <p className="text-slate-400 text-sm">No bodies found.</p>
+        <p className="text-[#6a96bb] text-sm">No bodies found.</p>
       ) : (
-        <div className="border border-[#e2e8f0] rounded-xl overflow-hidden bg-white">
+        <div className="border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073]">
           {bodies.map((b, i) => (
-            <div key={b.id} className={`p-4 ${i !== 0 ? 'border-t border-[#e2e8f0]' : ''}`}>
+            <div key={b.id} className={`p-4 ${i !== 0 ? 'border-t border-[#1e5080]' : ''}`}>
               {editingId === b.id ? (
                 <div className="space-y-2">
                   <input
@@ -156,7 +156,7 @@ export default function BodiesTab() {
                       onChange={e => setEditValues({ ...editValues, is_active: e.target.checked })}
                       id={`active-${b.id}`}
                     />
-                    <label htmlFor={`active-${b.id}`} className="text-sm text-slate-700">Active</label>
+                    <label htmlFor={`active-${b.id}`} className="text-sm text-[#f0f6ff]">Active</label>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -167,7 +167,7 @@ export default function BodiesTab() {
                     </button>
                     <button
                       onClick={() => setEditingId(null)}
-                      className="px-3 py-1.5 border border-[#e2e8f0] text-slate-700 text-sm rounded-lg hover:bg-slate-50 transition-colors"
+                      className="px-3 py-1.5 border border-[#1e5080] text-[#f0f6ff] text-sm rounded-lg hover:bg-[#1a4d8a] transition-colors"
                     >
                       Cancel
                     </button>
@@ -176,16 +176,16 @@ export default function BodiesTab() {
               ) : (
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-semibold text-[#0f172a]">{b.name}</p>
-                    <p className="text-sm text-slate-500">{b.division}</p>
+                    <p className="font-semibold text-[#f0f6ff]">{b.name}</p>
+                    <p className="text-sm text-[#93b8d8]">{b.division}</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${b.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${b.is_active ? 'bg-[#0f3d20] text-[#4ade80]' : 'bg-[#3d0f0f] text-[#f87171]'}`}>
                       {b.is_active ? 'Active' : 'Inactive'}
                     </span>
                     <button
                       onClick={() => startEdit(b)}
-                      className="text-sm text-[#0a1628] hover:text-[#c8102e] font-medium transition-colors"
+                      className="text-sm text-[#93b8d8] hover:text-[#c8102e] font-medium transition-colors"
                     >
                       Edit
                     </button>

@@ -13,6 +13,7 @@ export default function DashboardLayout({
   const [isAdmin, setIsAdmin] = useState(false)
   const [isLeadership, setIsLeadership] = useState(false)
   const [counts, setCounts] = useState({ requests: 0, cancellations: 0, total: 0 })
+  const [userName, setUserName] = useState('')
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
@@ -24,6 +25,13 @@ export default function DashboardLayout({
         setIsAdmin(true)
         fetchCounts()
       }
+
+      const { data: profile } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', user?.id)
+        .single()
+      if (profile?.full_name) setUserName(profile.full_name)
 
       const { data: memberships } = await supabase
         .from('board_memberships')
@@ -78,11 +86,13 @@ export default function DashboardLayout({
           {/* Brand */}
           <div className="px-5 py-5 border-b border-white/10">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-[#c8102e] font-bold text-xl tracking-tight">SGA</span>
-              <span className="text-white/70 text-sm font-medium">Space Manager</span>
+              <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
-            <p className="text-slate-500 text-xs mt-0.5">Northeastern University</p>
-            <p className="text-slate-600 text-xs mt-1">v1.0.2 (SGA Unreleased)</p>
+            <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
+            <p className="text-slate-600 text-xs mt-1">v1.1.0</p>
+            {userName && (
+              <p className="text-slate-500 text-xs mt-2 italic">Welcome,<br />{userName}</p>
+            )}
           </div>
 
           {/* Nav links */}
@@ -111,7 +121,7 @@ export default function DashboardLayout({
           </div>
         </nav>
 
-        <main className="flex-1 bg-[#f4f6f9] p-8 overflow-y-auto">
+        <main className="flex-1 bg-[#0f2a4a] p-8 overflow-y-auto">
           {children}
         </main>
       </div>

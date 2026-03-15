@@ -2,34 +2,47 @@
 
 import { useEffect, useState } from 'react'
 import CancelModal from './cancel-modal'
+import {createClient} from "@/lib/supabase/client"
 
 type Filter = 1 | 3 | 7
 
 const statusColors: Record<string, string> = {
-  'Reserved': 'bg-green-100 border-green-400',
-  'Alternate Room': 'bg-blue-100 border-blue-400',
-  'Alternate Time': 'bg-blue-100 border-blue-400',
-  'Waitlisted': 'bg-red-100 border-red-400',
-  'Unavailable': 'bg-red-100 border-red-400',
-  'Pending Cancellation': 'bg-orange-100 border-orange-400',
-  'Cancelled': 'bg-purple-100 border-purple-400',
-  'Virtual': 'bg-cyan-100 border-cyan-400',
+  'Reserved': 'bg-[#0f3d20] border-[#22c55e]',
+  'Alternate Room': 'bg-[#0e2f4f] border-[#93c5fd]',
+  'Alternate Time': 'bg-[#0e2f4f] border-[#93c5fd]',
+  'Waitlisted': 'bg-[#3d0f0f] border-[#ef4444]',
+  'Unavailable': 'bg-[#3d0f0f] border-[#ef4444]',
+  'Pending Cancellation': 'bg-[#3d2200] border-[#f97316]',
+  'Cancelled': 'bg-[#2a1042] border-[#a855f7]',
+  'Virtual': 'bg-[#062f3b] border-[#06b6d4]',
+}
+
+const statusBarColors: Record<string, string> = {
+  'Reserved': 'bg-[#22c55e]',
+  'Alternate Room': 'bg-[#93c5fd]',
+  'Alternate Time': 'bg-[#93c5fd]',
+  'Waitlisted': 'bg-[#ef4444]',
+  'Unavailable': 'bg-[#ef4444]',
+  'Pending Cancellation': 'bg-[#f97316]',
+  'Cancelled': 'bg-[#a855f7]',
+  'Virtual': 'bg-[#06b6d4]',
 }
 
 const statusTextColors: Record<string, string> = {
-  'Reserved': 'text-green-700',
-  'Alternate Room': 'text-blue-700',
-  'Alternate Time': 'text-blue-700',
-  'Waitlisted': 'text-red-700',
-  'Unavailable': 'text-red-700',
-  'Pending Cancellation': 'text-orange-700',
-  'Cancelled': 'text-purple-700',
-  'Virtual': 'text-cyan-700',
+  'Reserved': 'text-[#4ade80]',
+  'Alternate Room': 'text-[#93c5fd]',
+  'Alternate Time': 'text-[#93c5fd]',
+  'Waitlisted': 'text-[#f87171]',
+  'Unavailable': 'text-[#f87171]',
+  'Pending Cancellation': 'text-[#fb923c]',
+  'Cancelled': 'text-[#c084fc]',
+  'Virtual': 'text-[#22d3ee]',
 }
 
 interface FlatBooking {
   id: string
   bookingId: string //parent booking id
+  bodyId: string
   type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
   bodyName: string
   purpose: string
@@ -67,6 +80,7 @@ export default function MyRoomsPage() {
   const [filter, setFilter] = useState<Filter>(7)
   const [all, setAll] = useState<FlatBooking[]>([])
   const [loading, setLoading] = useState(true)
+  const [leadershipBodyIds, setLeadershipBodyIds] = useState<string[]>([])
   const [cancellingBooking, setCancellingBooking] = useState<{
     id: string
     type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -81,6 +95,16 @@ export default function MyRoomsPage() {
       setLoading(true)
       const res = await fetch('/api/my-rooms')
       const data = await res.json()
+
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data: memberships } = await supabase
+        .from('board_memberships')
+        .select('body_id')
+        .eq('user_id', user?.id)
+        .eq('role', 'Leadership')
+      setLeadershipBodyIds(memberships?.map(m => m.body_id) || [])
+
       const flat: FlatBooking[] = []
 
       for (const b of data.oneTimeBookings || []) {
@@ -88,6 +112,7 @@ export default function MyRoomsPage() {
         if (!d) continue
         flat.push({
           id: b.id,
+          bodyId: b.body_id,
           bookingId: b.id,
           type: 'One-Time Room',
           bodyName: b.bodies?.name || '',
@@ -107,6 +132,7 @@ export default function MyRoomsPage() {
         for (const occ of w.weekly_room_occurrences || []) {
           flat.push({
           id: occ.id,
+          bodyId: b.body_id,
           bookingId: b.id,
           type: 'Weekly Room',
           bodyName: b.bodies?.name || '',
@@ -127,6 +153,7 @@ export default function MyRoomsPage() {
       for (const s of t.tabling_sessions || []) {
         flat.push({
           id: s.id,
+          bodyId: b.body_id,
           bookingId: b.id,
           type: 'Tabling',
           bodyName: b.bodies?.name || '',
@@ -157,14 +184,14 @@ export default function MyRoomsPage() {
 
   const filteredUpcoming = all.filter(b => isWithinDays(b.date, filter))
 
-  if (loading) return <div className="text-slate-500 text-sm">Loading...</div>
+  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
 
   return (
     <div className="space-y-10">
       {/* My Upcoming Spaces */}
       <section>
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-xl font-bold text-[#0f172a]">My Upcoming Spaces</h2>
+          <h2 className="text-xl font-bold text-[#f0f6ff]">My Upcoming Spaces</h2>
           <div className="flex gap-2">
             {([1, 3, 7] as Filter[]).map(d => (
               <button
@@ -173,7 +200,7 @@ export default function MyRoomsPage() {
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                   filter === d
                     ? 'bg-[#0a1628] text-white border-[#0a1628]'
-                    : 'border-[#e2e8f0] text-slate-600 hover:border-slate-400 bg-white'
+                    : 'border-[#1e5080] text-[#93b8d8] hover:border-[#6a96bb] bg-[#184073]'
                 }`}
               >
                 Next {d} Day{d > 1 ? 's' : ''}
@@ -183,21 +210,21 @@ export default function MyRoomsPage() {
         </div>
 
         {filteredUpcoming.length === 0 ? (
-          <p className="text-slate-400 text-sm">No upcoming spaces in this range.</p>
+          <p className="text-[#6a96bb] text-sm">No upcoming spaces in this range.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredUpcoming.map(b => (
-              <div key={b.id} className={`rounded-xl p-5 shadow-sm border ${statusColors[b.status] || 'bg-gray-100 border-gray-400'}`}>
+              <div key={b.id} className={`rounded-xl p-5 shadow-sm border ${statusColors[b.status] || 'bg-[#184073] border-[#1e5080]'}`}>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{b.type}</span>
-                  <span className={`text-xs font-semibold ${statusTextColors[b.status] || 'text-slate-600'}`}>{b.status}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6a96bb]">{b.type}</span>
+                  <span className={`text-xs font-semibold ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
                 </div>
-                <p className="font-semibold text-[#0f172a]">{b.bodyName}</p>
-                <p className="text-sm text-slate-600 mt-0.5">{b.location}</p>
-                <p className="text-sm text-slate-500 mt-1">{formatDate(b.date)}</p>
-                <p className="text-sm text-slate-500">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                <p className="font-semibold text-[#f0f6ff]">{b.bodyName}</p>
+                <p className="text-sm text-[#93b8d8] mt-0.5">{b.location}</p>
+                <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
+                <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                 {b.reservationCode && (
-                  <p className="text-xs text-slate-400 mt-2">Code: {b.reservationCode}</p>
+                  <p className="text-xs text-[#6a96bb] mt-2">Code: {b.reservationCode}</p>
                 )}
               </div>
             ))}
@@ -207,34 +234,36 @@ export default function MyRoomsPage() {
 
       {/* All Bookings */}
       <section>
-        <h2 className="text-xl font-bold text-[#0f172a] mb-5">All Bookings</h2>
+        <h2 className="text-xl font-bold text-[#f0f6ff] mb-5">All Bookings</h2>
         {all.length === 0 ? (
-          <p className="text-slate-400 text-sm">No bookings found.</p>
+          <p className="text-[#6a96bb] text-sm">No bookings found.</p>
         ) : (
-          <div className="divide-y divide-[#e2e8f0] border border-[#e2e8f0] rounded-xl overflow-hidden bg-white">
+          <div className="divide-y divide-[#1e5080] border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073]">
             {all.map(b => (
-              <div key={b.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50 transition-colors">
-                <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusColors[b.status]?.split(' ')[0] || 'bg-slate-300'}`} />
+              <div key={b.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a4d8a] transition-colors">
+                <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800 truncate">{b.bodyName} — {b.location}</p>
-                  <p className="text-sm text-slate-500">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                  <p className="font-semibold text-[#f0f6ff] truncate">{b.bodyName} — {b.location}</p>
+                  <p className="text-sm text-[#6a96bb]">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                 </div>
-                <span className="text-xs text-slate-400 flex-shrink-0">{b.type}</span>
-                <span className={`text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-slate-600'}`}>{b.status}</span>
-                <button
-                  onClick={() => setCancellingBooking({
-                    id: b.bookingId,
-                    type: b.type,
-                    bodyName: b.bodyName,
-                    purpose: b.purpose,
-                    location: b.location,
-                    date: b.date,
-                    occurrenceId: b.type === 'Weekly Room' ? b.id : undefined,
-                  })}
-                  className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors flex-shrink-0"
-                >
-                  Cancel
-                </button>
+                <span className="text-xs text-[#6a96bb] flex-shrink-0">{b.type}</span>
+                <span className={`text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
+                {leadershipBodyIds.includes(b.bodyId) && (
+                  <button
+                    onClick={() => setCancellingBooking({
+                      id: b.bookingId,
+                      type: b.type,
+                      bodyName: b.bodyName,
+                      purpose: b.purpose,
+                      location: b.location,
+                      date: b.date,
+                      occurrenceId: b.type === 'Weekly Room' ? b.id : undefined,
+                    })}
+                    className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors flex-shrink-0"
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
             ))}
           </div>

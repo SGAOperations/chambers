@@ -41,35 +41,34 @@ export default function LoginPage() {
       {/* Subtle grid texture */}
       <div className="absolute inset-0 opacity-[0.03]" style={{backgroundImage: 'radial-gradient(circle, #ffffff 1px, transparent 1px)', backgroundSize: '32px 32px'}} />
 
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-10">
+      <div className="relative bg-[#184073] rounded-2xl shadow-2xl w-full max-w-md p-10">
         {/* Brand */}
         <div className="mb-8 text-center">
           <div className="flex items-baseline justify-center gap-2 mb-1">
-            <span className="text-[#c8102e] font-bold text-3xl tracking-tight">SGA</span>
-            <span className="text-[#0f172a] text-xl font-semibold">Space Manager</span>
+            <span className="text-[#c8102e] font-bold text-3xl tracking-tight">Chambers</span>
           </div>
-          <p className="text-slate-400 text-sm">Northeastern University Student Government</p>
+          <p className="text-[#93b8d8] text-sm">Northeastern Student Government Association</p>
         </div>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Email</label>
+            <label className="block text-xs font-medium text-[#93b8d8] mb-1.5">Email</label>
             <input
               type="email"
               placeholder="you@northeastern.edu"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2.5 text-sm text-[#0f172a] placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition"
+              className="w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1.5">Password</label>
+            <label className="block text-xs font-medium text-[#93b8d8] mb-1.5">Password</label>
             <input
               type="password"
               placeholder="••••••••"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full border border-[#e2e8f0] rounded-lg px-3 py-2.5 text-sm text-[#0f172a] placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition"
+              className="w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
             />
           </div>
           {error && <p className="text-[#c8102e] text-sm">{error}</p>}

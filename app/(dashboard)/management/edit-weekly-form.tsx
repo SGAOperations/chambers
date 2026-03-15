@@ -51,8 +51,8 @@ interface EditWeeklyFormProps {
   onSuccess: () => void
 }
 
-const inputCls = "w-full border border-[#e2e8f0] rounded-lg px-3 py-2.5 text-sm text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition"
-const labelCls = "block text-xs font-medium text-slate-500 mb-1"
+const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
+const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
 function formatDate(date: string) {
   return new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
@@ -204,20 +204,20 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
 
       {/* Occurrences */}
       <div className="space-y-2">
-        <p className="text-sm font-semibold text-[#0f172a]">Occurrences</p>
+        <p className="text-sm font-semibold text-[#f0f6ff]">Occurrences</p>
         {getWeeklyDates(form.start_date, form.end_date).map(date => {
           const occ = occurrences.find(o => o.occurrence_date === date)
           const hasOverride = occ && (occ.room_name || occ.start_time || occ.end_time || occ.status || occ.reservation_code)
           const isExpanded = expandedOcc === date
 
           return (
-            <div key={date} className="border border-[#e2e8f0] rounded-xl overflow-hidden">
+            <div key={date} className="border border-[#1e5080] rounded-xl overflow-hidden">
               <div
-                className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-slate-50"
+                className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-[#1a4d8a]"
                 onClick={() => setExpandedOcc(isExpanded ? null : date)}
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-[#0f172a]">{formatDate(date)}</span>
+                  <span className="text-sm text-[#f0f6ff]">{formatDate(date)}</span>
                   {hasOverride && (
                     <span className="text-xs bg-[#c8102e]/10 text-[#c8102e] px-2 py-0.5 rounded-full font-medium">Overridden</span>
                   )}
@@ -226,7 +226,7 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
               </div>
 
               {isExpanded && occ && (
-                <div className="px-4 pb-4 space-y-3 border-t border-[#e2e8f0] pt-3 bg-slate-50">
+                <div className="px-4 pb-4 space-y-3 border-t border-[#1e5080] pt-3 bg-[#0f2a4a]">
                   <div>
                     <label className={labelCls}>Room Override</label>
                     <input
@@ -305,7 +305,7 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-2 border border-[#e2e8f0] text-slate-700 text-sm rounded-lg hover:bg-slate-50 transition-colors"
+          className="px-4 py-2 border border-[#1e5080] text-[#f0f6ff] text-sm rounded-lg hover:bg-[#1a4d8a] transition-colors"
         >
           Cancel
         </button>

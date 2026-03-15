@@ -46,8 +46,8 @@ interface EditTablingFormProps {
   onSuccess: () => void
 }
 
-const inputCls = "w-full border border-[#e2e8f0] rounded-lg px-3 py-2.5 text-sm text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition"
-const labelCls = "block text-xs font-medium text-slate-500 mb-1"
+const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
+const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
 const emptySession = (): Session => ({
   location: '',
@@ -93,8 +93,6 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
       setError('Please fill out all required fields.')
       return
     }
-
-console.log('sessions before validation:', JSON.stringify(sessions))
 
     for (const s of sessions) {
       if (!s.location || !s.session_date || !s.start_time || !s.end_time) {
@@ -154,7 +152,7 @@ console.log('sessions before validation:', JSON.stringify(sessions))
       {/* Sessions */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-[#0f172a]">Sessions</span>
+          <span className="text-sm font-semibold text-[#f0f6ff]">Sessions</span>
           <button
             onClick={addSession}
             className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
@@ -164,9 +162,9 @@ console.log('sessions before validation:', JSON.stringify(sessions))
         </div>
 
         {sessions.map((s, i) => (
-          <div key={i} className="border border-[#e2e8f0] rounded-xl p-4 space-y-3 bg-[#f4f6f9]">
+          <div key={i} className="border border-[#1e5080] rounded-xl p-4 space-y-3 bg-[#0f2a4a]">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">
                 Session {i + 1} {s.isNew && <span className="text-[#c8102e]">· New</span>}
               </span>
               {sessions.length > 1 && (
@@ -237,7 +235,7 @@ console.log('sessions before validation:', JSON.stringify(sessions))
         </button>
         <button
           onClick={onClose}
-          className="px-4 py-2 border border-[#e2e8f0] text-slate-700 text-sm rounded-lg hover:bg-slate-50 transition-colors"
+          className="px-4 py-2 border border-[#1e5080] text-[#f0f6ff] text-sm rounded-lg hover:bg-[#1a4d8a] transition-colors"
         >
           Cancel
         </button>

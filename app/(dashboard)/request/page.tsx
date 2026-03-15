@@ -16,8 +16,8 @@ interface TablingSession {
   end_time: string
 }
 
-const inputCls = "w-full border border-[#e2e8f0] rounded-lg px-3 py-2.5 text-sm text-[#0f172a] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/20 focus:border-[#c8102e] transition"
-const labelCls = "block text-xs font-medium text-slate-500 mb-1"
+const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
+const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
 const emptySession = (): TablingSession => ({
   session_date: '',
@@ -132,19 +132,19 @@ export default function RequestPage() {
     setError('')
   }
 
-  if (loading) return <div className="text-slate-500 text-sm">Loading...</div>
+  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
 
   if (bodies.length === 0) return (
     <div className="max-w-xl">
-      <h1 className="text-2xl font-bold text-[#0f172a] mb-2">Request a Booking</h1>
-      <p className="text-slate-500 text-sm">You don't have Leadership access to any SGA bodies. Contact the Vice President of Operational Affairs or the Comptroller to be assigned to your body.</p>
+      <h1 className="text-2xl font-bold text-[#f0f6ff] mb-2">Request a Booking</h1>
+      <p className="text-[#93b8d8] text-sm">You don't have Leadership access to any SGA bodies. Contact the Vice President of Operational Affairs or the Comptroller to be assigned to your body.</p>
     </div>
   )
 
   if (submitted) return (
     <div className="max-w-xl">
-      <h1 className="text-2xl font-bold text-[#0f172a] mb-2">Request Submitted</h1>
-      <p className="text-slate-500 text-sm mb-6">Your request has been submitted. Please allow up to 48 hours for an update from the Operational Affairs team.</p>
+      <h1 className="text-2xl font-bold text-[#f0f6ff] mb-2">Request Submitted</h1>
+      <p className="text-[#93b8d8] text-sm mb-6">Your request has been submitted. Please allow up to 48 hours for an update from the Operational Affairs team.</p>
       <button
         onClick={resetForm}
         className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors"
@@ -156,18 +156,18 @@ export default function RequestPage() {
 
   return (
     <div className="max-w-xl space-y-6">
-      <h1 className="text-2xl font-bold text-[#0f172a]">Request a Booking</h1>
+      <h1 className="text-2xl font-bold text-[#f0f6ff]">Request a Booking</h1>
 
       {/* Type selector */}
-      <div className="flex gap-1 border-b border-[#e2e8f0]">
+      <div className="flex gap-1 border-b border-[#1e5080]">
         {(['One-Time Room', 'Weekly Room', 'Tabling'] as RequestType[]).map(t => (
           <button
             key={t}
             onClick={() => setType(t)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               type === t
-                ? 'border-[#c8102e] text-[#0a1628] font-semibold'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
+                ? 'border-[#c8102e] text-[#f0f6ff] font-semibold'
+                : 'border-transparent text-[#93b8d8] hover:text-[#f0f6ff]'
             }`}
           >
             {t}
@@ -248,7 +248,7 @@ export default function RequestPage() {
         {type === 'Tabling' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-[#0f172a]">Sessions</span>
+              <span className="text-sm font-semibold text-[#f0f6ff]">Sessions</span>
               <button
                 onClick={() => setSessions(prev => [...prev, emptySession()])}
                 className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
@@ -258,13 +258,13 @@ export default function RequestPage() {
             </div>
 
             {sessions.map((s, i) => (
-              <div key={i} className="border border-[#e2e8f0] rounded-xl p-4 space-y-3 bg-[#f4f6f9]">
+              <div key={i} className="border border-[#1e5080] rounded-xl p-4 space-y-3 bg-[#0f2a4a]">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Session {i + 1}</span>
+                  <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">Session {i + 1}</span>
                   {sessions.length > 1 && (
                     <button
                       onClick={() => setSessions(prev => prev.filter((_, idx) => idx !== i))}
-                      className="text-xs text-slate-400 hover:text-[#c8102e] transition-colors"
+                      className="text-xs text-[#6a96bb] hover:text-[#c8102e] transition-colors"
                     >
                       Remove
                     </button>

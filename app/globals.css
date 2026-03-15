@@ -6,14 +6,14 @@
   --navy-hover: #0f2040;
   --red: #c8102e;
   --red-hover: #a00d24;
-  --surface: #f4f6f9;
-  --card: #ffffff;
-  --border: #e2e8f0;
-  --text-primary: #0f172a;
-  --text-secondary: #64748b;
-  --text-muted: #94a3b8;
-  --background: #f4f6f9;
-  --foreground: #0f172a;
+  --surface: #0f2a4a;
+  --card: #184073;
+  --border: #1e5080;
+  --text-primary: #f0f6ff;
+  --text-secondary: #93b8d8;
+  --text-muted: #6a96bb;
+  --background: #0f2a4a;
+  --foreground: #f0f6ff;
 }
 
 @theme inline {
@@ -32,4 +32,13 @@ body {
 
 input, select, textarea {
   font-family: 'Space Grotesk', sans-serif;
+}
+
+option {
+  background-color: #0f2a4a;
+  color: #f0f6ff;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.7);
 }
