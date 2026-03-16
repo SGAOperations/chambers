@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import CancelModal from './cancel-modal'
+import NotificationBell from './notification-bell'
 import {createClient} from "@/lib/supabase/client"
 
 type Filter = 1 | 3 | 7
@@ -191,7 +192,10 @@ export default function MyRoomsPage() {
       {/* My Upcoming Spaces */}
       <section>
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-xl font-bold text-[#f0f6ff]">My Upcoming Spaces</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold text-[#f0f6ff]">My Upcoming Spaces</h2>
+            <NotificationBell />
+          </div>
           <div className="flex gap-2">
             {([1, 3, 7] as Filter[]).map(d => (
               <button
@@ -223,9 +227,6 @@ export default function MyRoomsPage() {
                 <p className="text-sm text-[#93b8d8] mt-0.5">{b.location}</p>
                 <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
                 <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
-                {b.reservationCode && (
-                  <p className="text-xs text-[#6a96bb] mt-2">Code: {b.reservationCode}</p>
-                )}
               </div>
             ))}
           </div>

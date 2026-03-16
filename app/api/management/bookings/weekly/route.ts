@@ -116,5 +116,35 @@ export async function PATCH(request: Request) {
 
   if (occError) return NextResponse.json({ error: occError.message }, { status: 500 })
 
+  const { data: auditLog } = await adminSupabase
+    .from('audit_logs')
+    .insert({ booking_id, admin_id: user.id, new_status: status })
+    .select('id')
+    .single()
+
+  const { data: parentBooking } = await adminSupabase
+    .from('bookings')
+    .select('body_id')
+    .eq('id', booking_id)
+    .single()
+
+  const { data: members } = await adminSupabase
+    .from('board_memberships')
+    .select('user_id')
+    .eq('body_id', parentBooking?.body_id)
+
+  if (members?.length && auditLog) {
+    await adminSupabase.from('user_alerts').insert(
+      members.map((m: { user_id: string }) => ({
+        user_id: m.user_id,
+        audit_log_id: auditLog.id,
+        booking_id,
+        booking_type: 'Weekly Room',
+        booking_date: start_date,
+        start_time: start_time,
+      }))
+    )
+  }
+
   return NextResponse.json({ success: true })
 }

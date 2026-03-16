@@ -11,8 +11,7 @@ export async function GET() {
 
   const { data: bodies } = await supabase
     .from('bodies')
-    .select('id, name, division')
-    .eq('is_active', true)
+    .select('id, name, division, is_active')
     .order('name', { ascending: true })
 
   return NextResponse.json({ bodies: bodies || [] })

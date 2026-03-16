@@ -21,6 +21,7 @@ interface OneTimeBooking {
   body_id: string
   purpose: string
   bodies: { name: string } | null
+  users: { admin_role: string | null } | null
   one_time_room_bookings: {
     id: string
     room_name: string
@@ -37,6 +38,7 @@ interface WeeklyBooking {
   body_id: string
   purpose: string
   bodies: { name: string } | null
+  users: { admin_role: string | null } | null
   weekly_room_bookings: {
     id: string
     room_name: string
@@ -63,6 +65,7 @@ interface TablingBooking {
   body_id: string
   purpose: string
   bodies: { name: string } | null
+  users: { admin_role: string | null } | null
   tabling_bookings: {
     id: string
     reservation_code: string | null
@@ -100,6 +103,24 @@ const statusColors: Record<string, string> = {
   'Pending Cancellation': 'bg-[#3d2200] text-[#fb923c]',
   'Cancelled': 'bg-[#2a1042] text-[#c084fc]',
   'Virtual': 'bg-[#062f3b] text-[#22d3ee]',
+}
+
+function AdminRoleBadge({ role }: { role: string | null | undefined }) {
+  if (role === 'Comptroller') {
+    return (
+      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#f87171] text-[#450a0a]">
+        Comptroller
+      </span>
+    )
+  }
+  if (role === 'Vice President of Operational Affairs') {
+    return (
+      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#22d3ee] text-[#0c4a6e]">
+        Vice President
+      </span>
+    )
+  }
+  return null
 }
 
 export default function BookingsTab() {
@@ -253,6 +274,7 @@ export default function BookingsTab() {
                       <p className="text-sm text-[#93b8d8]">{b.purpose}</p>
                     </div>
                     <div className="flex items-center gap-3">
+                      <AdminRoleBadge role={b.users?.admin_role} />
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[d.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {d.status}
                       </span>
@@ -294,6 +316,7 @@ export default function BookingsTab() {
                       <p className="text-sm text-[#93b8d8]">{b.purpose}</p>
                     </div>
                     <div className="flex items-center gap-3">
+                      <AdminRoleBadge role={b.users?.admin_role} />
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {w.status}
                       </span>
@@ -331,12 +354,15 @@ export default function BookingsTab() {
                 <div key={b.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm">
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-[#f0f6ff]">{b.bodies?.name}</p>
-                    <button
-                      onClick={() => setEditingTabling(b)}
-                      className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <AdminRoleBadge role={b.users?.admin_role} />
+                      <button
+                        onClick={() => setEditingTabling(b)}
+                        className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </div>
                   <p className="text-sm text-[#93b8d8] mb-3">{b.purpose}</p>
                   <div className="space-y-2">

@@ -5,10 +5,9 @@ import AdminGuard from '../adminguard'
 import RequestsTab from './requests-tab'
 import CancellationsTab from './cancellations-tab'
 import BookingsTab from './bookings-tab'
-import UsersTab from './users-tab'
-import BodiesTab from './bodies-tab'
+import AdvancedSettingsTab from './advanced-settings-tab'
 
-type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'Users' | 'Bodies'
+type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'Advanced Settings'
 
 export default function ManagementPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Requests')
@@ -37,7 +36,7 @@ export default function ManagementPage() {
         <h1 className="text-2xl font-bold text-[#f0f6ff]">Management</h1>
 
         <div className="flex gap-1 border-b border-[#1e5080]">
-          {(['Requests', 'Cancellations', 'Bookings', 'Users', 'Bodies'] as Tab[]).map(tab => (
+          {(['Requests', 'Cancellations', 'Bookings', 'Advanced Settings'] as Tab[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -61,8 +60,7 @@ export default function ManagementPage() {
           {activeTab === 'Requests' && <RequestsTab onCountChange={() => fetch('/api/management/counts').then(r => r.json()).then(d => setCounts(d))} />}
           {activeTab === 'Cancellations' && <CancellationsTab onCountChange={() => fetch('/api/management/counts').then(r => r.json()).then(d => setCounts(d))} />}
           {activeTab === 'Bookings' && <BookingsTab />}
-          {activeTab === 'Users' && <UsersTab />}
-          {activeTab === 'Bodies' && <BodiesTab />}
+          {activeTab === 'Advanced Settings' && <AdvancedSettingsTab />}
         </div>
       </div>
     </AdminGuard>
