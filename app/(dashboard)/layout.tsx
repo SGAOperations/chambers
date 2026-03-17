@@ -5,6 +5,13 @@ import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import AuthGuard from './authguard'
 
+function getGreeting() {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good Morning'
+  if (hour < 18) return 'Good Afternoon'
+  return 'Good Evening'
+}
+
 export default function DashboardLayout({
   children,
 }: {
@@ -89,9 +96,9 @@ export default function DashboardLayout({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.3.1 (SGA Unreleased)</p>
+            <p className="text-slate-600 text-xs mt-1">v1.3.2 (SGA Unreleased)</p>
             {userName && (
-              <p className="text-slate-500 text-xs mt-2 italic">Welcome,<br />{userName}</p>
+              <p className="text-slate-500 text-xs mt-2 italic">{getGreeting()},<br />{userName}</p>
             )}
           </div>
 

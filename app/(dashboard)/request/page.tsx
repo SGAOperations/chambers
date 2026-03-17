@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 import TimePicker from '../management/time-picker'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -50,10 +51,14 @@ export default function RequestPage() {
 
   useEffect(() => {
     const fetchBodies = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const isAdmin = user?.app_metadata?.is_admin ?? false
+
       const res = await fetch('/api/request')
       const data = await res.json()
       const resolved = data.bodies || []
-      if (resolved.length === 0) {
+      if (resolved.length === 0 && !isAdmin) {
         router.replace('/dashboard')
         return
       }

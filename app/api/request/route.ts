@@ -13,6 +13,16 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  // If user is admin, return all active bodies instead
+  if (user.app_metadata?.is_admin) {
+    const { data: allBodies } = await supabase
+      .from('bodies')
+      .select('id, name')
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+    return NextResponse.json({ bodies: allBodies || [] })
+  }
+
   // Get bodies where user has Leadership role
   const { data: memberships } = await supabase
     .from('board_memberships')
@@ -34,17 +44,19 @@ export async function POST(request: Request) {
   const body = await request.json()
   const { type, body_id, purpose, notes, details, sessions } = body
 
-  // Verify user has Leadership role in the submitted body_id
-  const { data: membership } = await supabase
-    .from('board_memberships')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('body_id', body_id)
-    .eq('role', 'Leadership')
-    .maybeSingle()
+  // Verify user has Leadership role in the submitted body_id (skip for admins)
+  if (!user.app_metadata?.is_admin) {
+    const { data: membership } = await supabase
+      .from('board_memberships')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('body_id', body_id)
+      .eq('role', 'Leadership')
+      .maybeSingle()
 
-  if (!membership) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    if (!membership) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
   }
 
   // Create the request
