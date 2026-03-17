@@ -263,7 +263,8 @@ export default function MyRoomsPage() {
                 </div>
                 <span className="text-xs text-[#6a96bb] flex-shrink-0">{b.type}</span>
                 <span className={`text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
-                {leadershipBodyIds.includes(b.bodyId) && (
+                {leadershipBodyIds.includes(b.bodyId) &&
+                 !['Pending Cancellation', 'Cancelled', 'Virtual'].includes(b.status) && (
                   <button
                     onClick={() => setCancellingBooking({
                       id: b.bookingId,
