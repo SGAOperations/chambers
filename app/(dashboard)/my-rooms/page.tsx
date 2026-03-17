@@ -53,6 +53,7 @@ interface FlatBooking {
   endTime: string
   status: string
   reservationCode: string | null
+  senateType: string | null
 }
 
 function formatTime(time: string) {
@@ -124,6 +125,7 @@ export default function MyRoomsPage() {
           endTime: d.end_time,
           status: d.status,
           reservationCode: d.reservation_code,
+          senateType: null,
         })
       }
 
@@ -144,6 +146,7 @@ export default function MyRoomsPage() {
           endTime: occ.end_time || w.end_time,
           status: occ.status || w.status,
           reservationCode: occ.reservation_code || w.reservation_code,
+          senateType: occ.senate_type ?? null,
         })
       }
     }
@@ -165,6 +168,7 @@ export default function MyRoomsPage() {
           endTime: s.end_time,
           status: s.status,
           reservationCode: s.reservation_code,
+          senateType: null,
         })
       }
     }
@@ -226,7 +230,12 @@ export default function MyRoomsPage() {
                 <p className="font-semibold text-[#f0f6ff]">{b.bodyName}</p>
                 <p className="text-sm text-[#93b8d8] mt-0.5">{b.location}</p>
                 <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
-                <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                  {b.senateType && (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#c8102e] text-white">{b.senateType}</span>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -244,7 +253,12 @@ export default function MyRoomsPage() {
               <div key={b.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a4d8a] transition-colors">
                 <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-[#f0f6ff] truncate">{b.bodyName} — {b.location}</p>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <p className="font-semibold text-[#f0f6ff] truncate">{b.bodyName} — {b.location}</p>
+                    {b.senateType && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#c8102e] text-white flex-shrink-0">{b.senateType}</span>
+                    )}
+                  </div>
                   <p className="text-sm text-[#6a96bb]">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                 </div>
                 <span className="text-xs text-[#6a96bb] flex-shrink-0">{b.type}</span>

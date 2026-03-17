@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import TimePicker from '../management/time-picker'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -26,6 +27,7 @@ const emptySession = (): TablingSession => ({
 })
 
 export default function RequestPage() {
+  const router = useRouter()
   const [type, setType] = useState<RequestType>('One-Time Room')
   const [bodies, setBodies] = useState<Body[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,7 +52,12 @@ export default function RequestPage() {
     const fetchBodies = async () => {
       const res = await fetch('/api/request')
       const data = await res.json()
-      setBodies(data.bodies || [])
+      const resolved = data.bodies || []
+      if (resolved.length === 0) {
+        router.replace('/dashboard')
+        return
+      }
+      setBodies(resolved)
       setLoading(false)
     }
     fetchBodies()
@@ -133,13 +140,6 @@ export default function RequestPage() {
   }
 
   if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
-
-  if (bodies.length === 0) return (
-    <div className="max-w-xl">
-      <h1 className="text-2xl font-bold text-[#f0f6ff] mb-2">Request a Booking</h1>
-      <p className="text-[#93b8d8] text-sm">You don't have Leadership access to any SGA bodies. Contact the Vice President of Operational Affairs or the Comptroller to be assigned to your body.</p>
-    </div>
-  )
 
   if (submitted) return (
     <div className="max-w-xl">

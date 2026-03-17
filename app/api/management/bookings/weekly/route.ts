@@ -98,7 +98,7 @@ export async function PATCH(request: Request) {
 
   const dates = getWeeklyDates(start_date, end_date)
   const newOccurrences = dates.map(date => {
-    const existing = occurrences.find((o: { occurrence_date: string; room_name: string | null; start_time: string | null; end_time: string | null; status: string | null; reservation_code: string | null }) => o.occurrence_date === date)
+    const existing = occurrences.find((o: { occurrence_date: string; room_name: string | null; start_time: string | null; end_time: string | null; status: string | null; reservation_code: string | null; senate_type: string | null }) => o.occurrence_date === date)
     return {
       weekly_booking_id: weekly_id,
       occurrence_date: date,
@@ -107,6 +107,7 @@ export async function PATCH(request: Request) {
       end_time: existing?.end_time || null,
       status: existing?.status || null,
       reservation_code: existing?.reservation_code || null,
+      senate_type: existing?.senate_type ?? null,
     }
   })
 

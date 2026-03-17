@@ -27,6 +27,7 @@ interface Occurrence {
   end_time: string | null
   status: string | null
   reservation_code: string | null
+  senate_type: string | null
 }
 
 interface EditWeeklyFormProps {
@@ -102,6 +103,8 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  const isSenate = bodies.find(b => b.id === form.body_id)?.name === 'Senate'
+
   if (!w) return null
 
   const updateOccurrence = (id: string, field: keyof Occurrence, value: string | null) => {
@@ -116,6 +119,7 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
       end_time: null,
       status: null,
       reservation_code: null,
+      senate_type: null,
     } : o))
   }
 
@@ -277,6 +281,22 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
                       className={inputCls}
                     />
                   </div>
+
+                  {isSenate && (
+                    <div>
+                      <label className={labelCls}>Session Type</label>
+                      <select
+                        value={occ.senate_type ?? ''}
+                        onChange={e => updateOccurrence(occ.id, 'senate_type', e.target.value || null)}
+                        className={inputCls}
+                      >
+                        <option value="">None</option>
+                        <option value="Weekly">Weekly</option>
+                        <option value="Full Body">Full Body</option>
+                        <option value="Office Hours">Office Hours</option>
+                      </select>
+                    </div>
+                  )}
 
                   {hasOverride && (
                     <button

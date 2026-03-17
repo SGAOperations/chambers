@@ -27,7 +27,7 @@ export async function GET() {
       bodies(name),
       users!created_by(admin_role),
       weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
-        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code)
+        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type)
       )
     `)
     .eq('type', 'Weekly Room')

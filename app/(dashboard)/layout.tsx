@@ -89,7 +89,7 @@ export default function DashboardLayout({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.2.0 (SGA Unreleased)</p>
+            <p className="text-slate-600 text-xs mt-1">v1.3.0 (SGA Unreleased)</p>
             {userName && (
               <p className="text-slate-500 text-xs mt-2 italic">Welcome,<br />{userName}</p>
             )}

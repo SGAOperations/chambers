@@ -56,6 +56,7 @@ interface WeeklyBooking {
         end_time: string | null
         status: string | null
         reservation_code: string | null
+        senate_type: string | null
     }[]
   }[] | null
 }
@@ -156,6 +157,16 @@ export default function BookingsTab() {
   }, [])
 
   if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
+
+  const sortedWeekly = [...weekly].sort((a, b) => {
+    const wa = a.weekly_room_bookings?.[0]
+    const wb = b.weekly_room_bookings?.[0]
+    if (!wa || !wb) return 0
+    const dayA = (new Date(wa.start_date + 'T00:00:00').getDay() + 6) % 7
+    const dayB = (new Date(wb.start_date + 'T00:00:00').getDay() + 6) % 7
+    if (dayA !== dayB) return dayA - dayB
+    return wa.start_time.localeCompare(wb.start_time)
+  })
 
   return (
     <div className="space-y-4">
@@ -305,7 +316,7 @@ export default function BookingsTab() {
           {weekly.length === 0 ? (
             <p className="text-[#6a96bb] text-sm">No weekly room bookings found.</p>
           ) : (
-            weekly.map(b => {
+            sortedWeekly.map(b => {
               const w = b.weekly_room_bookings?.[0]
               if (!w) return null
               return (
@@ -333,6 +344,11 @@ export default function BookingsTab() {
                     <p><span className="font-medium text-[#f0f6ff]">Dates:</span> {formatDate(w.start_date)} – {formatDate(w.end_date)}</p>
                     <p><span className="font-medium text-[#f0f6ff]">Time:</span> {formatTime(w.start_time)} – {formatTime(w.end_time)}</p>
                     {w.reservation_code && <p><span className="font-medium text-[#f0f6ff]">Code:</span> {w.reservation_code}</p>}
+                    {b.bodies?.name === 'Senate' && w.weekly_room_occurrences?.some(o => o.senate_type) && (
+                      <p><span className="font-medium text-[#f0f6ff]">Session Types:</span> {
+                        [...new Set(w.weekly_room_occurrences.map(o => o.senate_type).filter(Boolean))].join(', ')
+                      }</p>
+                    )}
                   </div>
                 </div>
               )

@@ -34,6 +34,19 @@ export async function POST(request: Request) {
   const body = await request.json()
   const { type, body_id, purpose, notes, details, sessions } = body
 
+  // Verify user has Leadership role in the submitted body_id
+  const { data: membership } = await supabase
+    .from('board_memberships')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('body_id', body_id)
+    .eq('role', 'Leadership')
+    .maybeSingle()
+
+  if (!membership) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+  }
+
   // Create the request
   const { data: roomRequest, error: requestError } = await adminSupabase
     .from('room_requests')
