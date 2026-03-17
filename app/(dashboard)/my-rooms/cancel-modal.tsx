@@ -58,7 +58,7 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
         {/* Booking summary */}
         <div className="bg-[#0f2a4a] rounded-lg px-4 py-3 space-y-1">
           <p className="text-sm font-semibold text-[#f0f6ff]">{booking.bodyName} — {booking.location}</p>
-          <p className="text-xs text-[#93b8d8]">{booking.purpose} · {booking.type}</p>
+          <p className="text-xs text-[#93b8d8]">{booking.purpose} · {booking.type === 'One-Time Room' ? 'One-Time/Multiple Room' : booking.type}</p>
         </div>
 
         {/* Weekly scope selector */}

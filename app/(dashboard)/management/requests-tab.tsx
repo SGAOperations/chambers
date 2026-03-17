@@ -101,7 +101,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
             <div>
               <span className="font-semibold text-[#f0f6ff]">{r.bodies?.name || 'Unknown Body'}</span>
               <span className="mx-2 text-[#1e5080]">·</span>
-              <span className="text-sm text-[#93b8d8]">{r.type}</span>
+              <span className="text-sm text-[#93b8d8]">{r.type === 'One-Time Room' ? 'One-Time/Multiple Room' : r.type}</span>
             </div>
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[r.status]}`}>
               {r.status}
@@ -116,14 +116,16 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
             {/* One-Time & Weekly details */}
             {r.room_request_details && r.room_request_details.length > 0 && (
               <div>
-                {r.room_request_details[0].room_name && (
-                  <p><span className="font-medium text-[#f0f6ff]">Preferred Room:</span> {r.room_request_details[0].room_name}</p>
-                )}
-                <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(r.room_request_details[0].start_date)}</p>
-                <p><span className="font-medium text-[#f0f6ff]">Time:</span> {formatTime(r.room_request_details[0].start_time)} – {formatTime(r.room_request_details[0].end_time)}</p>
-                {r.room_request_details[0].end_date && (
-                  <p><span className="font-medium text-[#f0f6ff]">Until:</span> {formatDate(r.room_request_details[0].end_date)}</p>
-                )}
+                <p className="font-medium text-[#f0f6ff]">Sessions:</p>
+                <ul className="ml-4 space-y-0.5">
+                  {r.room_request_details.map((d, i) => (
+                    <li key={i}>
+                      {d.room_name && <span>{d.room_name} · </span>}
+                      {formatDate(d.start_date)} · {formatTime(d.start_time)} – {formatTime(d.end_time)}
+                      {d.end_date && <span> → {formatDate(d.end_date)}</span>}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 

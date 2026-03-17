@@ -25,7 +25,7 @@ export async function GET() {
     .select(`
       id, purpose, body_id,
       bodies(name),
-      one_time_room_bookings(room_name, booking_date, start_time, end_time, status, reservation_code)
+      one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
     `)
     .eq('type', 'One-Time Room')
     .in('body_id', bodyIds)

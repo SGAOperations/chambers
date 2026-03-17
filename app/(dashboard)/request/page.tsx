@@ -18,6 +18,13 @@ interface TablingSession {
   end_time: string
 }
 
+interface OneTimeSession {
+  session_date: string
+  start_time: string
+  end_time: string
+  room_name: string
+}
+
 const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
@@ -26,6 +33,71 @@ const emptySession = (): TablingSession => ({
   start_time: '09:00',
   end_time: '10:00',
 })
+
+const emptyOneTimeSession = (): OneTimeSession => ({ session_date: '', start_time: '09:00', end_time: '10:00', room_name: '' })
+
+function GuidelinesPanel({ type }: { type: RequestType }) {
+  const email = 'sgaOperations@northeastern.edu'
+
+  const emailLine = (
+    <p className="text-xs text-[#6a96bb]">
+      Questions? Email Operational Affairs at{' '}
+      <a href={`mailto:${email}`} className="text-[#93b8d8] underline hover:text-[#f0f6ff] transition-colors">
+        {email}
+      </a>
+    </p>
+  )
+
+  if (type === 'One-Time Room') {
+    return (
+      <div className="bg-[#0f2a4a] border border-[#1e5080] rounded-xl p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-[#f0f6ff]">One-Time/Multiple Booking Guidelines</h2>
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-[#93b8d8] uppercase tracking-wide">Timelines</h3>
+          <p className="text-xs text-[#6a96bb] leading-relaxed">
+            Rooms cannot be guaranteed by the Curry Operations team closer than ten days from the requested reservation date. As such, Operational Affairs asks that you book your rooms at least two weeks in advance. We will make our best efforts to honor all requests, but not everything can be guaranteed.
+          </p>
+        </div>
+        {emailLine}
+      </div>
+    )
+  }
+
+  if (type === 'Weekly Room') {
+    return (
+      <div className="bg-[#2a1a00] border border-amber-600/50 rounded-xl p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-[#f0f6ff]">Weekly Booking Guidelines</h2>
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Warning</h3>
+          <p className="text-xs text-amber-200/80 leading-relaxed">
+            <span className="font-bold text-amber-200">This is probably not the form you are looking to use.</span>{' '}
+            If you have not explicitly confirmed with the Comptroller or Vice President of Operational Affairs that you need this type of booking, do not fill out this form.
+          </p>
+        </div>
+        <p className="text-xs text-amber-200/60">
+          Questions? Email Operational Affairs at{' '}
+          <a href={`mailto:${email}`} className="text-amber-200/80 underline hover:text-amber-200 transition-colors">
+            {email}
+          </a>
+        </p>
+      </div>
+    )
+  }
+
+  // Tabling
+  return (
+    <div className="bg-[#0f2a4a] border border-[#1e5080] rounded-xl p-5 space-y-3">
+      <h2 className="text-sm font-semibold text-[#f0f6ff]">Tabling Booking Guidelines</h2>
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold text-[#93b8d8] uppercase tracking-wide">Timeline</h3>
+        <p className="text-xs text-[#6a96bb] leading-relaxed">
+          Tabling bookings must be made at least three weeks in advance to be honored.
+        </p>
+      </div>
+      {emailLine}
+    </div>
+  )
+}
 
 export default function RequestPage() {
   const router = useRouter()
@@ -48,6 +120,7 @@ export default function RequestPage() {
   })
 
   const [sessions, setSessions] = useState<TablingSession[]>([emptySession()])
+  const [oneTimeSessions, setOneTimeSessions] = useState<OneTimeSession[]>([emptyOneTimeSession()])
 
   useEffect(() => {
     const fetchBodies = async () => {
@@ -72,6 +145,10 @@ export default function RequestPage() {
     setSessions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
   }
 
+  const updateOneTimeSession = (index: number, field: keyof OneTimeSession, value: string) => {
+    setOneTimeSessions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
+  }
+
   const handleSubmit = async () => {
     setError('')
 
@@ -80,9 +157,13 @@ export default function RequestPage() {
       return
     }
 
-    if (type === 'One-Time Room' && !form.start_date) {
-      setError('Please select a date.')
-      return
+    if (type === 'One-Time Room') {
+      for (const s of oneTimeSessions) {
+        if (!s.session_date || !s.start_time || !s.end_time) {
+          setError('Please fill out all session fields.')
+          return
+        }
+      }
     }
 
     if (type === 'Weekly Room' && (!form.start_date || !form.end_date)) {
@@ -108,13 +189,17 @@ export default function RequestPage() {
       notes: form.notes,
     }
 
-    if (type === 'One-Time Room' || type === 'Weekly Room') {
+    if (type === 'One-Time Room') {
+      payload.sessions = oneTimeSessions
+    }
+
+    if (type === 'Weekly Room') {
       payload.details = {
         room_name: form.room_name || null,
         start_date: form.start_date,
         start_time: form.start_time,
         end_time: form.end_time,
-        end_date: type === 'Weekly Room' ? form.end_date : null,
+        end_date: form.end_date,
       }
     }
 
@@ -140,6 +225,7 @@ export default function RequestPage() {
   const resetForm = () => {
     setForm({ body_id: '', purpose: '', notes: '', room_name: '', start_date: '', end_date: '', start_time: '09:00', end_time: '10:00' })
     setSessions([emptySession()])
+    setOneTimeSessions([emptyOneTimeSession()])
     setSubmitted(false)
     setError('')
   }
@@ -160,9 +246,12 @@ export default function RequestPage() {
   )
 
   return (
-    <div className="max-w-xl space-y-6">
+    <div className="space-y-6">
       <h1 className="text-2xl font-bold text-[#f0f6ff]">Request a Booking</h1>
 
+    <div className="flex gap-8 items-start">
+      {/* Form — left column */}
+      <div className="flex-1 space-y-6 min-w-0">
       {/* Type selector */}
       <div className="flex gap-1 border-b border-[#1e5080]">
         {(['One-Time Room', 'Weekly Room', 'Tabling'] as RequestType[]).map(t => (
@@ -175,7 +264,7 @@ export default function RequestPage() {
                 : 'border-transparent text-[#93b8d8] hover:text-[#f0f6ff]'
             }`}
           >
-            {t}
+            {t === 'One-Time Room' ? 'One-Time/Multiple Room' : t}
           </button>
         ))}
       </div>
@@ -197,26 +286,51 @@ export default function RequestPage() {
 
         {/* One-Time Room fields */}
         {type === 'One-Time Room' && (
-          <>
-            <div>
-              <label className={labelCls}>Preferred Room</label>
-              <input type="text" placeholder="Optional" value={form.room_name} onChange={e => setForm({ ...form, room_name: e.target.value })} className={inputCls} />
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-[#f0f6ff]">Sessions</span>
+              <button
+                onClick={() => setOneTimeSessions(prev => [...prev, emptyOneTimeSession()])}
+                className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+              >
+                + Add Session
+              </button>
             </div>
-            <div>
-              <label className={labelCls}>Date *</label>
-              <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className={inputCls} />
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className={labelCls}>Start Time *</label>
-                <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
+
+            {oneTimeSessions.map((s, i) => (
+              <div key={i} className="border border-[#1e5080] rounded-xl p-4 space-y-3 bg-[#0f2a4a]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">Session {i + 1}</span>
+                  {oneTimeSessions.length > 1 && (
+                    <button
+                      onClick={() => setOneTimeSessions(prev => prev.filter((_, idx) => idx !== i))}
+                      className="text-xs text-[#6a96bb] hover:text-[#c8102e] transition-colors"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <label className={labelCls}>Preferred Room</label>
+                  <input type="text" placeholder="Optional" value={s.room_name} onChange={e => updateOneTimeSession(i, 'room_name', e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>Date *</label>
+                  <input type="date" value={s.session_date} onChange={e => updateOneTimeSession(i, 'session_date', e.target.value)} className={inputCls} />
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className={labelCls}>Start Time *</label>
+                    <TimePicker value={s.start_time} onChange={v => updateOneTimeSession(i, 'start_time', v)} />
+                  </div>
+                  <div className="flex-1">
+                    <label className={labelCls}>End Time *</label>
+                    <TimePicker value={s.end_time} onChange={v => updateOneTimeSession(i, 'end_time', v)} />
+                  </div>
+                </div>
               </div>
-              <div className="flex-1">
-                <label className={labelCls}>End Time *</label>
-                <TimePicker value={form.end_time} onChange={v => setForm({ ...form, end_time: v })} />
-              </div>
-            </div>
-          </>
+            ))}
+          </div>
         )}
 
         {/* Weekly Room fields */}
@@ -317,6 +431,13 @@ export default function RequestPage() {
       >
         {submitting ? 'Submitting...' : 'Submit Request'}
       </button>
+      </div>
+
+      {/* Guidelines — right column, hidden on small screens */}
+      <div className="hidden lg:block w-72 flex-shrink-0 space-y-4 pt-1 ml-auto">
+        <GuidelinesPanel type={type} />
+      </div>
+    </div>
     </div>
   )
 }

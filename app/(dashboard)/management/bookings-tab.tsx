@@ -182,7 +182,7 @@ export default function BookingsTab() {
                 : 'border-transparent text-[#93b8d8] hover:text-[#f0f6ff]'
             }`}
           >
-            {tab}
+            {tab === 'One-Time Rooms' ? 'One-Time/Multiple Rooms' : tab}
           </button>
         ))}
       </div>
@@ -200,7 +200,7 @@ export default function BookingsTab() {
       {/* Modal */}
       {showModal && (
         <BookingModal
-          title={`New ${subTab === 'Tables' ? 'Tabling' : subTab.replace('s', '')} Booking`}
+          title={`New ${subTab === 'Tables' ? 'Tabling' : subTab === 'One-Time Rooms' ? 'One-Time/Multiple Room' : subTab.replace('s', '')} Booking`}
           onClose={() => setShowModal(false)}
         >
           {subTab === 'One-Time Rooms' && (
@@ -228,7 +228,7 @@ export default function BookingsTab() {
       )}
       {editingBooking && (
         <BookingModal
-            title="Edit One-Time Room Booking"
+            title="Edit One-Time/Multiple Room Booking"
             onClose={() => setEditingBooking(null)}
         >
             <EditOneTimeForm
@@ -275,8 +275,8 @@ export default function BookingsTab() {
             <p className="text-[#6a96bb] text-sm">No one-time room bookings found.</p>
           ) : (
             oneTime.map(b => {
-              const d = b.one_time_room_bookings?.[0]
-              if (!d) return null
+              if (!b.one_time_room_bookings?.length) return null
+              const firstSession = b.one_time_room_bookings[0]
               return (
                 <div key={b.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm">
                   <div className="flex items-center justify-between">
@@ -286,8 +286,8 @@ export default function BookingsTab() {
                     </div>
                     <div className="flex items-center gap-3">
                       <AdminRoleBadge role={b.users?.admin_role} />
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[d.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
-                        {d.status}
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
+                        {firstSession.status}
                       </span>
                       <button
                         onClick={() => setEditingBooking(b)}
@@ -297,11 +297,15 @@ export default function BookingsTab() {
                       </button>
                     </div>
                   </div>
-                  <div className="mt-3 text-sm text-[#93b8d8] space-y-0.5">
-                    <p><span className="font-medium text-[#f0f6ff]">Room:</span> {d.room_name}</p>
-                    <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(d.booking_date)}</p>
-                    <p><span className="font-medium text-[#f0f6ff]">Time:</span> {formatTime(d.start_time)} – {formatTime(d.end_time)}</p>
-                    {d.reservation_code && <p><span className="font-medium text-[#f0f6ff]">Code:</span> {d.reservation_code}</p>}
+                  <div className="mt-3 text-sm text-[#93b8d8] space-y-1">
+                    {b.one_time_room_bookings.map((d, i) => (
+                      <div key={i} className={b.one_time_room_bookings!.length > 1 ? 'border-t border-[#1e5080] pt-1 first:border-0 first:pt-0' : ''}>
+                        {d.room_name && <p><span className="font-medium text-[#f0f6ff]">Room:</span> {d.room_name}</p>}
+                        <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(d.booking_date)}</p>
+                        <p><span className="font-medium text-[#f0f6ff]">Time:</span> {formatTime(d.start_time)} – {formatTime(d.end_time)}</p>
+                        {d.reservation_code && <p><span className="font-medium text-[#f0f6ff]">Code:</span> {d.reservation_code}</p>}
+                      </div>
+                    ))}
                   </div>
                 </div>
               )

@@ -76,7 +76,29 @@ export async function POST(request: Request) {
   if (requestError) return NextResponse.json({ error: requestError.message }, { status: 500 })
 
   // Insert type-specific details
-  if (type === 'One-Time Room' || type === 'Weekly Room') {
+  if (type === 'One-Time Room') {
+    const sessionRows = sessions.map((s: {
+      session_date: string
+      start_time: string
+      end_time: string
+      room_name: string
+    }) => ({
+      request_id: roomRequest.id,
+      room_name: s.room_name || null,
+      start_date: s.session_date,
+      start_time: s.start_time,
+      end_time: s.end_time,
+      end_date: null,
+    }))
+
+    const { error: detailError } = await adminSupabase
+      .from('room_request_details')
+      .insert(sessionRows)
+
+    if (detailError) return NextResponse.json({ error: detailError.message }, { status: 500 })
+  }
+
+  if (type === 'Weekly Room') {
     const { error: detailError } = await adminSupabase
       .from('room_request_details')
       .insert({

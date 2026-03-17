@@ -7,6 +7,15 @@ const adminSupabase = createAdminClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+interface OneTimeSession {
+  room_name: string
+  booking_date: string
+  start_time: string
+  end_time: string
+  status: string
+  reservation_code: string
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient()
 
@@ -15,7 +24,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { body_id, purpose, room_name, booking_date, start_time, end_time, reservation_code, status } = await request.json()
+  const { body_id, purpose, sessions } = await request.json()
 
   // Create parent booking
   const { data: booking, error: bookingError } = await adminSupabase
@@ -26,10 +35,20 @@ export async function POST(request: Request) {
 
   if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 })
 
-  // Create one-time room booking
+  // Create one-time room booking rows
+  const sessionRows = sessions.map((s: OneTimeSession) => ({
+    booking_id: booking.id,
+    room_name: s.room_name || null,
+    booking_date: s.booking_date,
+    start_time: s.start_time,
+    end_time: s.end_time,
+    reservation_code: s.reservation_code || null,
+    status: s.status,
+  }))
+
   const { error: detailError } = await adminSupabase
     .from('one_time_room_bookings')
-    .insert({ booking_id: booking.id, room_name, booking_date, start_time, end_time, reservation_code: reservation_code || null, status })
+    .insert(sessionRows)
 
   if (detailError) return NextResponse.json({ error: detailError.message }, { status: 500 })
 
@@ -44,7 +63,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { booking_id, detail_id, body_id, purpose, room_name, booking_date, start_time, end_time, reservation_code, status } = await request.json()
+  const { booking_id, body_id, purpose, sessions } = await request.json()
 
   const { error: bookingError } = await adminSupabase
     .from('bookings')
@@ -53,16 +72,35 @@ export async function PATCH(request: Request) {
 
   if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 })
 
-  const { error: detailError } = await adminSupabase
+  // Delete existing session rows and reinsert
+  const { error: deleteError } = await adminSupabase
     .from('one_time_room_bookings')
-    .update({ room_name, booking_date, start_time, end_time, reservation_code: reservation_code || null, status })
-    .eq('id', detail_id)
+    .delete()
+    .eq('booking_id', booking_id)
 
-  if (detailError) return NextResponse.json({ error: detailError.message }, { status: 500 })
+  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
+
+  const sessionRows = sessions.map((s: OneTimeSession) => ({
+    booking_id,
+    room_name: s.room_name || null,
+    booking_date: s.booking_date,
+    start_time: s.start_time,
+    end_time: s.end_time,
+    reservation_code: s.reservation_code || null,
+    status: s.status,
+  }))
+
+  const { error: insertError } = await adminSupabase
+    .from('one_time_room_bookings')
+    .insert(sessionRows)
+
+  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+
+  const firstSession = sessions[0] as OneTimeSession
 
   const { data: auditLog } = await adminSupabase
     .from('audit_logs')
-    .insert({ booking_id, admin_id: user.id, new_status: status })
+    .insert({ booking_id, admin_id: user.id, new_status: firstSession.status })
     .select('id')
     .single()
 
@@ -84,8 +122,8 @@ export async function PATCH(request: Request) {
         audit_log_id: auditLog.id,
         booking_id,
         booking_type: 'One-Time Room',
-        booking_date: booking_date,
-        start_time: start_time,
+        booking_date: firstSession.booking_date,
+        start_time: firstSession.start_time,
       }))
     )
   }

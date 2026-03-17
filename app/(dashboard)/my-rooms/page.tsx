@@ -110,23 +110,23 @@ export default function MyRoomsPage() {
       const flat: FlatBooking[] = []
 
       for (const b of data.oneTimeBookings || []) {
-        const d = b.one_time_room_bookings?.[0]
-        if (!d) continue
-        flat.push({
-          id: b.id,
-          bodyId: b.body_id,
-          bookingId: b.id,
-          type: 'One-Time Room',
-          bodyName: b.bodies?.name || '',
-          purpose: b.purpose,
-          location: d.room_name,
-          date: d.booking_date,
-          startTime: d.start_time,
-          endTime: d.end_time,
-          status: d.status,
-          reservationCode: d.reservation_code,
-          senateType: null,
-        })
+        for (const d of b.one_time_room_bookings || []) {
+          flat.push({
+            id: d.id,
+            bodyId: b.body_id,
+            bookingId: b.id,
+            type: 'One-Time Room',
+            bodyName: b.bodies?.name || '',
+            purpose: b.purpose,
+            location: d.room_name,
+            date: d.booking_date,
+            startTime: d.start_time,
+            endTime: d.end_time,
+            status: d.status,
+            reservationCode: d.reservation_code,
+            senateType: null,
+          })
+        }
       }
 
       for (const b of data.weeklyBookings || []) {
@@ -224,7 +224,7 @@ export default function MyRoomsPage() {
             {filteredUpcoming.map(b => (
               <div key={b.id} className={`rounded-xl p-5 shadow-sm border ${statusColors[b.status] || 'bg-[#184073] border-[#1e5080]'}`}>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6a96bb]">{b.type}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6a96bb]">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
                   <span className={`text-xs font-semibold ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
                 </div>
                 <p className="font-semibold text-[#f0f6ff]">{b.bodyName}</p>
@@ -261,7 +261,7 @@ export default function MyRoomsPage() {
                   </div>
                   <p className="text-sm text-[#6a96bb]">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                 </div>
-                <span className="text-xs text-[#6a96bb] flex-shrink-0">{b.type}</span>
+                <span className="text-xs text-[#6a96bb] flex-shrink-0">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
                 <span className={`text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
                 {leadershipBodyIds.includes(b.bodyId) &&
                  !['Pending Cancellation', 'Cancelled', 'Virtual'].includes(b.status) && (

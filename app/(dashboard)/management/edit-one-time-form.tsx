@@ -19,6 +19,24 @@ interface Body {
   name: string
 }
 
+interface OneTimeSession {
+  room_name: string
+  booking_date: string
+  start_time: string
+  end_time: string
+  status: string
+  reservation_code: string
+}
+
+const emptySession = (): OneTimeSession => ({
+  room_name: '',
+  booking_date: '',
+  start_time: '',
+  end_time: '',
+  status: 'Reserved',
+  reservation_code: '',
+})
+
 interface EditOneTimeFormProps {
   booking: {
     id: string
@@ -43,27 +61,39 @@ const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py
 const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
 export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }: EditOneTimeFormProps) {
-  const d = booking.one_time_room_bookings?.[0]
-
   const [form, setForm] = useState({
     body_id: booking.body_id,
     purpose: booking.purpose,
-    room_name: d?.room_name ?? '',
-    booking_date: d?.booking_date ?? '',
-    start_time: d?.start_time.slice(0, 5) ?? '',
-    end_time: d?.end_time.slice(0, 5) ?? '',
-    reservation_code: d?.reservation_code ?? '',
-    status: d?.status ?? '',
   })
+
+  const [sessions, setSessions] = useState<OneTimeSession[]>(
+    booking.one_time_room_bookings?.map(d => ({
+      room_name: d.room_name ?? '',
+      booking_date: d.booking_date ?? '',
+      start_time: d.start_time.slice(0, 5) ?? '',
+      end_time: d.end_time.slice(0, 5) ?? '',
+      status: d.status ?? 'Reserved',
+      reservation_code: d.reservation_code ?? '',
+    })) ?? [emptySession()]
+  )
+
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  if (!d) return null
+  const updateSession = (index: number, field: keyof OneTimeSession, value: string) => {
+    setSessions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
+  }
 
   const handleSubmit = async () => {
-    if (!form.body_id || !form.purpose || !form.room_name || !form.booking_date || !form.start_time || !form.end_time) {
+    if (!form.body_id || !form.purpose) {
       setError('Please fill out all required fields.')
       return
+    }
+    for (const s of sessions) {
+      if (!s.booking_date || !s.start_time || !s.end_time) {
+        setError('Please fill out all session fields.')
+        return
+      }
     }
 
     setSaving(true)
@@ -72,8 +102,9 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         booking_id: booking.id,
-        detail_id: d.id,
-        ...form,
+        body_id: form.body_id,
+        purpose: form.purpose,
+        sessions,
       }),
     })
 
@@ -113,59 +144,87 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
         />
       </div>
 
-      <div>
-        <label className={labelCls}>Room Name *</label>
-        <input
-          type="text"
-          value={form.room_name}
-          onChange={e => setForm({ ...form, room_name: e.target.value })}
-          className={inputCls}
-        />
-      </div>
-
-      <div>
-        <label className={labelCls}>Date *</label>
-        <input
-          type="date"
-          value={form.booking_date}
-          onChange={e => setForm({ ...form, booking_date: e.target.value })}
-          className={inputCls}
-        />
-      </div>
-
-      <div className="flex gap-3">
-        <div className="flex-1">
-          <label className={labelCls}>Start Time *</label>
-          <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-semibold text-[#f0f6ff]">Sessions</span>
+          <button
+            onClick={() => setSessions(prev => [...prev, emptySession()])}
+            className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+          >
+            + Add Session
+          </button>
         </div>
-        <div className="flex-1">
-          <label className={labelCls}>End Time *</label>
-          <TimePicker value={form.end_time} onChange={v => setForm({ ...form, end_time: v })} />
-        </div>
-      </div>
 
-      <div>
-        <label className={labelCls}>Reservation Code</label>
-        <input
-          type="text"
-          placeholder="Optional"
-          value={form.reservation_code}
-          onChange={e => setForm({ ...form, reservation_code: e.target.value })}
-          className={inputCls}
-        />
-      </div>
+        {sessions.map((s, i) => (
+          <div key={i} className="border border-[#1e5080] rounded-xl p-4 space-y-3 bg-[#0f2a4a]">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">Session {i + 1}</span>
+              {sessions.length > 1 && (
+                <button
+                  onClick={() => setSessions(prev => prev.filter((_, idx) => idx !== i))}
+                  className="text-xs text-[#6a96bb] hover:text-[#c8102e] transition-colors"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
 
-      <div>
-        <label className={labelCls}>Status</label>
-        <select
-          value={form.status}
-          onChange={e => setForm({ ...form, status: e.target.value })}
-          className={inputCls}
-        >
-          {STATUSES.map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
+            <div>
+              <label className={labelCls}>Room Name</label>
+              <input
+                type="text"
+                value={s.room_name}
+                onChange={e => updateSession(i, 'room_name', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+
+            <div>
+              <label className={labelCls}>Date *</label>
+              <input
+                type="date"
+                value={s.booking_date}
+                onChange={e => updateSession(i, 'booking_date', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className={labelCls}>Start Time *</label>
+                <TimePicker value={s.start_time} onChange={v => updateSession(i, 'start_time', v)} />
+              </div>
+              <div className="flex-1">
+                <label className={labelCls}>End Time *</label>
+                <TimePicker value={s.end_time} onChange={v => updateSession(i, 'end_time', v)} />
+              </div>
+            </div>
+
+            <div>
+              <label className={labelCls}>Status</label>
+              <select
+                value={s.status}
+                onChange={e => updateSession(i, 'status', e.target.value)}
+                className={inputCls}
+              >
+                {STATUSES.map(st => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className={labelCls}>Reservation Code</label>
+              <input
+                type="text"
+                placeholder="Optional"
+                value={s.reservation_code}
+                onChange={e => updateSession(i, 'reservation_code', e.target.value)}
+                className={inputCls}
+              />
+            </div>
+          </div>
+        ))}
       </div>
 
       {error && <p className="text-[#c8102e] text-sm">{error}</p>}
