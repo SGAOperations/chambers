@@ -1,11 +1,15 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { checkRateLimit } from '@/lib/check-rate-limit'
 
 export async function GET() {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
 
   // Get user's body memberships
   const { data: memberships } = await supabase

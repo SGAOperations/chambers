@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { sendMissedReservationEmail, formatDateLong } from '@/lib/emails/missed-reservation'
+import { checkRateLimit } from '@/lib/check-rate-limit'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,6 +29,9 @@ export async function POST(request: Request) {
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
 
   const { body_id, purpose, room_name, start_date, end_date, start_time, end_time, reservation_code, status } = await request.json()
 
@@ -71,6 +76,9 @@ export async function PATCH(request: Request) {
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
 
   const { booking_id, weekly_id, body_id, purpose, room_name, start_date, end_date, start_time, end_time, reservation_code, status, occurrences } = await request.json()
 
@@ -125,7 +133,7 @@ export async function PATCH(request: Request) {
 
   const { data: parentBooking } = await adminSupabase
     .from('bookings')
-    .select('body_id')
+    .select('body_id, bodies(name)')
     .eq('id', booking_id)
     .single()
 
@@ -145,6 +153,34 @@ export async function PATCH(request: Request) {
         start_time: start_time,
       }))
     )
+  }
+
+  const isMissed = status === 'Missed' || occurrences.some((o: { status: string | null }) => o.status === 'Missed')
+  if (isMissed) {
+    try {
+      const { data: leaders } = await adminSupabase
+        .from('board_memberships')
+        .select('users(full_name)')
+        .eq('body_id', parentBooking?.body_id)
+        .eq('role', 'Leadership')
+
+      const contacts = (leaders ?? [])
+        .flatMap((l: { users: { full_name: string }[] }) => l.users.map(u => u.full_name))
+        .filter(Boolean) as string[]
+
+      const bodies = parentBooking?.bodies as { name: string }[] | undefined
+      const bodyName = bodies?.[0]?.name ?? 'Unknown'
+
+      await sendMissedReservationEmail({
+        bodyName,
+        date: formatDateLong(start_date),
+        startTime: start_time,
+        endTime: end_time,
+        contacts,
+      })
+    } catch (e) {
+      console.error('Resend email failed:', e)
+    }
   }
 
   return NextResponse.json({ success: true })

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { checkRateLimit } from '@/lib/check-rate-limit'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -14,6 +15,9 @@ export async function GET() {
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
 
   const { data: users } = await supabase
     .from('users')
@@ -36,6 +40,9 @@ export async function POST(request: Request) {
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
 
   const { email, full_name, admin_role } = await request.json()
 
@@ -74,6 +81,9 @@ export async function PATCH(request: Request) {
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
 
   const { id, admin_role, is_active } = await request.json()
 

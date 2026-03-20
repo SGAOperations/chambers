@@ -12,6 +12,7 @@ const STATUSES = [
   'Pending Cancellation',
   'Cancelled',
   'Virtual',
+  'Missed',
 ]
 
 interface Body {

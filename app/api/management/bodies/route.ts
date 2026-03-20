@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { checkRateLimit } from '@/lib/check-rate-limit'
 
 export async function GET() {
   const supabase = await createClient()
@@ -8,6 +9,9 @@ export async function GET() {
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
 
   const { data: bodies } = await supabase
     .from('bodies')
@@ -24,6 +28,9 @@ export async function POST(request: Request) {
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
 
   const { name, division } = await request.json()
 
@@ -43,6 +50,9 @@ export async function PATCH(request: Request) {
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
 
   const { id, name, division, is_active } = await request.json()
 

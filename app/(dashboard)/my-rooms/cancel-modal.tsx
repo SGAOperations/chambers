@@ -20,6 +20,7 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
   const [scope, setScope] = useState<'occurrence' | 'series'>(
     booking.type === 'Weekly Room' ? 'occurrence' : 'series'
   )
+  const [cancellationType, setCancellationType] = useState<'Cancellation' | 'Virtual'>('Cancellation')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -34,6 +35,7 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
         booking_id: booking.id,
         occurrence_id: scope === 'occurrence' ? booking.occurrenceId : null,
         scope,
+        cancellation_type: cancellationType,
       }),
     })
 
@@ -59,6 +61,35 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
         <div className="bg-[#0f2a4a] rounded-lg px-4 py-3 space-y-1">
           <p className="text-sm font-semibold text-[#f0f6ff]">{booking.bodyName} — {booking.location}</p>
           <p className="text-xs text-[#93b8d8]">{booking.purpose} · {booking.type === 'One-Time Room' ? 'One-Time/Multiple Room' : booking.type}</p>
+        </div>
+
+        {/* Cancellation type selector */}
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-[#93b8d8]">Cancellation Type</p>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="cancellationType"
+                value="Cancellation"
+                checked={cancellationType === 'Cancellation'}
+                onChange={() => setCancellationType('Cancellation')}
+                className="accent-[#c8102e]"
+              />
+              <span className="text-sm text-[#f0f6ff]">Full Cancellation</span>
+            </label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="radio"
+                name="cancellationType"
+                value="Virtual"
+                checked={cancellationType === 'Virtual'}
+                onChange={() => setCancellationType('Virtual')}
+                className="accent-[#c8102e]"
+              />
+              <span className="text-sm text-[#f0f6ff]">Going Virtual</span>
+            </label>
+          </div>
         </div>
 
         {/* Weekly scope selector */}

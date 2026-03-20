@@ -7,6 +7,7 @@ interface CancellationRequest {
   scope: 'occurrence' | 'series'
   status: 'Pending' | 'Done'
   created_at: string
+  cancellation_type: string
   bookings: {
     id: string
     type: string
@@ -86,6 +87,7 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
           <div className="mt-3 text-sm text-[#93b8d8] space-y-0.5">
             <p><span className="font-medium text-[#f0f6ff]">Requested by:</span> {c.users?.full_name}</p>
             <p><span className="font-medium text-[#f0f6ff]">Scope:</span> {c.scope === 'occurrence' ? 'Single occurrence' : 'Entire series'}</p>
+            <p><span className="font-medium text-[#f0f6ff]">Cancellation Type:</span> {c.cancellation_type === 'Virtual' ? 'Going Virtual' : 'Full Cancellation'}</p>
             {c.scope === 'occurrence' && c.weekly_room_occurrences?.occurrence_date && (
               <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(c.weekly_room_occurrences.occurrence_date)}</p>
             )}

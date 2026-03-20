@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { checkRateLimit } from '@/lib/check-rate-limit'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,10 +16,13 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
+
   const { data: cancellations } = await supabase
     .from('cancellation_requests')
     .select(`
-      id, scope, status, created_at,
+      id, scope, status, created_at, cancellation_type,
       bookings(id, type, purpose, bodies(name)),
       weekly_room_occurrences(occurrence_date),
       users(full_name)
@@ -35,6 +39,9 @@ export async function PATCH(request: Request) {
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
 
   const { id } = await request.json()
 

@@ -16,6 +16,7 @@ const statusColors: Record<string, string> = {
   'Pending Cancellation': 'bg-[#3d2200] border-[#f97316]',
   'Cancelled': 'bg-[#2a1042] border-[#a855f7]',
   'Virtual': 'bg-[#062f3b] border-[#06b6d4]',
+  'Missed': 'bg-[#1a1a2e] border-[#a78bfa]',
 }
 
 const statusBarColors: Record<string, string> = {
@@ -27,6 +28,7 @@ const statusBarColors: Record<string, string> = {
   'Pending Cancellation': 'bg-[#f97316]',
   'Cancelled': 'bg-[#a855f7]',
   'Virtual': 'bg-[#06b6d4]',
+  'Missed': 'bg-[#a78bfa]',
 }
 
 const statusTextColors: Record<string, string> = {
@@ -38,6 +40,7 @@ const statusTextColors: Record<string, string> = {
   'Pending Cancellation': 'text-[#fb923c]',
   'Cancelled': 'text-[#c084fc]',
   'Virtual': 'text-[#22d3ee]',
+  'Missed': 'text-[#a78bfa]',
 }
 
 interface FlatBooking {

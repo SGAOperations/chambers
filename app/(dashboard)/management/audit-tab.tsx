@@ -36,6 +36,7 @@ const statusColors: Record<string, string> = {
   'Pending Cancellation': 'bg-[#3d2200] text-[#fb923c]',
   'Cancelled': 'bg-[#2a1042] text-[#c084fc]',
   'Virtual': 'bg-[#062f3b] text-[#22d3ee]',
+  'Missed': 'bg-[#1a1a2e] text-[#a78bfa]',
 }
 
 function AdminRoleBadge({ role }: { role: string | null | undefined }) {
