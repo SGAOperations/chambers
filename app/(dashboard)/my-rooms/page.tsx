@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import CancelModal from './cancel-modal'
+import BookingDetailModal from './booking-detail-modal'
 import NotificationBell from './notification-bell'
 import {createClient} from "@/lib/supabase/client"
 
@@ -86,6 +87,7 @@ export default function MyRoomsPage() {
   const [all, setAll] = useState<FlatBooking[]>([])
   const [loading, setLoading] = useState(true)
   const [leadershipBodyIds, setLeadershipBodyIds] = useState<string[]>([])
+  const [detailBooking, setDetailBooking] = useState<FlatBooking | null>(null)
   const [cancellingBooking, setCancellingBooking] = useState<{
     id: string
     type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -250,51 +252,79 @@ export default function MyRoomsPage() {
         <h2 className="text-xl font-bold text-[#f0f6ff] mb-5">All Bookings</h2>
         {all.length === 0 ? (
           <p className="text-[#6a96bb] text-sm">No bookings found.</p>
-        ) : (
-          <div className="divide-y divide-[#1e5080] border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073]">
-            {all.map(b => (
-              <div key={b.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a4d8a] transition-colors">
-                <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <p className="font-semibold text-[#f0f6ff] truncate">{b.bodyName} — {b.location}</p>
-                    {b.senateType && (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#c8102e] text-white flex-shrink-0">{b.senateType}</span>
+        ) : (() => {
+          const bodyMap = new Map<string, { bodyName: string, bookings: FlatBooking[] }>()
+          for (const b of all) {
+            if (!bodyMap.has(b.bodyId)) bodyMap.set(b.bodyId, { bodyName: b.bodyName, bookings: [] })
+            bodyMap.get(b.bodyId)!.bookings.push(b)
+          }
+          const groups = Array.from(bodyMap.entries()).map(([bodyId, { bodyName, bookings }]) => ({
+            bodyId, bodyName, bookings,
+            isLeadership: leadershipBodyIds.includes(bodyId),
+          }))
+          groups.sort((a, b) => {
+            if (a.isLeadership !== b.isLeadership) return a.isLeadership ? -1 : 1
+            return a.bodyName.localeCompare(b.bodyName)
+          })
+          return (
+            <div className="space-y-6">
+              {groups.map(group => (
+                <div key={group.bodyId} className="space-y-2">
+                  <h3 className="text-sm font-semibold text-[#93b8d8] uppercase tracking-wider">
+                    {group.bodyName}
+                    {group.isLeadership && (
+                      <span className="ml-1 text-[#c8102e] normal-case tracking-normal"> (Leadership)</span>
                     )}
+                  </h3>
+                  <div className="divide-y divide-[#1e5080] border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073]">
+                    {group.bookings.map(b => (
+                      <div key={b.id} onClick={() => setDetailBooking(b)} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a4d8a] transition-colors cursor-pointer">
+                        <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="font-semibold text-[#f0f6ff] truncate">{b.location}</p>
+                            {b.senateType && (
+                              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#c8102e] text-white flex-shrink-0">{b.senateType}</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-[#6a96bb]">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                        </div>
+                        <span className="text-xs text-[#6a96bb] flex-shrink-0">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
+                        <span className={`text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-sm text-[#6a96bb]">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                 </div>
-                <span className="text-xs text-[#6a96bb] flex-shrink-0">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
-                <span className={`text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
-                {leadershipBodyIds.includes(b.bodyId) &&
-                 !['Pending Cancellation', 'Cancelled', 'Virtual'].includes(b.status) && (
-                  <button
-                    onClick={() => setCancellingBooking({
-                      id: b.bookingId,
-                      type: b.type,
-                      bodyName: b.bodyName,
-                      purpose: b.purpose,
-                      location: b.location,
-                      date: b.date,
-                      occurrenceId: b.type === 'Weekly Room' ? b.id : undefined,
-                    })}
-                    className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors flex-shrink-0"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )
+        })()}
       </section>
+      {detailBooking && (
+        <BookingDetailModal
+          booking={detailBooking}
+          isLeadership={leadershipBodyIds.includes(detailBooking.bodyId)}
+          onClose={() => setDetailBooking(null)}
+          onCancelClick={() => {
+            setCancellingBooking({
+              id: detailBooking.bookingId,
+              type: detailBooking.type,
+              bodyName: detailBooking.bodyName,
+              purpose: detailBooking.purpose,
+              location: detailBooking.location,
+              date: detailBooking.date,
+              occurrenceId: detailBooking.type === 'Weekly Room' ? detailBooking.id : undefined,
+            })
+            setDetailBooking(null)
+          }}
+        />
+      )}
       {cancellingBooking && (
         <CancelModal
           booking={cancellingBooking}
           onClose={() => setCancellingBooking(null)}
           onSuccess={() => {
             setCancellingBooking(null)
-            // Refetch bookings
             fetchBookings()
           }}
         />
