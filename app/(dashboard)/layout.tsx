@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import AuthGuard from './authguard'
@@ -21,9 +21,13 @@ export default function DashboardLayout({
   const [isLeadership, setIsLeadership] = useState(false)
   const [counts, setCounts] = useState({ requests: 0, cancellations: 0, total: 0 })
   const [userName, setUserName] = useState('')
+  const [showIdleWarning, setShowIdleWarning] = useState(false)
+  const [idleCountdown, setIdleCountdown] = useState(60)
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
     const checkUser = async () => {
@@ -65,6 +69,57 @@ export default function DashboardLayout({
     router.push('/')
   }
 
+  const startWarning = () => {
+    setShowIdleWarning(true)
+    let remaining = 60
+    setIdleCountdown(remaining)
+    countdownIntervalRef.current = setInterval(() => {
+      remaining -= 1
+      setIdleCountdown(remaining)
+      if (remaining <= 0) {
+        clearInterval(countdownIntervalRef.current!)
+        countdownIntervalRef.current = null
+        supabase.auth.signOut().then(() => router.push('/'))
+      }
+    }, 1000)
+  }
+
+  const handleStayLoggedIn = () => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current)
+      countdownIntervalRef.current = null
+    }
+    setShowIdleWarning(false)
+    setIdleCountdown(60)
+    idleTimerRef.current = setTimeout(startWarning, 44 * 60 * 1000)
+  }
+
+  useEffect(() => {
+    const IDLE_MS = 44 * 60 * 1000
+
+    const resetTimer = () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current)
+        countdownIntervalRef.current = null
+        setShowIdleWarning(false)
+        setIdleCountdown(60)
+      }
+      idleTimerRef.current = setTimeout(startWarning, IDLE_MS)
+    }
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart'] as const
+    events.forEach(e => window.addEventListener(e, resetTimer))
+    resetTimer()
+
+    return () => {
+      events.forEach(e => window.removeEventListener(e, resetTimer))
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+      if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current)
+    }
+  }, [])
+
   const navLink = (href: string, label: string, badge?: number) => {
   const isActive = pathname === href || pathname.startsWith(href + '/')
     return (
@@ -88,6 +143,22 @@ export default function DashboardLayout({
 
   return (
     <AuthGuard>
+      {showIdleWarning && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-[#0a1628] border border-white/10 rounded-xl p-8 max-w-sm w-full mx-4 text-center">
+            <h2 className="text-white font-semibold text-lg mb-2">Session Expiring</h2>
+            <p className="text-slate-400 text-sm mb-6">
+              You&apos;ll be logged out in <span className="text-white font-medium">{idleCountdown}</span> second{idleCountdown !== 1 ? 's' : ''} due to inactivity.
+            </p>
+            <button
+              onClick={handleStayLoggedIn}
+              className="w-full py-2.5 px-4 bg-[#c8102e] hover:bg-[#a50d26] text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              Stay Logged In
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex h-screen">
         <nav className="w-56 bg-[#0a1628] flex flex-col flex-shrink-0">
           {/* Brand */}
@@ -96,7 +167,7 @@ export default function DashboardLayout({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.6.0 (SGA Unreleased)</p>
+            <p className="text-slate-600 text-xs mt-1">v1.6.1 (SGA Unreleased)</p>
             {userName && (
               <p className="text-slate-500 text-xs mt-2 italic">{getGreeting()},<br />{userName}</p>
             )}

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { sendMissedReservationEmail, formatDateLong } from '@/lib/emails/missed-reservation'
+import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 
 const adminSupabase = createAdminClient(
@@ -142,7 +143,7 @@ export async function PATCH(request: Request) {
 
   const { data: members } = await adminSupabase
     .from('board_memberships')
-    .select('user_id')
+    .select('user_id, users(email)')
     .eq('body_id', parentBooking?.body_id)
 
   if (members?.length && auditLog) {
@@ -156,6 +157,27 @@ export async function PATCH(request: Request) {
         start_time: sessions[0]?.start_time ?? null,
       }))
     )
+  }
+
+  try {
+    const bodies = parentBooking?.bodies as { name: string }[] | undefined
+    const bodyName = bodies?.[0]?.name ?? 'Unknown'
+    const emails = (members ?? [])
+      .flatMap((m: { users: { email: string } | { email: string }[] | null }) =>
+        Array.isArray(m.users) ? m.users.map(u => u.email) : m.users ? [m.users.email] : []
+      )
+      .filter(Boolean) as string[]
+    await sendBookingUpdatedEmail({
+      bodyName,
+      roomOrTable: sessions[0]?.location || 'N/A',
+      date: sessions[0]?.session_date ?? '',
+      startTime: sessions[0]?.start_time ?? '',
+      endTime: sessions[0]?.end_time ?? '',
+      status: statusSummary,
+      recipients: emails,
+    })
+  } catch (e) {
+    console.error('Booking updated email failed:', e)
   }
 
   if (sessions.some((s: Session) => s.status === 'Missed')) {
