@@ -23,9 +23,15 @@ export async function GET() {
     .select('*', { count: 'exact', head: true })
     .eq('status', 'Pending')
 
+  const { count: revisionCount } = await supabase
+    .from('revision_requests')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'Pending')
+
   return NextResponse.json({
     requests: requestCount || 0,
     cancellations: cancellationCount || 0,
-    total: (requestCount || 0) + (cancellationCount || 0),
+    revisions: revisionCount || 0,
+    total: (requestCount || 0) + (cancellationCount || 0) + (revisionCount || 0),
   })
 }

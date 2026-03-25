@@ -12,6 +12,7 @@ const statusTextColors: Record<string, string> = {
   'Cancelled': 'text-[#c084fc]',
   'Virtual': 'text-[#22d3ee]',
   'Missed': 'text-[#a78bfa]',
+  'Repurposed': 'text-white',
 }
 
 interface FlatBooking {
@@ -35,6 +36,7 @@ interface BookingDetailModalProps {
   isLeadership: boolean
   onClose: () => void
   onCancelClick: () => void
+  onRevisionClick: () => void
 }
 
 function formatTime(time: string) {
@@ -51,8 +53,9 @@ function formatDate(date: string) {
   })
 }
 
-export default function BookingDetailModal({ booking, isLeadership, onClose, onCancelClick }: BookingDetailModalProps) {
+export default function BookingDetailModal({ booking, isLeadership, onClose, onCancelClick, onRevisionClick }: BookingDetailModalProps) {
   const canCancel = isLeadership && !['Pending Cancellation', 'Cancelled', 'Virtual'].includes(booking.status)
+  const canRevise = isLeadership && !['Cancelled', 'Missed', 'Repurposed'].includes(booking.status)
 
   return (
     <BookingModal title="Booking Details" onClose={onClose}>
@@ -98,13 +101,25 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
           )}
         </div>
 
-        {canCancel && (
-          <button
-            onClick={onCancelClick}
-            className="w-full mt-2 py-2.5 rounded-xl bg-[#c8102e] hover:bg-[#a00d24] text-white font-semibold text-sm transition-colors"
-          >
-            Request Cancellation
-          </button>
+        {(canCancel || canRevise) && (
+          <div className="flex flex-col gap-2 mt-2">
+            {canRevise && (
+              <button
+                onClick={onRevisionClick}
+                className="w-full py-2.5 rounded-xl bg-[#1a4d8a] hover:bg-[#2563eb] text-white font-semibold text-sm transition-colors"
+              >
+                Request Revision
+              </button>
+            )}
+            {canCancel && (
+              <button
+                onClick={onCancelClick}
+                className="w-full py-2.5 rounded-xl bg-[#c8102e] hover:bg-[#a00d24] text-white font-semibold text-sm transition-colors"
+              >
+                Request Cancellation
+              </button>
+            )}
+          </div>
         )}
       </div>
     </BookingModal>

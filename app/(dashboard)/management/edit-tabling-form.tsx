@@ -13,6 +13,7 @@ const STATUSES = [
   'Cancelled',
   'Virtual',
   'Missed',
+  'Repurposed',
 ]
 
 interface Body {

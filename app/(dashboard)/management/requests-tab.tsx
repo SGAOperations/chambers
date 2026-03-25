@@ -5,6 +5,23 @@ import FulfillModal from './fulfill-modal'
 
 type RequestStatus = 'Pending' | 'Fulfilled' | 'Denied'
 
+interface RevisionRequest {
+  id: string
+  change_type: 'Time' | 'Room' | 'Both'
+  new_start_time: string | null
+  new_end_time: string | null
+  new_room: string | null
+  more_info: string
+  created_at: string
+  bookings: {
+    id: string
+    type: string
+    purpose: string
+    bodies: { name: string } | null
+  } | null
+  users: { full_name: string } | null
+}
+
 interface RoomRequest {
   id: string
   body_id: string
@@ -55,6 +72,7 @@ interface RequestsTabProps {
 
 export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   const [requests, setRequests] = useState<RoomRequest[]>([])
+  const [revisions, setRevisions] = useState<RevisionRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [confirmingDenial, setConfirmingDenial] = useState<string | null>(null)
@@ -66,9 +84,14 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
 } | null>(null)
 
   const fetchRequests = async () => {
-    const res = await fetch('/api/management/requests')
-    const data = await res.json()
-    setRequests(data.requests || [])
+    const [reqRes, revRes] = await Promise.all([
+      fetch('/api/management/requests'),
+      fetch('/api/management/revisions'),
+    ])
+    const reqData = await reqRes.json()
+    const revData = await revRes.json()
+    setRequests(reqData.requests || [])
+    setRevisions(revData.revisions || [])
     setLoading(false)
   }
 
@@ -90,11 +113,50 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
 
   if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
 
-  if (requests.length === 0) return <div className="text-[#6a96bb] text-sm">No requests found.</div>
+  if (requests.length === 0 && revisions.length === 0) return <div className="text-[#6a96bb] text-sm">No requests found.</div>
 
   return (
-    <div className="space-y-4">
-      {requests.map(r => (
+    <div className="space-y-6">
+      {revisions.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-[#6a96bb]">Revision Requests</h3>
+          {revisions.map(rv => (
+            <div key={rv.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-semibold text-[#f0f6ff]">{rv.bookings?.bodies?.name || 'Unknown Body'}</span>
+                  <span className="mx-2 text-[#1e5080]">·</span>
+                  <span className="text-sm text-[#93b8d8]">{rv.bookings?.type === 'One-Time Room' ? 'One-Time/Multiple Room' : rv.bookings?.type}</span>
+                </div>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#0e2f4f] text-[#93c5fd]">
+                  Revision Request
+                </span>
+              </div>
+              <div className="text-sm text-[#93b8d8] space-y-1">
+                <p><span className="font-medium text-[#f0f6ff]">Requested by:</span> {rv.users?.full_name || 'Unknown'}</p>
+                <p><span className="font-medium text-[#f0f6ff]">Purpose:</span> {rv.bookings?.purpose}</p>
+                <p><span className="font-medium text-[#f0f6ff]">Requested change:</span> {rv.change_type === 'Both' ? 'Time and Room' : rv.change_type}</p>
+                {(rv.change_type === 'Time' || rv.change_type === 'Both') && (rv.new_start_time || rv.new_end_time) && (
+                  <p>
+                    <span className="font-medium text-[#f0f6ff]">Requested time:</span>{' '}
+                    {rv.new_start_time ? formatTime(rv.new_start_time) : '—'} – {rv.new_end_time ? formatTime(rv.new_end_time) : '—'}
+                  </p>
+                )}
+                {(rv.change_type === 'Room' || rv.change_type === 'Both') && rv.new_room && (
+                  <p><span className="font-medium text-[#f0f6ff]">Requested room:</span> {rv.new_room}</p>
+                )}
+                <p><span className="font-medium text-[#f0f6ff]">More info:</span> {rv.more_info}</p>
+                <p><span className="font-medium text-[#f0f6ff]">Submitted:</span> {new Date(rv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {requests.length > 0 && (
+        <div className="space-y-3">
+          {revisions.length > 0 && <h3 className="text-xs font-semibold uppercase tracking-widest text-[#6a96bb]">Room Requests</h3>}
+          {requests.map(r => (
         <div key={r.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm space-y-3">
           {/* Header */}
           <div className="flex items-center justify-between">
@@ -185,6 +247,8 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
           )}
         </div>
       ))}
+        </div>
+      )}
       {fulfillingRequest && (
         <FulfillModal
           request={fulfillingRequest}

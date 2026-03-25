@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import CancelModal from './cancel-modal'
+import RevisionModal from './revision-modal'
 import BookingDetailModal from './booking-detail-modal'
 import NotificationBell from './notification-bell'
 import {createClient} from "@/lib/supabase/client"
@@ -18,6 +19,7 @@ const statusColors: Record<string, string> = {
   'Cancelled': 'bg-[#2a1042] border-[#a855f7]',
   'Virtual': 'bg-[#062f3b] border-[#06b6d4]',
   'Missed': 'bg-[#1a1a2e] border-[#a78bfa]',
+  'Repurposed': 'bg-[#1a1a1a] border-white',
 }
 
 const statusBarColors: Record<string, string> = {
@@ -30,6 +32,7 @@ const statusBarColors: Record<string, string> = {
   'Cancelled': 'bg-[#a855f7]',
   'Virtual': 'bg-[#06b6d4]',
   'Missed': 'bg-[#a78bfa]',
+  'Repurposed': 'bg-white',
 }
 
 const statusTextColors: Record<string, string> = {
@@ -42,6 +45,7 @@ const statusTextColors: Record<string, string> = {
   'Cancelled': 'text-[#c084fc]',
   'Virtual': 'text-[#22d3ee]',
   'Missed': 'text-[#a78bfa]',
+  'Repurposed': 'text-white',
 }
 
 interface FlatBooking {
@@ -96,6 +100,13 @@ export default function MyRoomsPage() {
     location: string
     date: string
     occurrenceId?: string
+  } | null>(null)
+  const [revisingBooking, setRevisingBooking] = useState<{
+    id: string
+    type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
+    bodyName: string
+    purpose: string
+    location: string
   } | null>(null)
 
   const fetchBookings = async () => {
@@ -317,6 +328,16 @@ export default function MyRoomsPage() {
             })
             setDetailBooking(null)
           }}
+          onRevisionClick={() => {
+            setRevisingBooking({
+              id: detailBooking.bookingId,
+              type: detailBooking.type,
+              bodyName: detailBooking.bodyName,
+              purpose: detailBooking.purpose,
+              location: detailBooking.location,
+            })
+            setDetailBooking(null)
+          }}
         />
       )}
       {cancellingBooking && (
@@ -327,6 +348,13 @@ export default function MyRoomsPage() {
             setCancellingBooking(null)
             fetchBookings()
           }}
+        />
+      )}
+      {revisingBooking && (
+        <RevisionModal
+          booking={revisingBooking}
+          onClose={() => setRevisingBooking(null)}
+          onSuccess={() => setRevisingBooking(null)}
         />
       )}
     </div>

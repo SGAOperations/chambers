@@ -37,9 +37,17 @@ const statusColors: Record<string, string> = {
   'Cancelled': 'bg-[#2a1042] text-[#c084fc]',
   'Virtual': 'bg-[#062f3b] text-[#22d3ee]',
   'Missed': 'bg-[#1a1a2e] text-[#a78bfa]',
+  'Repurposed': 'bg-[#1a1a1a] text-white',
 }
 
 function AdminRoleBadge({ role }: { role: string | null | undefined }) {
+  if (role === 'Executive Vice President') {
+    return (
+      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#c084fc] text-[#3b0764]">
+        Executive VP
+      </span>
+    )
+  }
   if (role === 'Comptroller') {
     return (
       <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#f87171] text-[#450a0a]">

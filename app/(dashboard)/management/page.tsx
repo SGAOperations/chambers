@@ -11,7 +11,7 @@ type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'Advanced Settings'
 
 export default function ManagementPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Requests')
-  const [counts, setCounts] = useState({ requests: 0, cancellations: 0, total: 0 })
+  const [counts, setCounts] = useState({ requests: 0, cancellations: 0, revisions: 0, total: 0 })
 
   useEffect(() => {
     const fetchCounts = async () => {
@@ -25,7 +25,7 @@ export default function ManagementPage() {
   }, [])
 
   const tabBadge = (tab: Tab) => {
-    if (tab === 'Requests') return counts.requests
+    if (tab === 'Requests') return counts.requests + counts.revisions
     if (tab === 'Cancellations') return counts.cancellations
     return 0
   }

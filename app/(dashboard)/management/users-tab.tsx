@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 
 const ADMIN_ROLES = [
+  'Executive Vice President',
   'Vice President of Operational Affairs',
   'Comptroller',
   'Digital Innovation Project Member',
@@ -44,6 +45,7 @@ export default function UsersTab() {
   const [creating, setCreating] = useState(false)
   const [addingMembership, setAddingMembership] = useState<string | null>(null)
   const [newMembership, setNewMembership] = useState({ body_id: '', role: 'Member' })
+  const [adminRoleError, setAdminRoleError] = useState<string | null>(null)
 
   const fetchUsers = async () => {
     const res = await fetch('/api/management/users')
@@ -92,6 +94,25 @@ export default function UsersTab() {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: membershipId }),
+    })
+    await fetchUsers()
+  }
+
+  const updateAdminRole = async (userId: string, newRole: string) => {
+    setAdminRoleError(null)
+    const VP_ROLE = 'Vice President of Operational Affairs'
+    const currentUser = users.find(u => u.id === userId)
+    if (currentUser?.admin_role === VP_ROLE && newRole !== VP_ROLE) {
+      const vpCount = users.filter(u => u.admin_role === VP_ROLE).length
+      if (vpCount <= 1) {
+        setAdminRoleError('Cannot remove the only Vice President of Operational Affairs.')
+        return
+      }
+    }
+    await fetch('/api/management/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: userId, admin_role: newRole || null }),
     })
     await fetchUsers()
   }
@@ -197,6 +218,23 @@ export default function UsersTab() {
             {/* Expanded section */}
             {expandedUser === u.id && (
               <div className="border-t border-[#1e5080] px-4 py-4 space-y-4 bg-[#0f2a4a]/50 rounded-b-xl">
+                {/* Admin role */}
+                <div>
+                  <h4 className="text-sm font-semibold text-[#f0f6ff] mb-2">Admin Role</h4>
+                  {adminRoleError && (
+                    <p className="text-xs text-[#f87171] mb-2">{adminRoleError}</p>
+                  )}
+                  <select
+                    value={u.admin_role ?? ''}
+                    onChange={e => updateAdminRole(u.id, e.target.value)}
+                    className={inputCls}
+                  >
+                    <option value="">No Admin Role</option>
+                    {ADMIN_ROLES.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
                 {/* Body memberships */}
                 <div>
                   <h4 className="text-sm font-semibold text-[#f0f6ff] mb-2">Body Memberships</h4>

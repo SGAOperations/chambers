@@ -177,6 +177,13 @@ export async function PATCH(request: Request) {
     console.error('Booking updated email failed:', e)
   }
 
+  // Resolve any pending revision request for this booking
+  await adminSupabase
+    .from('revision_requests')
+    .update({ status: 'Done' })
+    .eq('booking_id', booking_id)
+    .eq('status', 'Pending')
+
   const isMissed = status === 'Missed' || occurrences.some((o: { status: string | null }) => o.status === 'Missed')
   if (isMissed) {
     try {
