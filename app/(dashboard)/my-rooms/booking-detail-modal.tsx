@@ -4,8 +4,8 @@ import BookingModal from '../management/booking-modal'
 
 const statusTextColors: Record<string, string> = {
   'Reserved': 'text-[#4ade80]',
-  'Alternate Room': 'text-[#93c5fd]',
-  'Alternate Time': 'text-[#93c5fd]',
+  'Alternate Room': 'text-[#4285f4]',
+  'Alternate Time': 'text-[#4285f4]',
   'Waitlisted': 'text-[#f87171]',
   'Unavailable': 'text-[#f87171]',
   'Pending Cancellation': 'text-[#fb923c]',

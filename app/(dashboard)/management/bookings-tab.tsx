@@ -8,6 +8,7 @@ import TablingForm from './tabling-form'
 import EditOneTimeForm from './edit-one-time-form'
 import EditWeeklyForm from './edit-weekly-form'
 import EditTablingForm from './edit-tabling-form'
+import WeeklyBookingGrid from './weekly-booking-grid'
 
 type BookingSubTab = 'One-Time Rooms' | 'Weekly Rooms' | 'Tables'
 
@@ -97,8 +98,8 @@ function formatDate(date: string) {
 
 const statusColors: Record<string, string> = {
   'Reserved': 'bg-[#0f3d20] text-[#4ade80]',
-  'Alternate Room': 'bg-[#0e2f4f] text-[#93c5fd]',
-  'Alternate Time': 'bg-[#0e2f4f] text-[#93c5fd]',
+  'Alternate Room': 'bg-[#0e2f4f] text-[#4285f4]',
+  'Alternate Time': 'bg-[#0e2f4f] text-[#4285f4]',
   'Waitlisted': 'bg-[#3d0f0f] text-[#f87171]',
   'Unavailable': 'bg-[#3d0f0f] text-[#f87171]',
   'Pending Cancellation': 'bg-[#3d2200] text-[#fb923c]',
@@ -325,7 +326,12 @@ export default function BookingsTab() {
 
       {/* Weekly Rooms */}
       {subTab === 'Weekly Rooms' && (
-        <div className="space-y-3">
+        <div className="space-y-4">
+          <WeeklyBookingGrid
+            bookings={weekly}
+            onBookingClick={(b) => setEditingWeekly(b)}
+          />
+          <div className="space-y-3">
           {weekly.length === 0 ? (
             <p className="text-[#6a96bb] text-sm">No weekly room bookings found.</p>
           ) : (
@@ -367,6 +373,7 @@ export default function BookingsTab() {
               )
             })
           )}
+          </div>
         </div>
       )}
 

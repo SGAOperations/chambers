@@ -128,7 +128,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
                   <span className="mx-2 text-[#1e5080]">·</span>
                   <span className="text-sm text-[#93b8d8]">{rv.bookings?.type === 'One-Time Room' ? 'One-Time/Multiple Room' : rv.bookings?.type}</span>
                 </div>
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#0e2f4f] text-[#93c5fd]">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#0e2f4f] text-[#4285f4]">
                   Revision Request
                 </span>
               </div>

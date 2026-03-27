@@ -11,8 +11,8 @@ type Filter = 1 | 3 | 7
 
 const statusColors: Record<string, string> = {
   'Reserved': 'bg-[#0f3d20] border-[#22c55e]',
-  'Alternate Room': 'bg-[#0e2f4f] border-[#93c5fd]',
-  'Alternate Time': 'bg-[#0e2f4f] border-[#93c5fd]',
+  'Alternate Room': 'bg-[#0e2f4f] border-[#4285f4]',
+  'Alternate Time': 'bg-[#0e2f4f] border-[#4285f4]',
   'Waitlisted': 'bg-[#3d0f0f] border-[#ef4444]',
   'Unavailable': 'bg-[#3d0f0f] border-[#ef4444]',
   'Pending Cancellation': 'bg-[#3d2200] border-[#f97316]',
@@ -24,8 +24,8 @@ const statusColors: Record<string, string> = {
 
 const statusBarColors: Record<string, string> = {
   'Reserved': 'bg-[#22c55e]',
-  'Alternate Room': 'bg-[#93c5fd]',
-  'Alternate Time': 'bg-[#93c5fd]',
+  'Alternate Room': 'bg-[#4285f4]',
+  'Alternate Time': 'bg-[#4285f4]',
   'Waitlisted': 'bg-[#ef4444]',
   'Unavailable': 'bg-[#ef4444]',
   'Pending Cancellation': 'bg-[#f97316]',
@@ -37,8 +37,8 @@ const statusBarColors: Record<string, string> = {
 
 const statusTextColors: Record<string, string> = {
   'Reserved': 'text-[#4ade80]',
-  'Alternate Room': 'text-[#93c5fd]',
-  'Alternate Time': 'text-[#93c5fd]',
+  'Alternate Room': 'text-[#4285f4]',
+  'Alternate Time': 'text-[#4285f4]',
   'Waitlisted': 'text-[#f87171]',
   'Unavailable': 'text-[#f87171]',
   'Pending Cancellation': 'text-[#fb923c]',
