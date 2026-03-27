@@ -23,6 +23,7 @@ export default function DashboardLayout({
   const [userName, setUserName] = useState('')
   const [showIdleWarning, setShowIdleWarning] = useState(false)
   const [idleCountdown, setIdleCountdown] = useState(60)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
@@ -125,6 +126,7 @@ export default function DashboardLayout({
     return (
       <a
         href={href}
+        onClick={() => setSidebarOpen(false)}
         className={`flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
           isActive
             ? 'bg-white/15 text-white'
@@ -159,8 +161,33 @@ export default function DashboardLayout({
           </div>
         </div>
       )}
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile hamburger button */}
+      <button
+        className="fixed top-4 right-4 z-50 md:hidden bg-[#0a1628] p-2 rounded-lg text-white border border-white/10"
+        onClick={() => setSidebarOpen(o => !o)}
+        aria-label={sidebarOpen ? 'Close menu' : 'Open menu'}
+      >
+        {sidebarOpen ? (
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        )}
+      </button>
+
       <div className="flex h-screen">
-        <nav className="w-56 bg-[#0a1628] flex flex-col flex-shrink-0">
+        <nav className={`fixed inset-y-0 left-0 z-40 w-56 bg-[#0a1628] flex flex-col flex-shrink-0 transition-transform duration-300 md:relative md:translate-x-0 md:inset-auto md:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           {/* Brand */}
           <div className="px-5 py-5 border-b border-white/10">
             <div className="flex items-baseline gap-1.5">
