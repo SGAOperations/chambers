@@ -46,6 +46,7 @@ export default function UsersTab() {
   const [addingMembership, setAddingMembership] = useState<string | null>(null)
   const [newMembership, setNewMembership] = useState({ body_id: '', role: 'Member' })
   const [adminRoleError, setAdminRoleError] = useState<string | null>(null)
+  const [togglingActive, setTogglingActive] = useState<string | null>(null)
 
   const fetchUsers = async () => {
     const res = await fetch('/api/management/users')
@@ -115,6 +116,17 @@ export default function UsersTab() {
       body: JSON.stringify({ id: userId, admin_role: newRole || null }),
     })
     await fetchUsers()
+  }
+
+  const toggleActiveStatus = async (userId: string, currentlyActive: boolean) => {
+    setTogglingActive(userId)
+    await fetch('/api/management/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: userId, is_active: !currentlyActive }),
+    })
+    await fetchUsers()
+    setTogglingActive(null)
   }
 
   const toggleMembershipRole = async (membershipId: string, currentRole: string) => {
@@ -234,6 +246,23 @@ export default function UsersTab() {
                       <option key={r} value={r}>{r}</option>
                     ))}
                   </select>
+                </div>
+                {/* Active status */}
+                <div>
+                  <h4 className="text-sm font-semibold text-[#f0f6ff] mb-2">Account Status</h4>
+                  <button
+                    onClick={() => toggleActiveStatus(u.id, u.is_active)}
+                    disabled={togglingActive === u.id}
+                    className={`px-4 py-2 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 ${
+                      u.is_active
+                        ? 'bg-[#3d0f0f] text-[#f87171] hover:bg-[#5a1414]'
+                        : 'bg-[#0f3d20] text-[#4ade80] hover:bg-[#1a5c30]'
+                    }`}
+                  >
+                    {togglingActive === u.id
+                      ? 'Updating...'
+                      : u.is_active ? 'Deactivate User' : 'Activate User'}
+                  </button>
                 </div>
                 {/* Body memberships */}
                 <div>

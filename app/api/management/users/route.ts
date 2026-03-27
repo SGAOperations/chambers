@@ -85,22 +85,29 @@ export async function PATCH(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { id, admin_role, is_active } = await request.json()
+  const body = await request.json()
+  const { id } = body
+
+  const updateData: Record<string, unknown> = {}
+  if ('admin_role' in body) updateData.admin_role = body.admin_role
+  if ('is_active' in body) updateData.is_active = body.is_active
 
   const { error } = await adminSupabase
     .from('users')
-    .update({ admin_role, is_active })
+    .update(updateData)
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Update app_metadata if admin role changed
-  await adminSupabase.auth.admin.updateUserById(id, {
-    app_metadata: {
-      is_admin: !!admin_role,
-      admin_role: admin_role || null,
-    },
-  })
+  // Only sync auth metadata if admin_role was part of this update
+  if ('admin_role' in body) {
+    await adminSupabase.auth.admin.updateUserById(id, {
+      app_metadata: {
+        is_admin: !!body.admin_role,
+        admin_role: body.admin_role || null,
+      },
+    })
+  }
 
   return NextResponse.json({ success: true })
 }

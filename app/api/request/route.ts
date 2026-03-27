@@ -17,6 +17,15 @@ export async function GET() {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
+  const { data: settings } = await supabase
+    .from('app_settings')
+    .select('min_days_advance_room, min_days_advance_tabling')
+    .eq('id', 1)
+    .maybeSingle()
+
+  const minDaysRoom = settings?.min_days_advance_room ?? 0
+  const minDaysTabling = settings?.min_days_advance_tabling ?? 0
+
   // If user is admin, return all active bodies instead
   if (user.app_metadata?.is_admin) {
     const { data: allBodies } = await supabase
@@ -24,7 +33,7 @@ export async function GET() {
       .select('id, name')
       .eq('is_active', true)
       .order('name', { ascending: true })
-    return NextResponse.json({ bodies: allBodies || [] })
+    return NextResponse.json({ bodies: allBodies || [], minDaysRoom, minDaysTabling })
   }
 
   // Get bodies where user has Leadership role
@@ -36,7 +45,7 @@ export async function GET() {
 
   const bodies = memberships?.map(m => m.bodies).filter(Boolean) || []
 
-  return NextResponse.json({ bodies })
+  return NextResponse.json({ bodies, minDaysRoom, minDaysTabling })
 }
 
 export async function POST(request: Request) {
@@ -63,6 +72,56 @@ export async function POST(request: Request) {
 
     if (!membership) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    }
+  }
+
+  // Fetch advance notice settings and validate dates
+  const { data: settings } = await adminSupabase
+    .from('app_settings')
+    .select('min_days_advance_room, min_days_advance_tabling')
+    .eq('id', 1)
+    .maybeSingle()
+
+  const minDaysRoom = settings?.min_days_advance_room ?? 0
+  const minDaysTabling = settings?.min_days_advance_tabling ?? 0
+
+  function getMinDateStr(days: number): string {
+    const d = new Date()
+    d.setUTCDate(d.getUTCDate() + days)
+    return d.toISOString().split('T')[0]
+  }
+
+  if (type === 'One-Time Room' && minDaysRoom > 0) {
+    const minDate = getMinDateStr(minDaysRoom)
+    for (const s of sessions as { session_date: string }[]) {
+      if (s.session_date < minDate) {
+        return NextResponse.json(
+          { error: `Room bookings require at least ${minDaysRoom} day${minDaysRoom === 1 ? '' : 's'} advance notice. Please select a date of ${minDate} or later.` },
+          { status: 400 }
+        )
+      }
+    }
+  }
+
+  if (type === 'Weekly Room' && minDaysRoom > 0) {
+    const minDate = getMinDateStr(minDaysRoom)
+    if (details.start_date < minDate) {
+      return NextResponse.json(
+        { error: `Room bookings require at least ${minDaysRoom} day${minDaysRoom === 1 ? '' : 's'} advance notice. Please select a start date of ${minDate} or later.` },
+        { status: 400 }
+      )
+    }
+  }
+
+  if (type === 'Tabling' && minDaysTabling > 0) {
+    const minDate = getMinDateStr(minDaysTabling)
+    for (const s of sessions as { session_date: string }[]) {
+      if (s.session_date < minDate) {
+        return NextResponse.json(
+          { error: `Tabling bookings require at least ${minDaysTabling} day${minDaysTabling === 1 ? '' : 's'} advance notice. Please select a date of ${minDate} or later.` },
+          { status: 400 }
+        )
+      }
     }
   }
 

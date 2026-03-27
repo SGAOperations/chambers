@@ -99,6 +99,12 @@ function GuidelinesPanel({ type }: { type: RequestType }) {
   )
 }
 
+function getMinDate(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return d.toISOString().split('T')[0]
+}
+
 export default function RequestPage() {
   const router = useRouter()
   const [type, setType] = useState<RequestType>('One-Time Room')
@@ -107,6 +113,8 @@ export default function RequestPage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
+  const [minDaysRoom, setMinDaysRoom] = useState(0)
+  const [minDaysTabling, setMinDaysTabling] = useState(0)
 
   const [form, setForm] = useState({
     body_id: '',
@@ -130,6 +138,8 @@ export default function RequestPage() {
 
       const res = await fetch('/api/request')
       const data = await res.json()
+      setMinDaysRoom(data.minDaysRoom ?? 0)
+      setMinDaysTabling(data.minDaysTabling ?? 0)
       const resolved = data.bodies || []
       if (resolved.length === 0 && !isAdmin) {
         router.replace('/dashboard')
@@ -164,6 +174,15 @@ export default function RequestPage() {
           return
         }
       }
+      if (minDaysRoom > 0) {
+        const minDate = getMinDate(minDaysRoom)
+        for (const s of oneTimeSessions) {
+          if (s.session_date < minDate) {
+            setError(`Room bookings require at least ${minDaysRoom} day${minDaysRoom === 1 ? '' : 's'} advance notice. Please select a date of ${minDate} or later.`)
+            return
+          }
+        }
+      }
     }
 
     if (type === 'Weekly Room' && (!form.start_date || !form.end_date)) {
@@ -171,11 +190,28 @@ export default function RequestPage() {
       return
     }
 
+    if (type === 'Weekly Room' && minDaysRoom > 0 && form.start_date) {
+      const minDate = getMinDate(minDaysRoom)
+      if (form.start_date < minDate) {
+        setError(`Room bookings require at least ${minDaysRoom} day${minDaysRoom === 1 ? '' : 's'} advance notice. Please select a start date of ${minDate} or later.`)
+        return
+      }
+    }
+
     if (type === 'Tabling') {
       for (const s of sessions) {
         if (!s.session_date || !s.start_time || !s.end_time) {
           setError('Please fill out all session fields.')
           return
+        }
+      }
+      if (minDaysTabling > 0) {
+        const minDate = getMinDate(minDaysTabling)
+        for (const s of sessions) {
+          if (s.session_date < minDate) {
+            setError(`Tabling bookings require at least ${minDaysTabling} day${minDaysTabling === 1 ? '' : 's'} advance notice. Please select a date of ${minDate} or later.`)
+            return
+          }
         }
       }
     }
@@ -316,7 +352,7 @@ export default function RequestPage() {
                 </div>
                 <div>
                   <label className={labelCls}>Date *</label>
-                  <input type="date" value={s.session_date} onChange={e => updateOneTimeSession(i, 'session_date', e.target.value)} className={inputCls} />
+                  <input type="date" value={s.session_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => updateOneTimeSession(i, 'session_date', e.target.value)} className={inputCls} />
                 </div>
                 <div className="flex gap-3">
                   <div className="flex-1">
@@ -343,11 +379,11 @@ export default function RequestPage() {
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className={labelCls}>Start Date *</label>
-                <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className={inputCls} />
+                <input type="date" value={form.start_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => setForm({ ...form, start_date: e.target.value })} className={inputCls} />
               </div>
               <div className="flex-1">
                 <label className={labelCls}>End Date *</label>
-                <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className={inputCls} />
+                <input type="date" value={form.end_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => setForm({ ...form, end_date: e.target.value })} className={inputCls} />
               </div>
             </div>
             <div className="flex gap-3">
@@ -392,7 +428,7 @@ export default function RequestPage() {
 
                 <div>
                   <label className={labelCls}>Date *</label>
-                  <input type="date" value={s.session_date} onChange={e => updateSession(i, 'session_date', e.target.value)} className={inputCls} />
+                  <input type="date" value={s.session_date} min={minDaysTabling > 0 ? getMinDate(minDaysTabling) : undefined} onChange={e => updateSession(i, 'session_date', e.target.value)} className={inputCls} />
                 </div>
 
                 <div className="flex gap-3">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import TimePicker from '../management/time-picker'
 
 interface RevisionModalProps {
   booking: {
@@ -103,21 +104,11 @@ export default function RevisionModal({ booking, onClose, onSuccess }: RevisionM
             <div className="flex gap-3">
               <div className="flex-1 space-y-1">
                 <label className="text-xs text-[#6a96bb]">Start</label>
-                <input
-                  type="time"
-                  value={newStartTime}
-                  onChange={e => setNewStartTime(e.target.value)}
-                  className="w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2 text-sm text-[#f0f6ff] focus:outline-none focus:border-[#6a96bb]"
-                />
+                <TimePicker value={newStartTime} onChange={setNewStartTime} />
               </div>
               <div className="flex-1 space-y-1">
                 <label className="text-xs text-[#6a96bb]">End</label>
-                <input
-                  type="time"
-                  value={newEndTime}
-                  onChange={e => setNewEndTime(e.target.value)}
-                  className="w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2 text-sm text-[#f0f6ff] focus:outline-none focus:border-[#6a96bb]"
-                />
+                <TimePicker value={newEndTime} onChange={setNewEndTime} />
               </div>
             </div>
           </div>

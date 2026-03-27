@@ -14,9 +14,22 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/')
-      } else {
-        setChecking(false)
+        return
       }
+
+      const { data: profile } = await supabase
+        .from('users')
+        .select('is_active')
+        .eq('id', user.id)
+        .single()
+
+      if (!profile?.is_active) {
+        await supabase.auth.signOut()
+        router.push('/')
+        return
+      }
+
+      setChecking(false)
     }
     checkAuth()
   }, [])

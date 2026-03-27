@@ -26,14 +26,28 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       setError(error.message)
       setLoading(false)
-    } else {
-      router.push('/my-rooms')
+      return
     }
+
+    const { data: profile } = await supabase
+      .from('users')
+      .select('is_active')
+      .eq('id', data.user.id)
+      .single()
+
+    if (!profile?.is_active) {
+      await supabase.auth.signOut()
+      setError('Your account has been deactivated. Please contact an administrator.')
+      setLoading(false)
+      return
+    }
+
+    router.push('/my-rooms')
   }
 
   return (
