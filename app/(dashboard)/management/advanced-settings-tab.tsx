@@ -5,8 +5,9 @@ import UsersTab from './users-tab'
 import BodiesTab from './bodies-tab'
 import AuditTab from './audit-tab'
 import BookingSettingsTab from './booking-settings-tab'
+import ArchiveTab from './archive-tab'
 
-type AdvancedSubTab = 'Users' | 'Bodies' | 'Audit' | 'Other Settings'
+type AdvancedSubTab = 'Users' | 'Bodies' | 'Audit' | 'Archive' | 'Other Settings'
 
 export default function AdvancedSettingsTab() {
   const [subTab, setSubTab] = useState<AdvancedSubTab>('Users')
@@ -14,7 +15,7 @@ export default function AdvancedSettingsTab() {
   return (
     <div className="space-y-4">
       <div className="flex gap-1 border-b border-[#1e5080]">
-        {(['Users', 'Bodies', 'Audit', 'Other Settings'] as AdvancedSubTab[]).map(tab => (
+        {(['Users', 'Bodies', 'Audit', 'Archive', 'Other Settings'] as AdvancedSubTab[]).map(tab => (
           <button
             key={tab}
             onClick={() => setSubTab(tab)}
@@ -32,6 +33,7 @@ export default function AdvancedSettingsTab() {
       {subTab === 'Users' && <UsersTab />}
       {subTab === 'Bodies' && <BodiesTab />}
       {subTab === 'Audit' && <AuditTab />}
+      {subTab === 'Archive' && <ArchiveTab />}
       {subTab === 'Other Settings' && <BookingSettingsTab />}
     </div>
   )

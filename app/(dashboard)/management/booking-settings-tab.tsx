@@ -1,9 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createBrowserClient } from '@supabase/ssr'
 
 const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
+
+interface Semester {
+  id: string
+  name: string
+  is_active: boolean
+  created_at: string
+}
 
 export default function BookingSettingsTab() {
   const [loading, setLoading] = useState(true)
@@ -13,6 +21,26 @@ export default function BookingSettingsTab() {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
 
+  // Semester state
+  const [semesters, setSemesters] = useState<Semester[]>([])
+  const [semesterLoading, setSemesterLoading] = useState(true)
+  const [newSemesterName, setNewSemesterName] = useState('')
+  const [creatingState, setCreatingState] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [createError, setCreateError] = useState('')
+  const [isVP, setIsVP] = useState(false)
+
+  // Activate modal
+  const [showActivateModal, setShowActivateModal] = useState(false)
+  const [pendingActivateId, setPendingActivateId] = useState<string | null>(null)
+  const [activating, setActivating] = useState(false)
+  const [activateError, setActivateError] = useState('')
+
+  // Delete modal
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
   useEffect(() => {
     fetch('/api/management/settings')
       .then(r => r.json())
@@ -21,7 +49,30 @@ export default function BookingSettingsTab() {
         setMinDaysTabling(data.min_days_advance_tabling ?? 0)
         setLoading(false)
       })
+
+    fetchSemesters()
+
+    // Check if current user is VP of Operational Affairs
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    )
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.app_metadata?.admin_role === 'Vice President of Operational Affairs') {
+        setIsVP(true)
+      }
+    })
   }, [])
+
+  const fetchSemesters = async () => {
+    setSemesterLoading(true)
+    const res = await fetch('/api/management/semesters')
+    if (res.ok) {
+      const data = await res.json()
+      setSemesters(data.semesters || [])
+    }
+    setSemesterLoading(false)
+  }
 
   const handleSave = async () => {
     setError('')
@@ -46,10 +97,77 @@ export default function BookingSettingsTab() {
     setSaving(false)
   }
 
+  const handleCreateSemester = async () => {
+    if (!newSemesterName.trim()) return
+    setCreatingState('saving')
+    setCreateError('')
+
+    const res = await fetch('/api/management/semesters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newSemesterName.trim() }),
+    })
+
+    if (res.ok) {
+      setNewSemesterName('')
+      setCreatingState('idle')
+      fetchSemesters()
+    } else {
+      const data = await res.json()
+      setCreateError(data.error || 'Something went wrong.')
+      setCreatingState('error')
+    }
+  }
+
+  const handleActivateConfirm = async () => {
+    if (!pendingActivateId) return
+    setActivating(true)
+    setActivateError('')
+
+    const res = await fetch('/api/management/semesters', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: pendingActivateId }),
+    })
+
+    if (res.ok) {
+      setShowActivateModal(false)
+      setPendingActivateId(null)
+      fetchSemesters()
+    } else {
+      const data = await res.json()
+      setActivateError(data.error || 'Something went wrong.')
+    }
+    setActivating(false)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!pendingDeleteId) return
+    setDeleting(true)
+    setDeleteError('')
+
+    const res = await fetch('/api/management/semesters', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: pendingDeleteId }),
+    })
+
+    if (res.ok) {
+      setShowDeleteModal(false)
+      setPendingDeleteId(null)
+      fetchSemesters()
+    } else {
+      const data = await res.json()
+      setDeleteError(data.error || 'Something went wrong.')
+    }
+    setDeleting(false)
+  }
+
   if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
 
   return (
-    <div className="max-w-sm space-y-6">
+    <div className="max-w-sm space-y-8">
+      {/* Advance Notice Requirements */}
       <div>
         <h2 className="text-sm font-semibold text-[#f0f6ff] mb-4">Advance Notice Requirements</h2>
         <div className="space-y-4">
@@ -74,18 +192,143 @@ export default function BookingSettingsTab() {
             />
           </div>
         </div>
+
+        {error && <p className="text-[#c8102e] text-sm mt-3">{error}</p>}
+        {success && <p className="text-green-400 text-sm mt-3">Settings saved.</p>}
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="mt-4 px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save'}
+        </button>
       </div>
 
-      {error && <p className="text-[#c8102e] text-sm">{error}</p>}
-      {success && <p className="text-green-400 text-sm">Settings saved.</p>}
+      {/* Semester Management */}
+      <div>
+        <h2 className="text-sm font-semibold text-[#f0f6ff] mb-4">Semester Management</h2>
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
-      >
-        {saving ? 'Saving...' : 'Save'}
-      </button>
+        {semesterLoading ? (
+          <p className="text-[#93b8d8] text-sm">Loading semesters...</p>
+        ) : (
+          <div className="space-y-2 mb-4">
+            {semesters.length === 0 && (
+              <p className="text-[#6a96bb] text-sm">No semesters yet.</p>
+            )}
+            {semesters.map(sem => (
+              <div key={sem.id} className="flex items-center justify-between border border-[#1e5080] rounded-lg px-3 py-2.5 bg-[#0f2a4a]">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-sm text-[#f0f6ff]">{sem.name}</span>
+                  {sem.is_active ? (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#0f3d20] text-[#4ade80]">Active</span>
+                  ) : (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#1e3a5f] text-[#6a96bb]">Inactive</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setPendingActivateId(sem.id); setActivateError(''); setShowActivateModal(true) }}
+                    className="text-xs text-[#93b8d8] hover:text-[#f0f6ff] font-medium transition-colors"
+                  >
+                    Activate
+                  </button>
+                  {isVP && (
+                    <button
+                      onClick={() => { setPendingDeleteId(sem.id); setDeleteError(''); setShowDeleteModal(true) }}
+                      className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Create semester form */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="e.g. Fall 2025"
+            value={newSemesterName}
+            onChange={e => { setNewSemesterName(e.target.value); setCreatingState('idle'); setCreateError('') }}
+            onKeyDown={e => { if (e.key === 'Enter') handleCreateSemester() }}
+            className={inputCls}
+          />
+          <button
+            onClick={handleCreateSemester}
+            disabled={creatingState === 'saving' || !newSemesterName.trim()}
+            className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
+          >
+            {creatingState === 'saving' ? 'Creating...' : 'Create'}
+          </button>
+        </div>
+        {createError && <p className="text-[#c8102e] text-xs mt-1.5">{createError}</p>}
+      </div>
+
+      {/* Activate Modal */}
+      {showActivateModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#184073] rounded-2xl shadow-2xl w-full max-w-md p-8 space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-[#f0f6ff]">Change Active Semester</h2>
+              <button onClick={() => { setShowActivateModal(false); setPendingActivateId(null) }} className="text-[#6a96bb] hover:text-[#f0f6ff] text-lg leading-none transition-colors">✕</button>
+            </div>
+            <p className="text-sm text-[#f0f6ff] leading-relaxed">
+              WARNING: You are about to change the active semester. New bookings will be created under the new semester name and previous bookings will be archived. Only make this change with permission from the Vice President of Operational Affairs.
+            </p>
+            {activateError && <p className="text-[#c8102e] text-sm">{activateError}</p>}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setShowActivateModal(false); setPendingActivateId(null) }}
+                className="px-4 py-2 text-sm text-[#93b8d8] hover:text-[#f0f6ff] font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleActivateConfirm}
+                disabled={activating}
+                className="px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {activating ? 'Activating...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#184073] rounded-2xl shadow-2xl w-full max-w-md p-8 space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-[#f0f6ff]">Delete Semester</h2>
+              <button onClick={() => { setShowDeleteModal(false); setPendingDeleteId(null) }} className="text-[#6a96bb] hover:text-[#f0f6ff] text-lg leading-none transition-colors">✕</button>
+            </div>
+            <p className="text-sm text-[#f0f6ff] leading-relaxed">
+              This will permanently delete this semester and all bookings assigned to it. This cannot be undone.
+            </p>
+            {deleteError && <p className="text-[#c8102e] text-sm">{deleteError}</p>}
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setShowDeleteModal(false); setPendingDeleteId(null) }}
+                className="px-4 py-2 text-sm text-[#93b8d8] hover:text-[#f0f6ff] font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+                className="px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

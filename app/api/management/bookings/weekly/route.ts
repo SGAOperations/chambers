@@ -36,10 +36,21 @@ export async function POST(request: Request) {
 
   const { body_id, purpose, room_name, start_date, end_date, start_time, end_time, reservation_code, status } = await request.json()
 
+  // Require an active semester
+  const { data: activeSemester } = await adminSupabase
+    .from('semesters')
+    .select('id')
+    .eq('is_active', true)
+    .single()
+
+  if (!activeSemester) {
+    return NextResponse.json({ error: 'No active semester. Please activate a semester before creating bookings.' }, { status: 400 })
+  }
+
   // Create parent booking
   const { data: booking, error: bookingError } = await adminSupabase
     .from('bookings')
-    .insert({ body_id, purpose, type: 'Weekly Room', created_by: user.id })
+    .insert({ body_id, purpose, type: 'Weekly Room', created_by: user.id, semester_id: activeSemester.id })
     .select()
     .single()
 

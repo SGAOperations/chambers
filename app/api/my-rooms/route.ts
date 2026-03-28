@@ -23,6 +23,17 @@ export async function GET() {
 
   const bodyIds = memberships.map(m => m.body_id)
 
+  // Get active semester
+  const { data: activeSemester } = await supabase
+    .from('semesters')
+    .select('id')
+    .eq('is_active', true)
+    .single()
+
+  if (!activeSemester) {
+    return NextResponse.json({ oneTimeBookings: [], weeklyBookings: [], tablingBookings: [] })
+  }
+
   // Fetch one-time room bookings
   const { data: oneTimeBookings } = await supabase
     .from('bookings')
@@ -32,6 +43,7 @@ export async function GET() {
       one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
     `)
     .eq('type', 'One-Time Room')
+    .eq('semester_id', activeSemester.id)
     .in('body_id', bodyIds)
 
   // Fetch weekly room bookings with occurrences
@@ -45,6 +57,7 @@ export async function GET() {
       )
     `)
     .eq('type', 'Weekly Room')
+    .eq('semester_id', activeSemester.id)
     .in('body_id', bodyIds)
 
   // Fetch tabling bookings with sessions
@@ -58,6 +71,7 @@ export async function GET() {
       )
     `)
     .eq('type', 'Tabling')
+    .eq('semester_id', activeSemester.id)
     .in('body_id', bodyIds)
 
   return NextResponse.json({

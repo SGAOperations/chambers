@@ -145,6 +145,8 @@ export default function BookingsTab() {
   const [editingBooking, setEditingBooking] = useState<OneTimeBooking | null>(null)
   const [editingWeekly, setEditingWeekly] = useState<WeeklyBooking | null>(null)
   const [editingTabling, setEditingTabling] = useState<TablingBooking | null>(null)
+  // undefined = loading, null = none found, object = found
+  const [activeSemester, setActiveSemester] = useState<{ id: string; name: string } | null | undefined>(undefined)
 
   const fetchBookings = async () => {
     const res = await fetch('/api/management/bookings')
@@ -152,6 +154,7 @@ export default function BookingsTab() {
     setOneTime(data.oneTime || [])
     setWeekly(data.weekly || [])
     setTabling(data.tabling || [])
+    setActiveSemester(data.activeSemester ?? null)
     setLoading(false)
   }
 
@@ -180,6 +183,13 @@ export default function BookingsTab() {
 
   return (
     <div className="space-y-4">
+      {/* Semester error banner */}
+      {activeSemester === null && (
+        <div className="flex items-center gap-2 bg-[#3d0f0f] border border-[#c8102e] text-[#f87171] text-sm rounded-lg px-4 py-3">
+          <span className="font-semibold">Semester Error:</span> No active semester is set. Please activate a semester in Other Settings before creating new bookings.
+        </div>
+      )}
+
       {/* Sub-tab bar */}
       <div className="flex gap-1 border-b border-[#1e5080]">
         {(['One-Time Rooms', 'Weekly Rooms', 'Tables'] as BookingSubTab[]).map(tab => (
@@ -201,7 +211,8 @@ export default function BookingsTab() {
       <div className="flex justify-end">
         <button
           onClick={() => setShowModal(true)}
-          className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors"
+          disabled={activeSemester === null}
+          className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + New Booking
         </button>

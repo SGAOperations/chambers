@@ -13,6 +13,17 @@ export async function GET() {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
+  // Only show bookings for the active semester
+  const { data: activeSemester } = await supabase
+    .from('semesters')
+    .select('id, name')
+    .eq('is_active', true)
+    .single()
+
+  if (!activeSemester) {
+    return NextResponse.json({ oneTime: [], weekly: [], tabling: [], activeSemester: null })
+  }
+
   const { data: oneTime } = await supabase
     .from('bookings')
     .select(`
@@ -22,6 +33,7 @@ export async function GET() {
       one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
     `)
     .eq('type', 'One-Time Room')
+    .eq('semester_id', activeSemester.id)
     .order('created_at', { ascending: false })
 
   const { data: weekly } = await supabase
@@ -35,6 +47,7 @@ export async function GET() {
       )
     `)
     .eq('type', 'Weekly Room')
+    .eq('semester_id', activeSemester.id)
     .order('created_at', { ascending: false })
 
   const { data: tabling } = await supabase
@@ -48,11 +61,13 @@ export async function GET() {
       )
     `)
     .eq('type', 'Tabling')
+    .eq('semester_id', activeSemester.id)
     .order('created_at', { ascending: false })
 
   return NextResponse.json({
     oneTime: oneTime || [],
     weekly: weekly || [],
     tabling: tabling || [],
+    activeSemester,
   })
 }
