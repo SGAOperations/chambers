@@ -317,7 +317,7 @@ export default function RequestPage() {
 
         <div>
           <label className={labelCls}>Purpose *</label>
-          <input type="text" placeholder="e.g. Weekly Meeting" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} className={inputCls} />
+          <input type="text" placeholder="e.g. Focus Group" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} className={inputCls} />
         </div>
 
         {/* One-Time Room fields */}

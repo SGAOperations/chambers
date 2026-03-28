@@ -295,8 +295,8 @@ export default function BookingsTab() {
                       <p className="text-sm text-[#93b8d8]">{b.purpose}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <AdminRoleBadge role={b.users?.admin_role} />
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
+                      <span className="hidden md:inline"><AdminRoleBadge role={b.users?.admin_role} /></span>
+                      <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {firstSession.status}
                       </span>
                       <button
@@ -346,8 +346,8 @@ export default function BookingsTab() {
                       <p className="text-sm text-[#93b8d8]">{b.purpose}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <AdminRoleBadge role={b.users?.admin_role} />
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
+                      <span className="hidden md:inline"><AdminRoleBadge role={b.users?.admin_role} /></span>
+                      <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {w.status}
                       </span>
                       <button
@@ -391,7 +391,7 @@ export default function BookingsTab() {
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-[#f0f6ff]">{b.bodies?.name}</p>
                     <div className="flex items-center gap-3">
-                      <AdminRoleBadge role={b.users?.admin_role} />
+                      <span className="hidden md:inline"><AdminRoleBadge role={b.users?.admin_role} /></span>
                       <button
                         onClick={() => setEditingTabling(b)}
                         className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"

@@ -115,7 +115,7 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
         <label className={labelCls}>Purpose *</label>
         <input
           type="text"
-          placeholder="e.g. Involvement Fair"
+          placeholder="e.g. Committee Tabling"
           value={form.purpose}
           onChange={e => setForm({ ...form, purpose: e.target.value })}
           className={inputCls}
@@ -163,7 +163,7 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
               <label className={labelCls}>Location *</label>
               <input
                 type="text"
-                placeholder="e.g. Curry Student Center"
+                placeholder="e.g. Curry Crossroads"
                 value={s.location}
                 onChange={e => updateSession(i, 'location', e.target.value)}
                 className={inputCls}

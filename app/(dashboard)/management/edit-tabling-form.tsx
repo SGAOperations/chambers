@@ -183,7 +183,7 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
               <label className={labelCls}>Location *</label>
               <input
                 type="text"
-                placeholder="e.g. Curry Student Center"
+                placeholder="e.g. Curry Crossroads"
                 value={s.location}
                 onChange={e => updateSession(i, 'location', e.target.value)}
                 className={inputCls}
