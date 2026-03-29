@@ -16,7 +16,7 @@ interface WeeklyBooking {
   body_id: string
   purpose: string
   bodies: { name: string } | null
-  users: { admin_role: string | null } | null
+  creator_role: string | null
   weekly_room_bookings: {
     id: string
     room_name: string

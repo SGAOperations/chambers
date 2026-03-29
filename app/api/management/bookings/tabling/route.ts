@@ -34,10 +34,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No active semester. Please activate a semester before creating bookings.' }, { status: 400 })
   }
 
+  const { data: userData } = await adminSupabase
+    .from('users')
+    .select('admin_role')
+    .eq('id', user.id)
+    .single()
+
   // Create parent booking
   const { data: booking, error: bookingError } = await adminSupabase
     .from('bookings')
-    .insert({ body_id, purpose, type: 'Tabling', created_by: user.id, semester_id: activeSemester.id })
+    .insert({ body_id, purpose, type: 'Tabling', created_by: user.id, creator_role: userData?.admin_role ?? null, semester_id: activeSemester.id })
     .select()
     .single()
 

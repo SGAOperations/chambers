@@ -6,8 +6,8 @@ Chambers is built in TypeScript, breaking down into Next.js, Tailwind CSS, and J
 
 # Contributors
 
-## Comptroller & Author
-Eli Patania
+## Author
+Eli Patania (Comptroller '26)
 
-## Digital Innovation Project Lead
-Logan Ravinuthala
+## Deployment Logistics & QA
+Logan Ravinuthala (Digital Innovation Team Lead '25-'26)

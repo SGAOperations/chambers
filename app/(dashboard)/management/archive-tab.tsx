@@ -7,7 +7,7 @@ interface OneTimeBooking {
   body_id: string
   purpose: string
   bodies: { name: string } | null
-  users: { admin_role: string | null } | null
+  creator_role: string | null
   one_time_room_bookings: {
     id: string
     room_name: string
@@ -24,7 +24,7 @@ interface WeeklyBooking {
   body_id: string
   purpose: string
   bodies: { name: string } | null
-  users: { admin_role: string | null } | null
+  creator_role: string | null
   weekly_room_bookings: {
     id: string
     room_name: string
@@ -52,7 +52,7 @@ interface TablingBooking {
   body_id: string
   purpose: string
   bodies: { name: string } | null
-  users: { admin_role: string | null } | null
+  creator_role: string | null
   tabling_bookings: {
     id: string
     reservation_code: string | null
@@ -288,7 +288,7 @@ export default function ArchiveTab() {
                       <p className="text-sm text-[#93b8d8]">{b.purpose}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="hidden md:inline"><AdminRoleBadge role={b.users?.admin_role} /></span>
+                      <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {firstSession.status}
                       </span>
@@ -320,7 +320,7 @@ export default function ArchiveTab() {
                       <p className="text-sm text-[#93b8d8]">{b.purpose}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="hidden md:inline"><AdminRoleBadge role={b.users?.admin_role} /></span>
+                      <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {w.status}
                       </span>
@@ -345,7 +345,7 @@ export default function ArchiveTab() {
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-[#f0f6ff]">{b.bodies?.name}</p>
                     <div className="flex items-center gap-3">
-                      <span className="hidden md:inline"><AdminRoleBadge role={b.users?.admin_role} /></span>
+                      <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
                       <span className="text-xs text-[#6a96bb] font-medium">Tabling</span>
                     </div>
                   </div>

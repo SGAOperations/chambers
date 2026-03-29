@@ -29,7 +29,7 @@ export async function GET() {
     .select(`
       id, purpose, body_id,
       bodies(name),
-      users!created_by(admin_role),
+      creator_role,
       one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
     `)
     .eq('type', 'One-Time Room')
@@ -41,7 +41,7 @@ export async function GET() {
     .select(`
       id, purpose, body_id,
       bodies(name),
-      users!created_by(admin_role),
+      creator_role,
       weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
         weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type)
       )
@@ -55,7 +55,7 @@ export async function GET() {
     .select(`
       id, purpose, body_id,
       bodies(name),
-      users!created_by(admin_role),
+      creator_role,
       tabling_bookings(id, reservation_code,
         tabling_sessions(location, session_date, start_time, end_time, status, reservation_code)
       )

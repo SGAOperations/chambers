@@ -91,7 +91,7 @@ function GuidelinesPanel({ type }: { type: RequestType }) {
       <div className="space-y-2">
         <h3 className="text-xs font-semibold text-[#93b8d8] uppercase tracking-wide">Timeline</h3>
         <p className="text-xs text-[#6a96bb] leading-relaxed">
-          Tabling bookings must be made at least three weeks in advance to be honored.
+          Tabling bookings must be made at least three weeks in advance to be given priority, and two weeks in advance to be honored.
         </p>
       </div>
       {emailLine}
