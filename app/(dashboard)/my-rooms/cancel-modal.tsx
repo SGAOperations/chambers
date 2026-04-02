@@ -11,20 +11,22 @@ interface CancelModalProps {
     location: string
     date: string
     occurrenceId?: string
+    sessionCount?: number
   }
   onClose: () => void
   onSuccess: () => void
 }
 
 export default function CancelModal({ booking, onClose, onSuccess }: CancelModalProps) {
+  const isWeekly = booking.type === 'Weekly Room'
+  const isMultiSession = !isWeekly && (booking.sessionCount ?? 1) > 1
+
   const [scope, setScope] = useState<'occurrence' | 'series'>(
-    booking.type === 'Weekly Room' ? 'occurrence' : 'series'
+    isWeekly || isMultiSession ? 'occurrence' : 'series'
   )
   const [cancellationType, setCancellationType] = useState<'Cancellation' | 'Virtual'>('Cancellation')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-
-  const isWeekly = booking.type === 'Weekly Room'
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -48,6 +50,14 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
     }
     setSubmitting(false)
   }
+
+  const showScopeSelector = isWeekly || isMultiSession
+
+  const seriesWarning = isWeekly
+    ? 'This will request cancellation of all occurrences in this series.'
+    : (booking.sessionCount ?? 1) > 1
+      ? 'This will request cancellation of all sessions in this booking.'
+      : 'This will request cancellation of this booking.'
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
@@ -92,8 +102,8 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
           </div>
         </div>
 
-        {/* Weekly scope selector */}
-        {isWeekly && (
+        {/* Scope selector — weekly uses occurrence/series labels; one-time/tabling use session labels */}
+        {showScopeSelector && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-[#93b8d8]">Cancellation Scope</p>
             <div className="flex flex-col gap-2">
@@ -106,7 +116,9 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
                   onChange={() => setScope('occurrence')}
                   className="accent-[#c8102e]"
                 />
-                <span className="text-sm text-[#f0f6ff]">This occurrence only</span>
+                <span className="text-sm text-[#f0f6ff]">
+                  {isWeekly ? 'This occurrence only' : 'This session only'}
+                </span>
               </label>
               <label className="flex items-center gap-3 cursor-pointer">
                 <input
@@ -117,7 +129,9 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
                   onChange={() => setScope('series')}
                   className="accent-[#c8102e]"
                 />
-                <span className="text-sm text-[#f0f6ff]">Entire series</span>
+                <span className="text-sm text-[#f0f6ff]">
+                  {isWeekly ? 'Entire series' : 'All sessions'}
+                </span>
               </label>
             </div>
           </div>
@@ -128,9 +142,7 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
           <div className="bg-[#3d2200] border border-[#f97316] rounded-lg px-4 py-3">
             <p className="text-sm font-semibold text-[#fb923c]">Warning</p>
             <p className="text-sm text-[#fdba74] mt-0.5">
-              {isWeekly
-                ? 'This will request cancellation of all occurrences in this series.'
-                : 'This will request cancellation of this booking.'}
+              {seriesWarning}
               {' '}An admin may reach out to confirm the cancellation.
             </p>
           </div>

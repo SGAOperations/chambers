@@ -100,6 +100,7 @@ export default function MyRoomsPage() {
     location: string
     date: string
     occurrenceId?: string
+    sessionCount?: number
   } | null>(null)
   const [revisingBooking, setRevisingBooking] = useState<{
     id: string
@@ -183,7 +184,7 @@ export default function MyRoomsPage() {
           startTime: s.start_time,
           endTime: s.end_time,
           status: s.status,
-          reservationCode: s.reservation_code,
+          reservationCode: s.reservation_code || t.reservation_code,
           senateType: null,
         })
       }
@@ -317,6 +318,7 @@ export default function MyRoomsPage() {
           isLeadership={leadershipBodyIds.includes(detailBooking.bodyId)}
           onClose={() => setDetailBooking(null)}
           onCancelClick={() => {
+            const sessionCount = all.filter(b => b.bookingId === detailBooking.bookingId).length
             setCancellingBooking({
               id: detailBooking.bookingId,
               type: detailBooking.type,
@@ -324,7 +326,8 @@ export default function MyRoomsPage() {
               purpose: detailBooking.purpose,
               location: detailBooking.location,
               date: detailBooking.date,
-              occurrenceId: detailBooking.type === 'Weekly Room' ? detailBooking.id : undefined,
+              occurrenceId: detailBooking.id,
+              sessionCount,
             })
             setDetailBooking(null)
           }}

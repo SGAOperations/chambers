@@ -12,14 +12,15 @@ export async function POST(request: Request) {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user || !user.app_metadata?.is_admin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { booking_id, occurrence_id, scope, cancellation_type = 'Cancellation' } = await request.json()
+  const { booking_id, scope, occurrence_id } = await request.json()
 
-  // Fetch booking type upfront — needed for both scope paths
   const { data: bookingRow } = await adminSupabase
     .from('bookings')
     .select('type')
@@ -27,54 +28,28 @@ export async function POST(request: Request) {
     .single()
   const bookingType = bookingRow?.type
 
-  // Create cancellation request
-  const { error: requestError } = await adminSupabase
-    .from('cancellation_requests')
-    .insert({
-      booking_id,
-      occurrence_id: occurrence_id || null,
-      requested_by: user.id,
-      scope,
-      status: 'Pending',
-      cancellation_type,
-    })
-
-  if (requestError) return NextResponse.json({ error: requestError.message }, { status: 500 })
-
-  // Update booking/occurrence status to Pending Cancellation
   if (scope === 'occurrence' && occurrence_id) {
     if (bookingType === 'One-Time Room') {
       const { error } = await adminSupabase
         .from('one_time_room_bookings')
-        .update({ status: 'Pending Cancellation' })
+        .update({ status: 'Cancelled' })
         .eq('id', occurrence_id)
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     } else if (bookingType === 'Tabling') {
       const { error } = await adminSupabase
         .from('tabling_sessions')
-        .update({ status: 'Pending Cancellation' })
-        .eq('id', occurrence_id)
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    } else {
-      // Weekly Room — update the specific occurrence
-      const { error } = await adminSupabase
-        .from('weekly_room_occurrences')
-        .update({ status: 'Pending Cancellation' })
+        .update({ status: 'Cancelled' })
         .eq('id', occurrence_id)
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     }
   } else {
-    // Series scope — update all sessions for the booking
+    // series scope — cancel all sessions
     if (bookingType === 'One-Time Room') {
-      await adminSupabase
+      const { error } = await adminSupabase
         .from('one_time_room_bookings')
-        .update({ status: 'Pending Cancellation' })
+        .update({ status: 'Cancelled' })
         .eq('booking_id', booking_id)
-    } else if (bookingType === 'Weekly Room') {
-      await adminSupabase
-        .from('weekly_room_bookings')
-        .update({ status: 'Pending Cancellation' })
-        .eq('booking_id', booking_id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     } else if (bookingType === 'Tabling') {
       const { data: tablingBooking } = await adminSupabase
         .from('tabling_bookings')
@@ -83,10 +58,11 @@ export async function POST(request: Request) {
         .single()
 
       if (tablingBooking) {
-        await adminSupabase
+        const { error } = await adminSupabase
           .from('tabling_sessions')
-          .update({ status: 'Pending Cancellation' })
+          .update({ status: 'Cancelled' })
           .eq('tabling_booking_id', tablingBooking.id)
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       }
     }
   }

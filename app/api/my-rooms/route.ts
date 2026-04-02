@@ -66,7 +66,7 @@ export async function GET() {
     .select(`
       id, purpose, body_id,
       bodies(name),
-      tabling_bookings(id,
+      tabling_bookings(id, reservation_code,
         tabling_sessions(id, location, session_date, start_time, end_time, status, reservation_code)
       )
     `)

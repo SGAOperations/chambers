@@ -14,9 +14,8 @@ interface CancellationRequest {
     purpose: string
     bodies: { name: string } | null
   } | null
-  weekly_room_occurrences: {
-    occurrence_date: string
-  } | null
+  occurrence_date: string | null
+  reservation_code: string | null
   users: {
     full_name: string
   } | null
@@ -88,8 +87,11 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
             <p><span className="font-medium text-[#f0f6ff]">Requested by:</span> {c.users?.full_name}</p>
             <p><span className="font-medium text-[#f0f6ff]">Scope:</span> {c.scope === 'occurrence' ? 'Single occurrence' : 'Entire series'}</p>
             <p><span className="font-medium text-[#f0f6ff]">Cancellation Type:</span> {c.cancellation_type === 'Virtual' ? 'Going Virtual' : 'Full Cancellation'}</p>
-            {c.scope === 'occurrence' && c.weekly_room_occurrences?.occurrence_date && (
-              <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(c.weekly_room_occurrences.occurrence_date)}</p>
+            {c.scope === 'occurrence' && c.occurrence_date && (
+              <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(c.occurrence_date)}</p>
+            )}
+            {c.reservation_code && (
+              <p><span className="font-medium text-[#f0f6ff]">Res. Code:</span> <span className="font-mono">{c.reservation_code}</span></p>
             )}
             <p><span className="font-medium text-[#f0f6ff]">Submitted:</span> {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
           </div>

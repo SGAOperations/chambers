@@ -8,7 +8,9 @@ interface Alert {
   booking_date: string | null
   start_time: string | null
   created_at: string
+  denial_reason: string | null
   bookings: { bodies: { name: string } | null } | null
+  room_requests: { bodies: { name: string } | null } | null
 }
 
 function formatTime(time: string) {
@@ -120,12 +122,23 @@ export default function NotificationBell() {
               {alerts.map(alert => (
                 <li key={alert.id} className="flex items-start gap-3 px-4 py-3 hover:bg-[#1a4d8a] transition-colors">
                   <p className="flex-1 text-sm text-[#f0f6ff] leading-snug">
-                    {alert.bookings?.bodies?.name && (
-                      <span className="font-medium">{alert.bookings.bodies.name} </span>
+                    {alert.booking_type === 'Denied' ? (
+                      <>
+                        Your{alert.room_requests?.bodies?.name ? ` ${alert.room_requests.bodies.name}` : ''} room request was denied.
+                        {alert.denial_reason && (
+                          <> <span className="text-[#93b8d8]">Reason: {alert.denial_reason}</span></>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {alert.bookings?.bodies?.name && (
+                          <span className="font-medium">{alert.bookings.bodies.name} </span>
+                        )}
+                        <span className="font-medium">{alert.booking_type}</span> booking
+                        {alert.booking_date ? ` on ${formatDate(alert.booking_date)}` : ''}
+                        {alert.start_time ? ` starting at ${formatTime(alert.start_time)}` : ''} was updated.
+                      </>
                     )}
-                    <span className="font-medium">{alert.booking_type}</span> booking
-                    {alert.booking_date ? ` on ${formatDate(alert.booking_date)}` : ''}
-                    {alert.start_time ? ` starting at ${formatTime(alert.start_time)}` : ''} was updated.
                   </p>
                   <button
                     onClick={() => dismiss(alert.id)}

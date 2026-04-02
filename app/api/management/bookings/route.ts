@@ -57,7 +57,7 @@ export async function GET() {
       bodies(name),
       creator_role,
       tabling_bookings(id, reservation_code,
-        tabling_sessions(location, session_date, start_time, end_time, status, reservation_code)
+        tabling_sessions(id, location, session_date, start_time, end_time, status, reservation_code)
       )
     `)
     .eq('type', 'Tabling')

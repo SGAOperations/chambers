@@ -14,7 +14,7 @@ export async function GET() {
 
   const { data } = await adminSupabase
     .from('user_alerts')
-    .select('id, booking_id, booking_type, booking_date, start_time, created_at, bookings!booking_id(bodies(name))')
+    .select('id, booking_id, request_id, booking_type, booking_date, start_time, created_at, denial_reason, bookings!booking_id(bodies(name)), room_requests!request_id(bodies(name))')
     .eq('user_id', user.id)
     .eq('dismissed', false)
     .order('created_at', { ascending: false })

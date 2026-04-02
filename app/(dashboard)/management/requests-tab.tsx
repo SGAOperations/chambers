@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import FulfillModal from './fulfill-modal'
+import DenyModal from './deny-modal'
 
 type RequestStatus = 'Pending' | 'Fulfilled' | 'Denied'
 
@@ -74,8 +75,8 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   const [requests, setRequests] = useState<RoomRequest[]>([])
   const [revisions, setRevisions] = useState<RevisionRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [updating, setUpdating] = useState<string | null>(null)
   const [confirmingDenial, setConfirmingDenial] = useState<string | null>(null)
+  const [denyingRequest, setDenyingRequest] = useState<string | null>(null)
   const [fulfillingRequest, setFulfillingRequest] = useState<{
   id: string
   type: string
@@ -98,18 +99,6 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   useEffect(() => {
     fetchRequests()
   }, [])
-
-  const updateStatus = async (id: string, status: RequestStatus) => {
-    setUpdating(id)
-    await fetch('/api/management/requests', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, status }),
-    })
-    await fetchRequests()
-    onCountChange()
-    setUpdating(null)
-  }
 
   if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
 
@@ -210,12 +199,8 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
               <div className="flex items-center gap-2">
                 <span className="text-sm text-[#93b8d8]">Are you sure?</span>
                 <button
-                  onClick={() => {
-                    updateStatus(r.id, 'Denied')
-                    setConfirmingDenial(null)
-                  }}
-                  disabled={updating === r.id}
-                  className="px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                  onClick={() => setDenyingRequest(r.id)}
+                  className="px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
                 >
                   Yes, Deny
                 </button>
@@ -230,15 +215,13 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={() => setFulfillingRequest({ id: r.id, type: r.type, purpose: r.purpose, body_id: r.body_id })}
-                  disabled={updating === r.id}
-                  className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                  className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
                 >
                   Fulfill
                 </button>
                 <button
                   onClick={() => setConfirmingDenial(r.id)}
-                  disabled={updating === r.id}
-                  className="px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                  className="px-3 py-1 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
                 >
                   Deny
                 </button>
@@ -254,6 +237,13 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
           request={fulfillingRequest}
           onClose={() => setFulfillingRequest(null)}
           onSuccess={fetchRequests}
+        />
+      )}
+      {denyingRequest && (
+        <DenyModal
+          requestId={denyingRequest}
+          onClose={() => { setDenyingRequest(null); setConfirmingDenial(null) }}
+          onDenied={() => { setDenyingRequest(null); setConfirmingDenial(null); fetchRequests(); onCountChange() }}
         />
       )}
     </div>

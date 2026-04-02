@@ -44,7 +44,7 @@ export async function PATCH(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { id, status, booking_id, notes } = await request.json()
+  const { id, status, booking_id, notes, denial_reason } = await request.json()
 
   // Update request status and notes
   const { error: requestError } = await adminSupabase
@@ -62,6 +62,25 @@ export async function PATCH(request: Request) {
       .eq('id', booking_id)
 
     if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 })
+  }
+
+  // Create denial notification for the requester
+  if (status === 'Denied') {
+    const { data: roomRequest } = await adminSupabase
+      .from('room_requests')
+      .select('requested_by')
+      .eq('id', id)
+      .single()
+
+    if (roomRequest?.requested_by) {
+      const { error: alertError } = await adminSupabase.from('user_alerts').insert({
+        user_id: roomRequest.requested_by,
+        request_id: id,
+        booking_type: 'Denied',
+        denial_reason: denial_reason ?? null,
+      })
+      if (alertError) return NextResponse.json({ error: alertError.message }, { status: 500 })
+    }
   }
 
   return NextResponse.json({ success: true })

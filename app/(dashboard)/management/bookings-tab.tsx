@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import BookingModal from './booking-modal'
+import AdminCancelModal from './admin-cancel-modal'
 import OneTimeForm from './one-time-form'
 import WeeklyForm from './weekly-form'
 import TablingForm from './tabling-form'
@@ -72,6 +73,7 @@ interface TablingBooking {
     id: string
     reservation_code: string | null
     tabling_sessions: {
+      id: string
       location: string
       session_date: string
       start_time: string
@@ -145,6 +147,10 @@ export default function BookingsTab() {
   const [editingBooking, setEditingBooking] = useState<OneTimeBooking | null>(null)
   const [editingWeekly, setEditingWeekly] = useState<WeeklyBooking | null>(null)
   const [editingTabling, setEditingTabling] = useState<TablingBooking | null>(null)
+  const [cancellingAdminBooking, setCancellingAdminBooking] = useState<{
+    booking: { id: string; type: 'One-Time Room' | 'Tabling'; bodyName: string; purpose: string }
+    sessions: { id: string; label: string }[]
+  } | null>(null)
   // undefined = loading, null = none found, object = found
   const [activeSemester, setActiveSemester] = useState<{ id: string; name: string } | null | undefined>(undefined)
 
@@ -289,6 +295,15 @@ export default function BookingsTab() {
         </BookingModal>
       )}
 
+      {cancellingAdminBooking && (
+        <AdminCancelModal
+          booking={cancellingAdminBooking.booking}
+          sessions={cancellingAdminBooking.sessions}
+          onClose={() => setCancellingAdminBooking(null)}
+          onCancelled={() => { setCancellingAdminBooking(null); fetchBookings() }}
+        />
+      )}
+
       {/* One-Time Rooms */}
       {subTab === 'One-Time Rooms' && (
         <div className="space-y-3">
@@ -315,6 +330,18 @@ export default function BookingsTab() {
                         className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
                       >
                         Edit
+                      </button>
+                      <button
+                        onClick={() => setCancellingAdminBooking({
+                          booking: { id: b.id, type: 'One-Time Room', bodyName: b.bodies?.name ?? '', purpose: b.purpose },
+                          sessions: b.one_time_room_bookings!.map(d => ({
+                            id: d.id,
+                            label: `${formatDate(d.booking_date)} · ${formatTime(d.start_time)} – ${formatTime(d.end_time)}${d.room_name ? ` · ${d.room_name}` : ''}`,
+                          })),
+                        })}
+                        className="text-xs text-[#6a96bb] hover:text-[#f0f6ff] font-medium transition-colors"
+                      >
+                        Cancel
                       </button>
                     </div>
                   </div>
@@ -408,6 +435,18 @@ export default function BookingsTab() {
                         className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
                       >
                         Edit
+                      </button>
+                      <button
+                        onClick={() => setCancellingAdminBooking({
+                          booking: { id: b.id, type: 'Tabling', bodyName: b.bodies?.name ?? '', purpose: b.purpose },
+                          sessions: t.tabling_sessions.map(s => ({
+                            id: s.id,
+                            label: `${formatDate(s.session_date)} · ${formatTime(s.start_time)} – ${formatTime(s.end_time)} · ${s.location}`,
+                          })),
+                        })}
+                        className="text-xs text-[#6a96bb] hover:text-[#f0f6ff] font-medium transition-colors"
+                      >
+                        Cancel
                       </button>
                     </div>
                   </div>
