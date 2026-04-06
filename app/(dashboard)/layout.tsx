@@ -127,15 +127,18 @@ export default function DashboardLayout({
       <a
         href={href}
         onClick={() => setSidebarOpen(false)}
-        className={`flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+        className={`group relative flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium overflow-hidden transition-colors ${
           isActive
             ? 'bg-white/15 text-white'
-            : 'text-slate-400 hover:bg-white/10 hover:text-white'
+            : 'text-slate-400 hover:text-white'
           }`}
       >
-        <span>{label}</span>
+        {!isActive && (
+          <span className="absolute inset-0 bg-white/10 rounded-lg -translate-x-full group-hover:translate-x-0 transition-transform duration-200 ease-out" />
+        )}
+        <span className="relative z-10">{label}</span>
         {badge ? (
-          <span className="bg-[#c8102e] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+          <span className="relative z-10 bg-[#c8102e] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
             {badge}
           </span>
         ) : null}
@@ -194,7 +197,7 @@ export default function DashboardLayout({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.8.2 (SGA Unreleased)</p>
+            <p className="text-slate-600 text-xs mt-1">v1.9.0-alpha (SGA Unreleased)</p>
             {userName && (
               <p className="text-slate-500 text-xs mt-2 italic">{getGreeting()},<br />{userName}</p>
             )}
@@ -219,14 +222,14 @@ export default function DashboardLayout({
             )}
             <button
               onClick={handleLogout}
-              className="w-full flex items-center px-4 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-white/10 hover:text-white transition-all text-left"
+              className="w-full flex items-center px-4 py-2.5 rounded-lg text-sm font-medium text-slate-400 hover:bg-white/10 hover:text-[#c8102e] transition-all text-left"
             >
               Sign Out
             </button>
           </div>
         </nav>
 
-        <main className="flex-1 bg-[#0f2a4a] p-8 overflow-y-auto">
+        <main className="flex-1 bg-gradient-to-br from-[#112244] via-[#0a1628] to-[#060e1a] p-8 overflow-y-auto">
           {children}
         </main>
       </div>

@@ -154,7 +154,7 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] hover:scale-105 text-white text-sm rounded-lg font-medium transition-all disabled:opacity-50"
           >
             {submitting ? 'Submitting...' : 'Submit Request'}
           </button>

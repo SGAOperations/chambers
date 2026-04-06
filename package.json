@@ -1,6 +1,6 @@
 {
   "name": "chambers",
-  "version": "1.8.2",
+  "version": "1.9.0-alpha",
   "private": true,
   "scripts": {
     "dev": "next dev",

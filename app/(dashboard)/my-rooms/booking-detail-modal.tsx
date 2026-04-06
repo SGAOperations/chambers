@@ -106,7 +106,7 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
             {canRevise && (
               <button
                 onClick={onRevisionClick}
-                className="w-full py-2.5 rounded-xl bg-[#1a4d8a] hover:bg-[#2563eb] text-white font-semibold text-sm transition-colors"
+                className="w-full py-2.5 rounded-xl bg-[#1a4d8a] hover:bg-[#2563eb] hover:scale-105 text-white font-semibold text-sm transition-all"
               >
                 Request Revision
               </button>
@@ -114,7 +114,7 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
             {canCancel && (
               <button
                 onClick={onCancelClick}
-                className="w-full py-2.5 rounded-xl bg-[#c8102e] hover:bg-[#a00d24] text-white font-semibold text-sm transition-colors"
+                className="w-full py-2.5 rounded-xl bg-[#c8102e] hover:bg-[#a00d24] hover:scale-105 text-white font-semibold text-sm transition-all"
               >
                 Request Cancellation
               </button>

@@ -224,7 +224,7 @@ export default function MyRoomsPage() {
                 onClick={() => setFilter(d)}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
                   filter === d
-                    ? 'bg-[#0a1628] text-white border-[#0a1628]'
+                    ? 'bg-white/20 text-white border-white/30'
                     : 'border-[#1e5080] text-[#93b8d8] hover:border-[#6a96bb] bg-[#184073]'
                 }`}
               >
