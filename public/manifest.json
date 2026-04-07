@@ -1,6 +1,6 @@
 {
-  "name": "SGA Room Manager",
-  "short_name": "Room Manager",
+  "name": "Chambers",
+  "short_name": "Chambers",
   "start_url": "/",
   "display": "standalone",
   "theme_color": "#0a1628",

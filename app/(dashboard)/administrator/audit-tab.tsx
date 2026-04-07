@@ -75,7 +75,7 @@ export default function AuditTab() {
 
   useEffect(() => {
     const fetchBookings = async () => {
-      const res = await fetch('/api/management/bookings')
+      const res = await fetch('/api/administrator/bookings')
       const data = await res.json()
 
       const options: BookingOption[] = []
@@ -112,7 +112,7 @@ export default function AuditTab() {
     }
     const fetchLogs = async () => {
       setLoadingLogs(true)
-      const res = await fetch(`/api/management/audit-logs?booking_id=${selectedId}`)
+      const res = await fetch(`/api/administrator/audit-logs?booking_id=${selectedId}`)
       const data = await res.json()
       setLogs(data.logs || [])
       setLoadingLogs(false)

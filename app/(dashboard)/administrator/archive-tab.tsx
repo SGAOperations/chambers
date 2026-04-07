@@ -225,7 +225,7 @@ export default function ArchiveTab() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/management/archive')
+    fetch('/api/administrator/archive')
       .then(r => r.json())
       .then(data => {
         setGroups(data.groups || [])

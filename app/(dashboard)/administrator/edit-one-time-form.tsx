@@ -21,26 +21,37 @@ interface Body {
   name: string
 }
 
-interface Session {
-  id?: string
-  location: string
-  session_date: string
+interface OneTimeSession {
+  room_name: string
+  booking_date: string
   start_time: string
   end_time: string
   status: string
-  reservation_code: string | null
-  isNew?: boolean
+  reservation_code: string
 }
 
-interface EditTablingFormProps {
+const emptySession = (): OneTimeSession => ({
+  room_name: '',
+  booking_date: '',
+  start_time: '',
+  end_time: '',
+  status: 'Reserved',
+  reservation_code: '',
+})
+
+interface EditOneTimeFormProps {
   booking: {
     id: string
     body_id: string
     purpose: string
-    tabling_bookings: {
+    one_time_room_bookings: {
       id: string
+      room_name: string
+      booking_date: string
+      start_time: string
+      end_time: string
+      status: string
       reservation_code: string | null
-      tabling_sessions: Session[]
     }[] | null
   }
   bodies: Body[]
@@ -51,43 +62,28 @@ interface EditTablingFormProps {
 const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
-const emptySession = (): Session => ({
-  location: '',
-  session_date: '',
-  start_time: '09:00',
-  end_time: '10:00',
-  status: 'Reserved',
-  reservation_code: null,
-  isNew: true,
-})
-
-export default function EditTablingForm({ booking, bodies, onClose, onSuccess }: EditTablingFormProps) {
-  const t = booking.tabling_bookings?.[0]
-
+export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }: EditOneTimeFormProps) {
   const [form, setForm] = useState({
     body_id: booking.body_id,
     purpose: booking.purpose,
-    reservation_code: t?.reservation_code ?? '',
   })
 
-  const [sessions, setSessions] = useState<Session[]>(
-    t?.tabling_sessions.map(s => ({ ...s, start_time: s.start_time.slice(0, 5), end_time: s.end_time.slice(0, 5) })) || []
+  const [sessions, setSessions] = useState<OneTimeSession[]>(
+    booking.one_time_room_bookings?.map(d => ({
+      room_name: d.room_name ?? '',
+      booking_date: d.booking_date ?? '',
+      start_time: d.start_time.slice(0, 5) ?? '',
+      end_time: d.end_time.slice(0, 5) ?? '',
+      status: d.status ?? 'Reserved',
+      reservation_code: d.reservation_code ?? '',
+    })) ?? [emptySession()]
   )
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  if (!t) return null
-
-  const updateSession = (index: number, field: keyof Session, value: string | null) => {
+  const updateSession = (index: number, field: keyof OneTimeSession, value: string) => {
     setSessions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
-  }
-
-  const addSession = () => setSessions(prev => [...prev, emptySession()])
-
-  const removeSession = (index: number) => {
-    if (sessions.length === 1) return
-    setSessions(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleSubmit = async () => {
@@ -95,22 +91,21 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
       setError('Please fill out all required fields.')
       return
     }
-
     for (const s of sessions) {
-      if (!s.location || !s.session_date || !s.start_time || !s.end_time) {
-        setError('Please fill out all required session fields.')
+      if (!s.booking_date || !s.start_time || !s.end_time) {
+        setError('Please fill out all session fields.')
         return
       }
     }
 
     setSaving(true)
-    const res = await fetch('/api/management/bookings/tabling', {
+    const res = await fetch('/api/administrator/bookings/one-time', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         booking_id: booking.id,
-        tabling_id: t.id,
-        ...form,
+        body_id: form.body_id,
+        purpose: form.purpose,
         sessions,
       }),
     })
@@ -126,37 +121,36 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div>
         <label className={labelCls}>Body *</label>
-        <select value={form.body_id} onChange={e => setForm({ ...form, body_id: e.target.value })} className={inputCls}>
+        <select
+          value={form.body_id}
+          onChange={e => setForm({ ...form, body_id: e.target.value })}
+          className={inputCls}
+        >
           <option value="">Select Body</option>
-          {bodies.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          {bodies.map(b => (
+            <option key={b.id} value={b.id}>{b.name}</option>
+          ))}
         </select>
       </div>
 
       <div>
         <label className={labelCls}>Purpose *</label>
-        <input type="text" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} className={inputCls} />
-      </div>
-
-      <div>
-        <label className={labelCls}>Reservation Code</label>
         <input
           type="text"
-          placeholder="Optional"
-          value={form.reservation_code}
-          onChange={e => setForm({ ...form, reservation_code: e.target.value })}
+          value={form.purpose}
+          onChange={e => setForm({ ...form, purpose: e.target.value })}
           className={inputCls}
         />
       </div>
 
-      {/* Sessions */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-[#f0f6ff]">Sessions</span>
           <button
-            onClick={addSession}
+            onClick={() => setSessions(prev => [...prev, emptySession()])}
             className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
           >
             + Add Session
@@ -166,13 +160,11 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
         {sessions.map((s, i) => (
           <div key={i} className="border border-[#1e5080] rounded-xl p-4 space-y-3 bg-[#0f2a4a]">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">
-                Session {i + 1} {s.isNew && <span className="text-[#c8102e]">· New</span>}
-              </span>
+              <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">Session {i + 1}</span>
               {sessions.length > 1 && (
                 <button
-                  onClick={() => removeSession(i)}
-                  className="text-xs text-slate-400 hover:text-[#c8102e] transition-colors"
+                  onClick={() => setSessions(prev => prev.filter((_, idx) => idx !== i))}
+                  className="text-xs text-[#6a96bb] hover:text-[#c8102e] transition-colors"
                 >
                   Remove
                 </button>
@@ -180,12 +172,11 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
             </div>
 
             <div>
-              <label className={labelCls}>Location *</label>
+              <label className={labelCls}>Room Name</label>
               <input
                 type="text"
-                placeholder="e.g. Curry Crossroads"
-                value={s.location}
-                onChange={e => updateSession(i, 'location', e.target.value)}
+                value={s.room_name}
+                onChange={e => updateSession(i, 'room_name', e.target.value)}
                 className={inputCls}
               />
             </div>
@@ -194,8 +185,8 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
               <label className={labelCls}>Date *</label>
               <input
                 type="date"
-                value={s.session_date}
-                onChange={e => updateSession(i, 'session_date', e.target.value)}
+                value={s.booking_date}
+                onChange={e => updateSession(i, 'booking_date', e.target.value)}
                 className={inputCls}
               />
             </div>
@@ -218,8 +209,21 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
                 onChange={e => updateSession(i, 'status', e.target.value)}
                 className={inputCls}
               >
-                {STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
+                {STATUSES.map(st => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
               </select>
+            </div>
+
+            <div>
+              <label className={labelCls}>Reservation Code</label>
+              <input
+                type="text"
+                placeholder="Optional"
+                value={s.reservation_code}
+                onChange={e => updateSession(i, 'reservation_code', e.target.value)}
+                className={inputCls}
+              />
             </div>
           </div>
         ))}

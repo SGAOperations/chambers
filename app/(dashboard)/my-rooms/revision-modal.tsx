@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import TimePicker from '../management/time-picker'
+import TimePicker from '../administrator/time-picker'
 
 interface RevisionModalProps {
   booking: {

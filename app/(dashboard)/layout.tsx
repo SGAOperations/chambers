@@ -18,6 +18,7 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isIEMS, setIsIEMS] = useState(false)
   const [isLeadership, setIsLeadership] = useState(false)
   const [counts, setCounts] = useState({ requests: 0, cancellations: 0, total: 0 })
   const [userName, setUserName] = useState('')
@@ -36,6 +37,9 @@ export default function DashboardLayout({
       if (user?.app_metadata?.is_admin) {
         setIsAdmin(true)
         fetchCounts()
+      }
+      if (user?.app_metadata?.iems_role) {
+        setIsIEMS(true)
       }
 
       const { data: profile } = await supabase
@@ -58,7 +62,7 @@ export default function DashboardLayout({
   }, [])
 
   const fetchCounts = async () => {
-    const res = await fetch('/api/management/counts')
+    const res = await fetch('/api/administrator/counts')
     if (res.ok) {
       const data = await res.json()
       setCounts(data)
@@ -207,7 +211,8 @@ export default function DashboardLayout({
           <div className="flex flex-col gap-1 px-3 py-4 flex-1">
             {navLink('/my-rooms', 'My Rooms')}
             {(isLeadership || isAdmin) && navLink('/request', 'Request a Booking')}
-            {isAdmin && navLink('/management', 'Management')}
+            {(isAdmin || isIEMS) && navLink('/events', 'Events')}
+            {isAdmin && navLink('/administrator', 'Administrator')}
           </div>
 
           {/* Total badge + Sign out */}

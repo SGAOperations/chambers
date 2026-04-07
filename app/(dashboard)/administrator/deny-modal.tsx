@@ -19,7 +19,7 @@ export default function DenyModal({ requestId, onClose, onDenied }: DenyModalPro
 
   const handleSubmit = async () => {
     setSaving(true)
-    const res = await fetch('/api/management/requests', {
+    const res = await fetch('/api/administrator/requests', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -86,8 +86,8 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
 
   const fetchRequests = async () => {
     const [reqRes, revRes] = await Promise.all([
-      fetch('/api/management/requests'),
-      fetch('/api/management/revisions'),
+      fetch('/api/administrator/requests'),
+      fetch('/api/administrator/revisions'),
     ])
     const reqData = await reqRes.json()
     const revData = await revRes.json()

@@ -28,12 +28,13 @@ export default function FulfillModal({ request, onClose, onSuccess }: FulfillMod
   const [loading, setLoading] = useState(true)
   const [booking_id, setBookingId] = useState('')
   const [notes, setNotes] = useState('')
+  const [isEvent, setIsEvent] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
     const fetchBookings = async () => {
-      const res = await fetch(`/api/management/requests/bookings?type=${encodeURIComponent(request.type)}&body_id=${request.body_id}`)
+      const res = await fetch(`/api/administrator/requests/bookings?type=${encodeURIComponent(request.type)}&body_id=${request.body_id}`)
       const data = await res.json()
       setBookings(data.bookings || [])
       setLoading(false)
@@ -48,7 +49,7 @@ export default function FulfillModal({ request, onClose, onSuccess }: FulfillMod
     }
 
     setSaving(true)
-    const res = await fetch('/api/management/requests', {
+    const res = await fetch('/api/administrator/requests', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -56,6 +57,7 @@ export default function FulfillModal({ request, onClose, onSuccess }: FulfillMod
         status: 'Fulfilled',
         booking_id,
         notes,
+        is_event: isEvent,
       }),
     })
 
@@ -113,6 +115,17 @@ export default function FulfillModal({ request, onClose, onSuccess }: FulfillMod
             className={inputCls}
           />
         </div>
+
+        {/* Event booking flag */}
+        <label className="flex items-center gap-3 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={isEvent}
+            onChange={e => setIsEvent(e.target.checked)}
+            className="w-4 h-4 rounded border border-[#1e5080] bg-[#0f2a4a] accent-[#c8102e] cursor-pointer"
+          />
+          <span className="text-sm text-[#f0f6ff]">Mark as Event Booking</span>
+        </label>
 
         {error && <p className="text-[#c8102e] text-sm">{error}</p>}
 

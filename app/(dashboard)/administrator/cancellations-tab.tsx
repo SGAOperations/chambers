@@ -37,7 +37,7 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
   const [updating, setUpdating] = useState<string | null>(null)
 
   const fetchCancellations = async () => {
-    const res = await fetch('/api/management/cancellations')
+    const res = await fetch('/api/administrator/cancellations')
     const data = await res.json()
     setCancellations(data.cancellations || [])
     setLoading(false)
@@ -49,7 +49,7 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
 
   const markDone = async (id: string) => {
     setUpdating(id)
-    await fetch('/api/management/cancellations', {
+    await fetch('/api/administrator/cancellations', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),

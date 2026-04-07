@@ -12,8 +12,6 @@ const STATUSES = [
   'Pending Cancellation',
   'Cancelled',
   'Virtual',
-  'Missed',
-  'Repurposed',
 ]
 
 interface Body {
@@ -39,46 +37,15 @@ const emptySession = (): OneTimeSession => ({
   reservation_code: '',
 })
 
-interface EditOneTimeFormProps {
-  booking: {
-    id: string
-    body_id: string
-    purpose: string
-    one_time_room_bookings: {
-      id: string
-      room_name: string
-      booking_date: string
-      start_time: string
-      end_time: string
-      status: string
-      reservation_code: string | null
-    }[] | null
-  }
+interface OneTimeFormProps {
   bodies: Body[]
   onClose: () => void
   onSuccess: () => void
 }
 
-const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
-const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
-
-export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }: EditOneTimeFormProps) {
-  const [form, setForm] = useState({
-    body_id: booking.body_id,
-    purpose: booking.purpose,
-  })
-
-  const [sessions, setSessions] = useState<OneTimeSession[]>(
-    booking.one_time_room_bookings?.map(d => ({
-      room_name: d.room_name ?? '',
-      booking_date: d.booking_date ?? '',
-      start_time: d.start_time.slice(0, 5) ?? '',
-      end_time: d.end_time.slice(0, 5) ?? '',
-      status: d.status ?? 'Reserved',
-      reservation_code: d.reservation_code ?? '',
-    })) ?? [emptySession()]
-  )
-
+export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormProps) {
+  const [form, setForm] = useState({ body_id: '', purpose: '' })
+  const [sessions, setSessions] = useState<OneTimeSession[]>([emptySession()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -99,15 +66,10 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
     }
 
     setSaving(true)
-    const res = await fetch('/api/management/bookings/one-time', {
-      method: 'PATCH',
+    const res = await fetch('/api/administrator/bookings/one-time', {
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        booking_id: booking.id,
-        body_id: form.body_id,
-        purpose: form.purpose,
-        sessions,
-      }),
+      body: JSON.stringify({ body_id: form.body_id, purpose: form.purpose, sessions }),
     })
 
     if (res.ok) {
@@ -119,6 +81,9 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
     }
     setSaving(false)
   }
+
+  const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
+  const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
   return (
     <div className="space-y-3">
@@ -140,6 +105,7 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
         <label className={labelCls}>Purpose *</label>
         <input
           type="text"
+          placeholder="e.g. Club Meeting"
           value={form.purpose}
           onChange={e => setForm({ ...form, purpose: e.target.value })}
           className={inputCls}
@@ -175,6 +141,7 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
               <label className={labelCls}>Room Name</label>
               <input
                 type="text"
+                placeholder="e.g. Curry 318"
                 value={s.room_name}
                 onChange={e => updateSession(i, 'room_name', e.target.value)}
                 className={inputCls}
@@ -237,7 +204,7 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
           disabled={saving}
           className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
         >
-          {saving ? 'Saving...' : 'Save Changes'}
+          {saving ? 'Saving...' : 'Create Booking'}
         </button>
         <button
           onClick={onClose}

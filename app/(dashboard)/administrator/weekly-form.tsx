@@ -55,7 +55,7 @@ export default function WeeklyForm({ bodies, onClose, onSuccess }: WeeklyFormPro
     }
 
     setSaving(true)
-    const res = await fetch('/api/management/bookings/weekly', {
+    const res = await fetch('/api/administrator/bookings/weekly', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import TimePicker from '../management/time-picker'
+import TimePicker from '../administrator/time-picker'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
 

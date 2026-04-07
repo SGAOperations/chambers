@@ -22,7 +22,7 @@ export async function GET() {
   const { data: users } = await supabase
     .from('users')
     .select(`
-      id, email, full_name, admin_role, is_active, created_at,
+      id, email, full_name, admin_role, iems_role, is_active, created_at,
       board_memberships(
         id, role,
         bodies(id, name, division)
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { email, full_name, admin_role } = await request.json()
+  const { email, full_name, admin_role, iems_role } = await request.json()
 
   // Create auth user with default password
   const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
@@ -56,17 +56,21 @@ export async function POST(request: Request) {
 
   if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
 
-  // Set admin metadata if applicable
-  if (admin_role) {
+  // Set auth metadata (admin and IEMS are mutually exclusive)
+  if (admin_role || iems_role) {
     await adminSupabase.auth.admin.updateUserById(authData.user.id, {
-      app_metadata: { is_admin: true, admin_role },
+      app_metadata: {
+        is_admin: !!admin_role,
+        admin_role: admin_role || null,
+        iems_role: iems_role || null,
+      },
     })
   }
 
-  // Update users table with admin_role and full_name (trigger creates the row)
+  // Update users table (trigger creates the row)
   const { error: updateError } = await adminSupabase
     .from('users')
-    .update({ admin_role, full_name })
+    .update({ admin_role: admin_role || null, iems_role: iems_role || null, full_name })
     .eq('id', authData.user.id)
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
@@ -89,7 +93,16 @@ export async function PATCH(request: Request) {
   const { id } = body
 
   const updateData: Record<string, unknown> = {}
-  if ('admin_role' in body) updateData.admin_role = body.admin_role
+  if ('admin_role' in body) {
+    updateData.admin_role = body.admin_role || null
+    // Setting an admin_role clears iems_role
+    if (body.admin_role) updateData.iems_role = null
+  }
+  if ('iems_role' in body) {
+    updateData.iems_role = body.iems_role || null
+    // Setting an iems_role clears admin_role
+    if (body.iems_role) updateData.admin_role = null
+  }
   if ('is_active' in body) updateData.is_active = body.is_active
 
   const { error } = await adminSupabase
@@ -99,12 +112,15 @@ export async function PATCH(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Only sync auth metadata if admin_role was part of this update
-  if ('admin_role' in body) {
+  // Sync auth metadata when role changes
+  if ('admin_role' in body || 'iems_role' in body) {
+    const isSettingAdmin = 'admin_role' in body && !!body.admin_role
+    const isSettingIEMS = 'iems_role' in body && !!body.iems_role
     await adminSupabase.auth.admin.updateUserById(id, {
       app_metadata: {
-        is_admin: !!body.admin_role,
-        admin_role: body.admin_role || null,
+        is_admin: isSettingAdmin,
+        admin_role: isSettingAdmin ? body.admin_role : null,
+        iems_role: isSettingIEMS ? body.iems_role : null,
       },
     })
   }

@@ -9,6 +9,12 @@ const ADMIN_ROLES = [
   'Digital Innovation Project Member',
 ]
 
+const IEMS_ROLES = [
+  'Vice President of External Affairs',
+  'Assistant Vice President of External Affairs',
+  'Director of Events',
+]
+
 interface Membership {
   id: string
   role: 'Leadership' | 'Member'
@@ -24,6 +30,7 @@ interface User {
   email: string
   full_name: string
   admin_role: string | null
+  iems_role: string | null
   is_active: boolean
   created_at: string
   board_memberships: Membership[]
@@ -49,14 +56,14 @@ export default function UsersTab() {
   const [togglingActive, setTogglingActive] = useState<string | null>(null)
 
   const fetchUsers = async () => {
-    const res = await fetch('/api/management/users')
+    const res = await fetch('/api/administrator/users')
     const data = await res.json()
     setUsers(data.users || [])
     setLoading(false)
   }
 
   const fetchBodies = async () => {
-    const res = await fetch('/api/management/bodies')
+    const res = await fetch('/api/administrator/bodies')
     const data = await res.json()
     setBodies(data.bodies || [])
   }
@@ -68,7 +75,7 @@ export default function UsersTab() {
 
   const createUser = async () => {
     setCreating(true)
-    await fetch('/api/management/users', {
+    await fetch('/api/administrator/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newUser),
@@ -80,7 +87,7 @@ export default function UsersTab() {
   }
 
   const addMembership = async (userId: string) => {
-    await fetch('/api/management/users/memberships', {
+    await fetch('/api/administrator/users/memberships', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId, ...newMembership }),
@@ -91,7 +98,7 @@ export default function UsersTab() {
   }
 
   const removeMembership = async (membershipId: string) => {
-    await fetch('/api/management/users/memberships', {
+    await fetch('/api/administrator/users/memberships', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: membershipId }),
@@ -110,7 +117,7 @@ export default function UsersTab() {
         return
       }
     }
-    await fetch('/api/management/users', {
+    await fetch('/api/administrator/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: userId, admin_role: newRole || null }),
@@ -118,9 +125,18 @@ export default function UsersTab() {
     await fetchUsers()
   }
 
+  const updateIEMSRole = async (userId: string, newRole: string) => {
+    await fetch('/api/administrator/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: userId, iems_role: newRole || null }),
+    })
+    await fetchUsers()
+  }
+
   const toggleActiveStatus = async (userId: string, currentlyActive: boolean) => {
     setTogglingActive(userId)
-    await fetch('/api/management/users', {
+    await fetch('/api/administrator/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: userId, is_active: !currentlyActive }),
@@ -131,7 +147,7 @@ export default function UsersTab() {
 
   const toggleMembershipRole = async (membershipId: string, currentRole: string) => {
     const newRole = currentRole === 'Leadership' ? 'Member' : 'Leadership'
-    await fetch('/api/management/users/memberships', {
+    await fetch('/api/administrator/users/memberships', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: membershipId, role: newRole }),
@@ -218,6 +234,9 @@ export default function UsersTab() {
                 {u.admin_role && (
                   <p className="text-xs text-[#c8102e] font-medium mt-0.5">{u.admin_role}</p>
                 )}
+                {u.iems_role && (
+                  <p className="text-xs text-[#22d3ee] font-medium mt-0.5">IEMS: {u.iems_role}</p>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${u.is_active ? 'bg-[#0f3d20] text-[#4ade80]' : 'bg-[#3d0f0f] text-[#f87171]'}`}>
@@ -243,6 +262,21 @@ export default function UsersTab() {
                   >
                     <option value="">No Admin Role</option>
                     {ADMIN_ROLES.map(r => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+                {/* IEMS role */}
+                <div>
+                  <h4 className="text-sm font-semibold text-[#f0f6ff] mb-1">IEMS Role</h4>
+                  <p className="text-xs text-[#6a96bb] mb-2">Mutually exclusive with Admin Role.</p>
+                  <select
+                    value={u.iems_role ?? ''}
+                    onChange={e => updateIEMSRole(u.id, e.target.value)}
+                    className={inputCls}
+                  >
+                    <option value="">No IEMS Role</option>
+                    {IEMS_ROLES.map(r => (
                       <option key={r} value={r}>{r}</option>
                     ))}
                   </select>

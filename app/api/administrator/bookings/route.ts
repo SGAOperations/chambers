@@ -1,6 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+
+const adminSupabase = createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function GET() {
   const supabase = await createClient()
@@ -27,7 +33,7 @@ export async function GET() {
   const { data: oneTime } = await supabase
     .from('bookings')
     .select(`
-      id, purpose, body_id,
+      id, purpose, body_id, is_event,
       bodies(name),
       creator_role,
       one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
@@ -39,7 +45,7 @@ export async function GET() {
   const { data: weekly } = await supabase
     .from('bookings')
     .select(`
-      id, purpose, body_id,
+      id, purpose, body_id, is_event,
       bodies(name),
       creator_role,
       weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
@@ -53,7 +59,7 @@ export async function GET() {
   const { data: tabling } = await supabase
     .from('bookings')
     .select(`
-      id, purpose, body_id,
+      id, purpose, body_id, is_event,
       bodies(name),
       creator_role,
       tabling_bookings(id, reservation_code,
@@ -70,4 +76,27 @@ export async function GET() {
     tabling: tabling || [],
     activeSemester,
   })
+}
+
+export async function PATCH(request: Request) {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || !user.app_metadata?.is_admin) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const rateLimitRes = await checkRateLimit(user.id)
+  if (rateLimitRes) return rateLimitRes
+
+  const { id, is_event } = await request.json()
+
+  const { error } = await adminSupabase
+    .from('bookings')
+    .update({ is_event })
+    .eq('id', id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  return NextResponse.json({ success: true })
 }

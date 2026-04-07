@@ -19,38 +19,50 @@ interface Body {
   name: string
 }
 
-interface OneTimeSession {
-  room_name: string
-  booking_date: string
+interface Session {
+  location: string
+  session_date: string
   start_time: string
   end_time: string
   status: string
-  reservation_code: string
 }
 
-const emptySession = (): OneTimeSession => ({
-  room_name: '',
-  booking_date: '',
-  start_time: '',
-  end_time: '',
-  status: 'Reserved',
-  reservation_code: '',
-})
-
-interface OneTimeFormProps {
+interface TablingFormProps {
   bodies: Body[]
   onClose: () => void
   onSuccess: () => void
 }
 
-export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormProps) {
-  const [form, setForm] = useState({ body_id: '', purpose: '' })
-  const [sessions, setSessions] = useState<OneTimeSession[]>([emptySession()])
+const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
+const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
+
+const emptySession = (): Session => ({
+  location: '',
+  session_date: '',
+  start_time: '09:00',
+  end_time: '10:00',
+  status: 'Reserved',
+})
+
+export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormProps) {
+  const [form, setForm] = useState({
+    body_id: '',
+    purpose: '',
+    reservation_code: '',
+  })
+  const [sessions, setSessions] = useState<Session[]>([emptySession()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const updateSession = (index: number, field: keyof OneTimeSession, value: string) => {
+  const updateSession = (index: number, field: keyof Session, value: string) => {
     setSessions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
+  }
+
+  const addSession = () => setSessions(prev => [...prev, emptySession()])
+
+  const removeSession = (index: number) => {
+    if (sessions.length === 1) return
+    setSessions(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleSubmit = async () => {
@@ -58,18 +70,19 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
       setError('Please fill out all required fields.')
       return
     }
+
     for (const s of sessions) {
-      if (!s.booking_date || !s.start_time || !s.end_time) {
-        setError('Please fill out all session fields.')
+      if (!s.location || !s.session_date || !s.start_time || !s.end_time) {
+        setError('Please fill out all required session fields.')
         return
       }
     }
 
     setSaving(true)
-    const res = await fetch('/api/management/bookings/one-time', {
+    const res = await fetch('/api/administrator/bookings/tabling', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body_id: form.body_id, purpose: form.purpose, sessions }),
+      body: JSON.stringify({ ...form, sessions }),
     })
 
     if (res.ok) {
@@ -82,11 +95,8 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
     setSaving(false)
   }
 
-  const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
-  const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
-
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div>
         <label className={labelCls}>Body *</label>
         <select
@@ -105,18 +115,30 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
         <label className={labelCls}>Purpose *</label>
         <input
           type="text"
-          placeholder="e.g. Club Meeting"
+          placeholder="e.g. Committee Tabling"
           value={form.purpose}
           onChange={e => setForm({ ...form, purpose: e.target.value })}
           className={inputCls}
         />
       </div>
 
-      <div className="space-y-3">
+      <div>
+        <label className={labelCls}>Reservation Code</label>
+        <input
+          type="text"
+          placeholder="Optional"
+          value={form.reservation_code}
+          onChange={e => setForm({ ...form, reservation_code: e.target.value })}
+          className={inputCls}
+        />
+      </div>
+
+      {/* Sessions */}
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-[#f0f6ff]">Sessions</span>
           <button
-            onClick={() => setSessions(prev => [...prev, emptySession()])}
+            onClick={addSession}
             className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
           >
             + Add Session
@@ -129,8 +151,8 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
               <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">Session {i + 1}</span>
               {sessions.length > 1 && (
                 <button
-                  onClick={() => setSessions(prev => prev.filter((_, idx) => idx !== i))}
-                  className="text-xs text-[#6a96bb] hover:text-[#c8102e] transition-colors"
+                  onClick={() => removeSession(i)}
+                  className="text-xs text-slate-400 hover:text-[#c8102e] transition-colors"
                 >
                   Remove
                 </button>
@@ -138,12 +160,12 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
             </div>
 
             <div>
-              <label className={labelCls}>Room Name</label>
+              <label className={labelCls}>Location *</label>
               <input
                 type="text"
-                placeholder="e.g. Curry 318"
-                value={s.room_name}
-                onChange={e => updateSession(i, 'room_name', e.target.value)}
+                placeholder="e.g. Curry Crossroads"
+                value={s.location}
+                onChange={e => updateSession(i, 'location', e.target.value)}
                 className={inputCls}
               />
             </div>
@@ -152,8 +174,8 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
               <label className={labelCls}>Date *</label>
               <input
                 type="date"
-                value={s.booking_date}
-                onChange={e => updateSession(i, 'booking_date', e.target.value)}
+                value={s.session_date}
+                onChange={e => updateSession(i, 'session_date', e.target.value)}
                 className={inputCls}
               />
             </div>
@@ -180,17 +202,6 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
                   <option key={st} value={st}>{st}</option>
                 ))}
               </select>
-            </div>
-
-            <div>
-              <label className={labelCls}>Reservation Code</label>
-              <input
-                type="text"
-                placeholder="Optional"
-                value={s.reservation_code}
-                onChange={e => updateSession(i, 'reservation_code', e.target.value)}
-                className={inputCls}
-              />
             </div>
           </div>
         ))}

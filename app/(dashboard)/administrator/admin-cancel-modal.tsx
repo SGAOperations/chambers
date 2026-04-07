@@ -40,7 +40,7 @@ export default function AdminCancelModal({ booking, sessions, onClose, onCancell
 
   const handleSubmit = async () => {
     setSaving(true)
-    const res = await fetch('/api/management/bookings/cancel', {
+    const res = await fetch('/api/administrator/bookings/cancel', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

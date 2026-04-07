@@ -42,7 +42,7 @@ export default function BookingSettingsTab() {
   const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
-    fetch('/api/management/settings')
+    fetch('/api/administrator/settings')
       .then(r => r.json())
       .then(data => {
         setMinDaysRoom(data.min_days_advance_room ?? 0)
@@ -66,7 +66,7 @@ export default function BookingSettingsTab() {
 
   const fetchSemesters = async () => {
     setSemesterLoading(true)
-    const res = await fetch('/api/management/semesters')
+    const res = await fetch('/api/administrator/semesters')
     if (res.ok) {
       const data = await res.json()
       setSemesters(data.semesters || [])
@@ -79,7 +79,7 @@ export default function BookingSettingsTab() {
     setSuccess(false)
     setSaving(true)
 
-    const res = await fetch('/api/management/settings', {
+    const res = await fetch('/api/administrator/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -102,7 +102,7 @@ export default function BookingSettingsTab() {
     setCreatingState('saving')
     setCreateError('')
 
-    const res = await fetch('/api/management/semesters', {
+    const res = await fetch('/api/administrator/semesters', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newSemesterName.trim() }),
@@ -124,7 +124,7 @@ export default function BookingSettingsTab() {
     setActivating(true)
     setActivateError('')
 
-    const res = await fetch('/api/management/semesters', {
+    const res = await fetch('/api/administrator/semesters', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: pendingActivateId }),
@@ -146,7 +146,7 @@ export default function BookingSettingsTab() {
     setDeleting(true)
     setDeleteError('')
 
-    const res = await fetch('/api/management/semesters', {
+    const res = await fetch('/api/administrator/semesters', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: pendingDeleteId }),

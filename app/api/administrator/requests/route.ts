@@ -44,7 +44,7 @@ export async function PATCH(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { id, status, booking_id, notes, denial_reason } = await request.json()
+  const { id, status, booking_id, notes, denial_reason, is_event } = await request.json()
 
   // Update request status and notes
   const { error: requestError } = await adminSupabase
@@ -56,9 +56,12 @@ export async function PATCH(request: Request) {
 
   // Link booking if fulfilling
   if (status === 'Fulfilled' && booking_id) {
+    const bookingUpdate: Record<string, unknown> = { request_id: id }
+    if (is_event) bookingUpdate.is_event = true
+
     const { error: bookingError } = await adminSupabase
       .from('bookings')
-      .update({ request_id: id })
+      .update(bookingUpdate)
       .eq('id', booking_id)
 
     if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 })

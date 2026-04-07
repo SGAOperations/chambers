@@ -22,6 +22,7 @@ interface OneTimeBooking {
   id: string
   body_id: string
   purpose: string
+  is_event: boolean
   bodies: { name: string } | null
   creator_role: string | null
   one_time_room_bookings: {
@@ -39,6 +40,7 @@ interface WeeklyBooking {
   id: string
   body_id: string
   purpose: string
+  is_event: boolean
   bodies: { name: string } | null
   creator_role: string | null
   weekly_room_bookings: {
@@ -67,6 +69,7 @@ interface TablingBooking {
   id: string
   body_id: string
   purpose: string
+  is_event: boolean
   bodies: { name: string } | null
   creator_role: string | null
   tabling_bookings: {
@@ -155,7 +158,7 @@ export default function BookingsTab() {
   const [activeSemester, setActiveSemester] = useState<{ id: string; name: string } | null | undefined>(undefined)
 
   const fetchBookings = async () => {
-    const res = await fetch('/api/management/bookings')
+    const res = await fetch('/api/administrator/bookings')
     const data = await res.json()
     setOneTime(data.oneTime || [])
     setWeekly(data.weekly || [])
@@ -165,9 +168,20 @@ export default function BookingsTab() {
   }
 
   const fetchBodies = async () => {
-    const res = await fetch('/api/management/bodies')
+    const res = await fetch('/api/administrator/bodies')
     const data = await res.json()
     setBodies(data.bodies || [])
+  }
+
+  const toggleEvent = async (id: string, current: boolean) => {
+    // Optimistic update
+    setOneTime(prev => prev.map(b => b.id === id ? { ...b, is_event: !current } : b))
+    setTabling(prev => prev.map(b => b.id === id ? { ...b, is_event: !current } : b))
+    await fetch('/api/administrator/bookings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, is_event: !current }),
+    })
   }
 
   useEffect(() => {
@@ -322,9 +336,18 @@ export default function BookingsTab() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
+                      {b.is_event && (
+                        <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#062f3b] text-[#22d3ee]">Event</span>
+                      )}
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {firstSession.status}
                       </span>
+                      <button
+                        onClick={() => toggleEvent(b.id, b.is_event)}
+                        className="text-xs text-[#22d3ee] hover:text-[#67e8f9] font-medium transition-colors"
+                      >
+                        {b.is_event ? 'Unmark Event' : 'Mark Event'}
+                      </button>
                       <button
                         onClick={() => setEditingBooking(b)}
                         className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
@@ -385,6 +408,9 @@ export default function BookingsTab() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
+                      {b.is_event && (
+                        <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#062f3b] text-[#22d3ee]">Event</span>
+                      )}
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {w.status}
                       </span>
@@ -430,6 +456,15 @@ export default function BookingsTab() {
                     <p className="font-semibold text-[#f0f6ff]">{b.bodies?.name}</p>
                     <div className="flex items-center gap-3">
                       <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
+                      {b.is_event && (
+                        <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#062f3b] text-[#22d3ee]">Event</span>
+                      )}
+                      <button
+                        onClick={() => toggleEvent(b.id, b.is_event)}
+                        className="text-xs text-[#22d3ee] hover:text-[#67e8f9] font-medium transition-colors"
+                      >
+                        {b.is_event ? 'Unmark Event' : 'Mark Event'}
+                      </button>
                       <button
                         onClick={() => setEditingTabling(b)}
                         className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"

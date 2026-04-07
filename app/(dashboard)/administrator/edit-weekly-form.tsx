@@ -132,7 +132,7 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
     }
 
     setSaving(true)
-    const res = await fetch('/api/management/bookings/weekly', {
+    const res = await fetch('/api/administrator/bookings/weekly', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

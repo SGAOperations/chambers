@@ -9,13 +9,13 @@ import AdvancedSettingsTab from './advanced-settings-tab'
 
 type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'Advanced Settings'
 
-export default function ManagementPage() {
+export default function AdministratorPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Requests')
   const [counts, setCounts] = useState({ requests: 0, cancellations: 0, revisions: 0, total: 0 })
 
   useEffect(() => {
     const fetchCounts = async () => {
-      const res = await fetch('/api/management/counts')
+      const res = await fetch('/api/administrator/counts')
       if (res.ok) {
         const data = await res.json()
         setCounts(data)
@@ -33,7 +33,7 @@ export default function ManagementPage() {
   return (
     <AdminGuard>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-[#f0f6ff]">Management</h1>
+        <h1 className="text-2xl font-bold text-[#f0f6ff]">Administrator</h1>
 
         <div className="flex gap-1 border-b border-[#1e5080]">
           {(['Requests', 'Cancellations', 'Bookings', 'Advanced Settings'] as Tab[]).map(tab => (
@@ -57,8 +57,8 @@ export default function ManagementPage() {
         </div>
 
         <div>
-          {activeTab === 'Requests' && <RequestsTab onCountChange={() => fetch('/api/management/counts').then(r => r.json()).then(d => setCounts(d))} />}
-          {activeTab === 'Cancellations' && <CancellationsTab onCountChange={() => fetch('/api/management/counts').then(r => r.json()).then(d => setCounts(d))} />}
+          {activeTab === 'Requests' && <RequestsTab onCountChange={() => fetch('/api/administrator/counts').then(r => r.json()).then(d => setCounts(d))} />}
+          {activeTab === 'Cancellations' && <CancellationsTab onCountChange={() => fetch('/api/administrator/counts').then(r => r.json()).then(d => setCounts(d))} />}
           {activeTab === 'Bookings' && <BookingsTab />}
           {activeTab === 'Advanced Settings' && <AdvancedSettingsTab />}
         </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import BookingModal from '../management/booking-modal'
+import BookingModal from '../administrator/booking-modal'
 
 const statusTextColors: Record<string, string> = {
   'Reserved': 'text-[#4ade80]',

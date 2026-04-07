@@ -32,7 +32,7 @@ export default function BodiesTab() {
   const [editValues, setEditValues] = useState({ name: '', division: '', is_active: true })
 
   const fetchBodies = async () => {
-    const res = await fetch('/api/management/bodies')
+    const res = await fetch('/api/administrator/bodies')
     const data = await res.json()
     setBodies(data.bodies || [])
     setLoading(false)
@@ -44,7 +44,7 @@ export default function BodiesTab() {
 
   const createBody = async () => {
     setCreating(true)
-    await fetch('/api/management/bodies', {
+    await fetch('/api/administrator/bodies', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newBody),
@@ -56,7 +56,7 @@ export default function BodiesTab() {
   }
 
   const saveEdit = async (id: string) => {
-    await fetch('/api/management/bodies', {
+    await fetch('/api/administrator/bodies', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, ...editValues }),
