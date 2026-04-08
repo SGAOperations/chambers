@@ -6,6 +6,56 @@ import RevisionModal from './revision-modal'
 import BookingDetailModal from './booking-detail-modal'
 import NotificationBell from './notification-bell'
 import {createClient} from "@/lib/supabase/client"
+import { Skeleton } from '@/app/_components/skeleton'
+
+function MyRoomsSkeleton() {
+  return (
+    <div className="space-y-10">
+      <section>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-bold text-[#f0f6ff]">My Upcoming Spaces</h2>
+          <div className="flex gap-2">
+            {[0, 1, 2].map(i => (
+              <Skeleton key={i} className="h-8 w-24 animate-pulse border border-[#1e5080]" />
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="rounded-xl p-5 border border-[#1e5080] bg-[#184073] animate-pulse">
+              <div className="flex items-center justify-between mb-2">
+                <Skeleton className="h-2.5 w-24" />
+                <Skeleton className="h-2.5 w-16" />
+              </div>
+              <Skeleton className="h-4 w-36 mb-2" />
+              <Skeleton className="h-3.5 w-28 mb-1.5" />
+              <Skeleton className="h-3.5 w-24 mb-1.5" />
+              <Skeleton className="h-3.5 w-32" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="text-xl font-bold text-[#f0f6ff] mb-5">All Bookings</h2>
+        <div className="space-y-2">
+          <Skeleton className="h-3.5 w-36 animate-pulse" />
+          <div className="divide-y divide-[#1e5080] border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073] animate-pulse">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className="flex items-center gap-4 px-5 py-3.5">
+                <Skeleton className="w-1.5 h-8 rounded-full flex-shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-56" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
 
 type Filter = 1 | 3 | 7
 
@@ -206,7 +256,7 @@ export default function MyRoomsPage() {
 
   const filteredUpcoming = all.filter(b => isWithinDays(b.date, filter))
 
-  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
+  if (loading) return <MyRoomsSkeleton />
 
   return (
     <div className="space-y-10">

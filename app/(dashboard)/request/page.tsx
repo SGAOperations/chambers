@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import TimePicker from '../administrator/time-picker'
+import { Skeleton } from '@/app/_components/skeleton'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
 
@@ -109,7 +110,7 @@ export default function RequestPage() {
   const router = useRouter()
   const [type, setType] = useState<RequestType>('One-Time Room')
   const [bodies, setBodies] = useState<Body[]>([])
-  const [loading, setLoading] = useState(true)
+  const [bodiesLoading, setBodiesLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
@@ -146,7 +147,7 @@ export default function RequestPage() {
         return
       }
       setBodies(resolved)
-      setLoading(false)
+      setBodiesLoading(false)
     }
     fetchBodies()
   }, [])
@@ -266,8 +267,6 @@ export default function RequestPage() {
     setError('')
   }
 
-  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
-
   if (submitted) return (
     <div className="max-w-xl">
       <h1 className="text-2xl font-bold text-[#f0f6ff] mb-2">Request Submitted</h1>
@@ -309,10 +308,14 @@ export default function RequestPage() {
       <div className="space-y-3">
         <div>
           <label className={labelCls}>Body *</label>
-          <select value={form.body_id} onChange={e => setForm({ ...form, body_id: e.target.value })} className={inputCls}>
-            <option value="">Select Body</option>
-            {bodies.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
+          {bodiesLoading ? (
+            <Skeleton className="h-10 w-full animate-pulse bg-[#0f2a4a] border border-[#1e5080]" />
+          ) : (
+            <select value={form.body_id} onChange={e => setForm({ ...form, body_id: e.target.value })} className={inputCls}>
+              <option value="">Select Body</option>
+              {bodies.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          )}
         </div>
 
         <div>

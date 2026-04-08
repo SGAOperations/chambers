@@ -2,6 +2,33 @@
 
 import { useEffect, useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
+import { Skeleton } from '@/app/_components/skeleton'
+
+function BookingSettingsTabSkeleton() {
+  return (
+    <div className="max-w-sm space-y-8">
+      <div className="space-y-4">
+        <Skeleton className="h-4 w-52 animate-pulse" />
+        {[0, 1].map(i => (
+          <div key={i} className="space-y-1">
+            <Skeleton className="h-3 w-64 animate-pulse" />
+            <Skeleton className="h-10 w-full rounded-lg animate-pulse" />
+          </div>
+        ))}
+        <Skeleton className="h-9 w-16 rounded-lg animate-pulse" />
+      </div>
+      <div className="space-y-4">
+        <Skeleton className="h-4 w-44 animate-pulse" />
+        <div className="space-y-2">
+          {[0, 1, 2].map(i => (
+            <Skeleton key={i} className="h-10 w-full rounded-xl animate-pulse" />
+          ))}
+        </div>
+        <Skeleton className="h-10 w-full rounded-lg animate-pulse" />
+      </div>
+    </div>
+  )
+}
 
 const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
@@ -163,7 +190,7 @@ export default function BookingSettingsTab() {
     setDeleting(false)
   }
 
-  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
+  if (loading) return <BookingSettingsTabSkeleton />
 
   return (
     <div className="max-w-sm space-y-8">

@@ -3,6 +3,37 @@
 import { useEffect, useState } from 'react'
 import FulfillModal from './fulfill-modal'
 import DenyModal from './deny-modal'
+import { Skeleton } from '@/app/_components/skeleton'
+
+function RequestsTabSkeleton() {
+  const card = (wide: boolean) => (
+    <div className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] animate-pulse">
+      <div className="flex items-center justify-between mb-3">
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className={`h-5 rounded-full ${wide ? 'w-28' : 'w-16'}`} />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-3.5 w-48" />
+        <Skeleton className="h-3.5 w-56" />
+        <Skeleton className="h-3.5 w-44" />
+        {wide && <Skeleton className="h-3.5 w-52" />}
+        <Skeleton className="h-3.5 w-36" />
+      </div>
+    </div>
+  )
+  return (
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <Skeleton className="h-3 w-36 animate-pulse" />
+        {[0, 1].map(i => <div key={i}>{card(true)}</div>)}
+      </div>
+      <div className="space-y-3">
+        <Skeleton className="h-3 w-28 animate-pulse" />
+        {[0, 1].map(i => <div key={i}>{card(false)}</div>)}
+      </div>
+    </div>
+  )
+}
 
 type RequestStatus = 'Pending' | 'Fulfilled' | 'Denied'
 
@@ -100,7 +131,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
     fetchRequests()
   }, [])
 
-  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
+  if (loading) return <RequestsTabSkeleton />
 
   if (requests.length === 0 && revisions.length === 0) return <div className="text-[#6a96bb] text-sm">No requests found.</div>
 

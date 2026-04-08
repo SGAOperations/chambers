@@ -10,6 +10,7 @@ import EditOneTimeForm from './edit-one-time-form'
 import EditWeeklyForm from './edit-weekly-form'
 import EditTablingForm from './edit-tabling-form'
 import WeeklyBookingGrid from './weekly-booking-grid'
+import { Skeleton } from '@/app/_components/skeleton'
 
 type BookingSubTab = 'One-Time Rooms' | 'Weekly Rooms' | 'Tables'
 
@@ -189,9 +190,7 @@ export default function BookingsTab() {
     fetchBodies()
   }, [])
 
-  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
-
-  const sortedWeekly = [...weekly].sort((a, b) => {
+  const sortedWeekly = loading ? [] : [...weekly].sort((a, b) => {
     const wa = a.weekly_room_bookings?.[0]
     const wb = b.weekly_room_bookings?.[0]
     if (!wa || !wb) return 0
@@ -204,7 +203,7 @@ export default function BookingsTab() {
   return (
     <div className="space-y-4">
       {/* Semester error banner */}
-      {activeSemester === null && (
+      {!loading && activeSemester === null && (
         <div className="flex items-center gap-2 bg-[#3d0f0f] border border-[#c8102e] text-[#f87171] text-sm rounded-lg px-4 py-3">
           <span className="font-semibold">Semester Error:</span> No active semester is set. Please activate a semester in Other Settings before creating new bookings.
         </div>
@@ -231,7 +230,7 @@ export default function BookingsTab() {
       <div className="flex justify-end">
         <button
           onClick={() => setShowModal(true)}
-          disabled={activeSemester === null}
+          disabled={loading || activeSemester === null}
           className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + New Booking
@@ -318,8 +317,33 @@ export default function BookingsTab() {
         />
       )}
 
+      {/* Booking list skeleton */}
+      {loading && (
+        <div className="space-y-3">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] animate-pulse">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1.5">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3.5 w-56" />
+                </div>
+                <div className="flex gap-3">
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                  <Skeleton className="h-5 w-12 rounded-full" />
+                </div>
+              </div>
+              <div className="mt-3 space-y-1.5">
+                <Skeleton className="h-3.5 w-48" />
+                <Skeleton className="h-3.5 w-40" />
+                <Skeleton className="h-3.5 w-44" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* One-Time Rooms */}
-      {subTab === 'One-Time Rooms' && (
+      {!loading && subTab === 'One-Time Rooms' && (
         <div className="space-y-3">
           {oneTime.length === 0 ? (
             <p className="text-[#6a96bb] text-sm">No one-time room bookings found.</p>
@@ -386,7 +410,7 @@ export default function BookingsTab() {
       )}
 
       {/* Weekly Rooms */}
-      {subTab === 'Weekly Rooms' && (
+      {!loading && subTab === 'Weekly Rooms' && (
         <div className="space-y-4">
           <WeeklyBookingGrid
             bookings={weekly}
@@ -442,7 +466,7 @@ export default function BookingsTab() {
       )}
 
       {/* Tables */}
-      {subTab === 'Tables' && (
+      {!loading && subTab === 'Tables' && (
         <div className="space-y-3">
           {tabling.length === 0 ? (
             <p className="text-[#6a96bb] text-sm">No tabling bookings found.</p>

@@ -161,14 +161,17 @@ export async function PATCH(request: Request) {
     .eq('body_id', parentBooking?.body_id)
 
   if (members?.length && auditLog) {
+    const changedOcc = newOccurrences.find(
+      o => o.room_name || o.start_time || o.end_time || o.status || o.reservation_code
+    ) ?? newOccurrences[0]
     await adminSupabase.from('user_alerts').insert(
       members.map((m: { user_id: string }) => ({
         user_id: m.user_id,
         audit_log_id: auditLog.id,
         booking_id,
         booking_type: 'Weekly Room',
-        booking_date: start_date,
-        start_time: start_time,
+        booking_date: changedOcc?.occurrence_date ?? start_date,
+        start_time: changedOcc?.start_time ?? start_time,
       }))
     )
   }

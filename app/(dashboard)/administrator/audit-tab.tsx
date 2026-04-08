@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Skeleton } from '@/app/_components/skeleton'
 
 interface BookingOption {
   id: string
@@ -141,7 +142,20 @@ export default function AuditTab() {
       )}
 
       {selectedId && loadingLogs && (
-        <div className="text-[#93b8d8] text-sm">Loading...</div>
+        <div className="space-y-2">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="border border-[#1e5080] rounded-xl px-5 py-4 bg-[#184073] flex items-center justify-between animate-pulse">
+              <div className="space-y-1.5">
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-5 w-20 rounded-full" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {selectedId && !loadingLogs && logs.length === 0 && (

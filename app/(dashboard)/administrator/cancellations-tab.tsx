@@ -1,6 +1,34 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Skeleton } from '@/app/_components/skeleton'
+
+function CancellationsTabSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[0, 1, 2].map(i => (
+        <div key={i} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] animate-pulse">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3.5 w-56" />
+            </div>
+            <Skeleton className="h-6 w-16 rounded-full" />
+          </div>
+          <div className="mt-3 space-y-1.5">
+            <Skeleton className="h-3.5 w-44" />
+            <Skeleton className="h-3.5 w-52" />
+            <Skeleton className="h-3.5 w-36" />
+            <Skeleton className="h-3.5 w-40" />
+          </div>
+          <div className="mt-4">
+            <Skeleton className="h-8 w-24 rounded-lg" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 interface CancellationRequest {
   id: string
@@ -59,7 +87,7 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
     setUpdating(null)
   }
 
-  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
+  if (loading) return <CancellationsTabSkeleton />
 
   if (cancellations.length === 0) return (
     <p className="text-[#6a96bb] text-sm">No cancellation requests found.</p>

@@ -1,6 +1,28 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Skeleton } from '@/app/_components/skeleton'
+
+function BodiesTabSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Skeleton className="h-9 w-24 rounded-lg animate-pulse" />
+      </div>
+      <div className="border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073] animate-pulse">
+        {[0, 1, 2, 3].map(i => (
+          <div key={i} className={`flex items-center justify-between p-4 ${i !== 0 ? 'border-t border-[#1e5080]' : ''}`}>
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3.5 w-28" />
+            </div>
+            <Skeleton className="h-5 w-14 rounded-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 const DIVISIONS = [
   'Office of the President',
@@ -70,7 +92,7 @@ export default function BodiesTab() {
     setEditValues({ name: body.name, division: body.division, is_active: body.is_active })
   }
 
-  if (loading) return <div className="text-[#93b8d8] text-sm">Loading...</div>
+  if (loading) return <BodiesTabSkeleton />
 
   const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 
