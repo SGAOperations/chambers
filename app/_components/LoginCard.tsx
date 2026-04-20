@@ -21,7 +21,12 @@ export default function LoginCard() {
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        router.push('/my-rooms')
+        const { data: profile } = await supabase
+          .from('users')
+          .select('has_completed_onboarding')
+          .eq('id', user.id)
+          .single()
+        router.push(profile?.has_completed_onboarding ? '/my-rooms' : '/onboarding')
       }
     }
     checkAuth()
@@ -41,7 +46,7 @@ export default function LoginCard() {
 
     const { data: profile } = await supabase
       .from('users')
-      .select('is_active')
+      .select('is_active, has_completed_onboarding')
       .eq('id', data.user.id)
       .single()
 
@@ -52,7 +57,7 @@ export default function LoginCard() {
       return
     }
 
-    router.push('/my-rooms')
+    router.push(profile?.has_completed_onboarding ? '/my-rooms' : '/onboarding')
   }
 
   const handleResetPassword = async () => {

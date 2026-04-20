@@ -3,11 +3,11 @@
 const inputCls = "bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-2 py-2.5 text-sm text-[#f0f6ff] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition w-full min-w-0"
 
 const hours = Array.from({ length: 12 }, (_, i) => i + 1)
-const minutes = Array.from({ length: 12 }, (_, i) => i * 5)
 
 interface TimePickerProps {
   value: string // HH:MM in 24hr format
   onChange: (value: string) => void
+  interval?: 5 | 15
 }
 
 function to24Hour(hour: number, minute: number, period: 'AM' | 'PM'): string {
@@ -25,7 +25,8 @@ function from24Hour(value: string): { hour: number; minute: number; period: 'AM'
   return { hour, minute: m, period }
 }
 
-export default function TimePicker({ value, onChange }: TimePickerProps) {
+export default function TimePicker({ value, onChange, interval = 5 }: TimePickerProps) {
+  const minutes = Array.from({ length: 60 / interval }, (_, i) => i * interval)
   const { hour, minute, period } = from24Hour(value)
 
   const update = (newHour: number, newMinute: number, newPeriod: 'AM' | 'PM') => {

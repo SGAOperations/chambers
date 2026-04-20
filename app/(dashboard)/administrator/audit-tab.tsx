@@ -39,6 +39,7 @@ const statusColors: Record<string, string> = {
   'Virtual': 'bg-[#062f3b] text-[#22d3ee]',
   'Missed': 'bg-[#1a1a2e] text-[#a78bfa]',
   'Repurposed': 'bg-[#1a1a1a] text-white',
+  'Tentative': 'bg-[#2d2800] text-[#fef08a]',
 }
 
 function AdminRoleBadge({ role }: { role: string | null | undefined }) {

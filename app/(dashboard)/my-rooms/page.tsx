@@ -70,6 +70,7 @@ const statusColors: Record<string, string> = {
   'Virtual': 'bg-[#062f3b] border-[#06b6d4]',
   'Missed': 'bg-[#1a1a2e] border-[#a78bfa]',
   'Repurposed': 'bg-[#1a1a1a] border-white',
+  'Tentative': 'bg-[#2d2800] border-[#fef08a]',
 }
 
 const statusBarColors: Record<string, string> = {
@@ -83,6 +84,7 @@ const statusBarColors: Record<string, string> = {
   'Virtual': 'bg-[#06b6d4]',
   'Missed': 'bg-[#a78bfa]',
   'Repurposed': 'bg-white',
+  'Tentative': 'bg-[#fef08a]',
 }
 
 const statusTextColors: Record<string, string> = {
@@ -96,6 +98,7 @@ const statusTextColors: Record<string, string> = {
   'Virtual': 'text-[#22d3ee]',
   'Missed': 'text-[#a78bfa]',
   'Repurposed': 'text-white',
+  'Tentative': 'text-[#fef08a]',
 }
 
 interface FlatBooking {

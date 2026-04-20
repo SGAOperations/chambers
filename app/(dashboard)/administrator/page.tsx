@@ -6,8 +6,9 @@ import RequestsTab from './requests-tab'
 import CancellationsTab from './cancellations-tab'
 import BookingsTab from './bookings-tab'
 import AdvancedSettingsTab from './advanced-settings-tab'
+import SGASpacesTab from './sga-spaces-tab'
 
-type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'Advanced Settings'
+type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'SGA Spaces' | 'Advanced Settings'
 
 export default function AdministratorPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Requests')
@@ -36,7 +37,7 @@ export default function AdministratorPage() {
         <h1 className="text-2xl font-bold text-[#f0f6ff]">Administrator</h1>
 
         <div className="flex gap-1 border-b border-[#1e5080]">
-          {(['Requests', 'Cancellations', 'Bookings', 'Advanced Settings'] as Tab[]).map(tab => (
+          {(['Requests', 'Cancellations', 'Bookings', 'SGA Spaces', 'Advanced Settings'] as Tab[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -60,6 +61,7 @@ export default function AdministratorPage() {
           {activeTab === 'Requests' && <RequestsTab onCountChange={() => fetch('/api/administrator/counts').then(r => r.json()).then(d => setCounts(d))} />}
           {activeTab === 'Cancellations' && <CancellationsTab onCountChange={() => fetch('/api/administrator/counts').then(r => r.json()).then(d => setCounts(d))} />}
           {activeTab === 'Bookings' && <BookingsTab />}
+          {activeTab === 'SGA Spaces' && <SGASpacesTab />}
           {activeTab === 'Advanced Settings' && <AdvancedSettingsTab />}
         </div>
       </div>

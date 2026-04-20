@@ -13,6 +13,7 @@ const statusTextColors: Record<string, string> = {
   'Virtual': 'text-[#22d3ee]',
   'Missed': 'text-[#a78bfa]',
   'Repurposed': 'text-white',
+  'Tentative': 'text-[#fef08a]',
 }
 
 interface FlatBooking {

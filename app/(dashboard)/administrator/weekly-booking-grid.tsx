@@ -56,6 +56,7 @@ const statusCellHex: Record<string, string> = {
   'Virtual': '#22d3ee',
   'Missed': '#a78bfa',
   'Repurposed': '#ffffff',
+  'Tentative': '#fef08a',
 }
 
 function formatTime(time: string) {

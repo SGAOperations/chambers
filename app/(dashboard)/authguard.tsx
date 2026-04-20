@@ -19,13 +19,18 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
       const { data: profile } = await supabase
         .from('users')
-        .select('is_active')
+        .select('is_active, has_completed_onboarding')
         .eq('id', user.id)
         .single()
 
       if (!profile?.is_active) {
         await supabase.auth.signOut()
         router.push('/')
+        return
+      }
+
+      if (!profile?.has_completed_onboarding) {
+        router.push('/onboarding')
         return
       }
 

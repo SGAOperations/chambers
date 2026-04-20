@@ -14,6 +14,7 @@ const STATUSES = [
   'Virtual',
   'Missed',
   'Repurposed',
+  'Tentative',
 ]
 
 interface Body {

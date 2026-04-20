@@ -201,7 +201,7 @@ export default function DashboardLayout({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.9.0-alpha (SGA Unreleased)</p>
+            <p className="text-slate-600 text-xs mt-1">v1.9.1-alpha (SGA Unreleased)</p>
             {userName && (
               <p className="text-slate-500 text-xs mt-2 italic">{getGreeting()},<br />{userName}</p>
             )}
@@ -210,6 +210,7 @@ export default function DashboardLayout({
           {/* Nav links */}
           <div className="flex flex-col gap-1 px-3 py-4 flex-1">
             {navLink('/my-rooms', 'My Rooms')}
+            {navLink('/sga-spaces', 'SGA Spaces')}
             {(isLeadership || isAdmin) && navLink('/request', 'Request a Booking')}
             {(isAdmin || isIEMS) && navLink('/events', 'Events')}
             {isAdmin && navLink('/administrator', 'Administrator')}
