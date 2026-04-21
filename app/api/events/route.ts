@@ -13,6 +13,14 @@ export async function GET() {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
+  const { data: activeSemester } = await supabase
+    .from('semesters')
+    .select('id')
+    .eq('is_active', true)
+    .single()
+
+  if (!activeSemester) return NextResponse.json({ bookings: [] })
+
   const { data: bookings, error } = await supabase
     .from('bookings')
     .select(`
@@ -27,6 +35,7 @@ export async function GET() {
       event_tracking(event_management_form, engage_form)
     `)
     .eq('is_event', true)
+    .eq('semester_id', activeSemester.id)
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

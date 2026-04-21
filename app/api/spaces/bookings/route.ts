@@ -64,16 +64,29 @@ export async function GET(request: Request) {
 
   const weekEnd = new Date(new Date(weekStart).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  // Fetch bookings with creator display name
+  // Fetch bookings (no join — creator FK points to auth.users which PostgREST can't reach)
   const { data: bookings, error: bookingsError } = await adminSupabase
     .from('space_bookings')
-    .select('*, creator:users!space_bookings_creator_id_fkey(id, full_name, email)')
+    .select('*')
     .eq('space_id', spaceId)
     .lt('start_time', weekEnd)
     .gt('end_time', weekStart)
     .order('start_time')
 
   if (bookingsError) return NextResponse.json({ error: bookingsError.message }, { status: 500 })
+
+  // Fetch creator display names from public.users
+  const creatorIds = [...new Set((bookings ?? []).map((b: { creator_id: string }) => b.creator_id))]
+  const creatorMap: Record<string, string> = {}
+  if (creatorIds.length > 0) {
+    const { data: creators } = await adminSupabase
+      .from('users')
+      .select('id, full_name')
+      .in('id', creatorIds)
+    for (const c of creators ?? []) {
+      creatorMap[c.id] = c.full_name
+    }
+  }
 
   // Fetch blackouts for this space (space-specific or all-spaces)
   const { data: blackouts, error: blackoutsError } = await adminSupabase
@@ -86,16 +99,11 @@ export async function GET(request: Request) {
 
   if (blackoutsError) return NextResponse.json({ error: blackoutsError.message }, { status: 500 })
 
-  // Redact creator name for non-owners
-  const sanitized = (bookings ?? []).map((b: {
-    id: string
-    creator_id: string
-    creator: { id: string; full_name: string; email: string } | null
-    [key: string]: unknown
-  }) => ({
+  // Admins see all creator names; regular users only see their own
+  const isAdmin = !!user.app_metadata?.is_admin
+  const sanitized = (bookings ?? []).map((b: { id: string; creator_id: string; [key: string]: unknown }) => ({
     ...b,
-    creator_name: b.creator_id === user.id ? (b.creator as { full_name: string } | null)?.full_name ?? null : null,
-    creator: undefined,
+    creator_name: (isAdmin || b.creator_id === user.id) ? (creatorMap[b.creator_id] ?? null) : null,
   }))
 
   return NextResponse.json({ bookings: sanitized, blackouts: blackouts ?? [] })

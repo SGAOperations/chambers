@@ -67,6 +67,7 @@ export default function BookingSettingsTab() {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [deletePermissionChecked, setDeletePermissionChecked] = useState(false)
 
   useEffect(() => {
     fetch('/api/administrator/settings')
@@ -328,27 +329,52 @@ export default function BookingSettingsTab() {
 
       {/* Delete Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[#184073] rounded-2xl shadow-2xl w-full max-w-md p-8 space-y-5">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-[#2d0810] border border-[#c8102e]/40 rounded-2xl shadow-2xl w-full max-w-md p-8 space-y-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-[#f0f6ff]">Delete Semester</h2>
-              <button onClick={() => { setShowDeleteModal(false); setPendingDeleteId(null) }} className="text-[#6a96bb] hover:text-[#f0f6ff] text-lg leading-none transition-colors">✕</button>
+              <h2 className="text-xl font-bold text-[#ff6b6b]">Delete Semester</h2>
+              <button onClick={() => { setShowDeleteModal(false); setPendingDeleteId(null); setDeletePermissionChecked(false) }} className="text-[#ff6b6b]/60 hover:text-[#ff6b6b] text-lg leading-none transition-colors">✕</button>
             </div>
-            <p className="text-sm text-[#f0f6ff] leading-relaxed">
-              This will permanently delete this semester and all bookings assigned to it. This cannot be undone.
+            <p className="text-sm text-[#fca5a5] leading-relaxed">
+              WARNING: This will permanently delete this semester and all bookings assigned to it. This is inconsistent with the rules of the POAF and cannot be undone. The Vice President of Operational Affairs MUST be consulted before completing this action.
             </p>
-            {deleteError && <p className="text-[#c8102e] text-sm">{deleteError}</p>}
+            <label className="flex items-start gap-3 cursor-pointer">
+              <div className="relative mt-0.5 shrink-0">
+                <input
+                  type="checkbox"
+                  checked={deletePermissionChecked}
+                  onChange={e => setDeletePermissionChecked(e.target.checked)}
+                  className="sr-only"
+                />
+                <div className={`h-4 w-4 rounded border-2 border-[#c8102e] transition-colors flex items-center justify-center ${deletePermissionChecked ? 'bg-[#c8102e]' : 'bg-transparent'}`}>
+                  {deletePermissionChecked && (
+                    <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 8" fill="none">
+                      <path d="M1 4l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+              </div>
+              <span className="text-sm text-[#fca5a5] leading-snug">
+                I have received permission from the Vice President of Operational Affairs to complete this action.
+              </span>
+            </label>
+            {deletePermissionChecked && (
+              <p className="text-xs text-[#ff6b6b]/70 leading-snug">
+                Checking this box without express written permission from the VP may result in consequences up to and including impeachment/forcible removal from office.
+              </p>
+            )}
+            {deleteError && <p className="text-[#ff6b6b] text-sm">{deleteError}</p>}
             <div className="flex gap-3 justify-end">
               <button
-                onClick={() => { setShowDeleteModal(false); setPendingDeleteId(null) }}
-                className="px-4 py-2 text-sm text-[#93b8d8] hover:text-[#f0f6ff] font-medium transition-colors"
+                onClick={() => { setShowDeleteModal(false); setPendingDeleteId(null); setDeletePermissionChecked(false) }}
+                className="px-4 py-2 text-sm text-[#fca5a5]/70 hover:text-[#fca5a5] font-medium transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteConfirm}
-                disabled={deleting}
-                className="px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
+                disabled={deleting || !deletePermissionChecked}
+                className="px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>

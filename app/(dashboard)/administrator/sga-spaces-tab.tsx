@@ -39,9 +39,8 @@ interface SpaceBooking {
   start_time: string
   end_time: string
   attendee_ids: string[]
-  creator_name?: string
+  creator_name: string | null
   spaces?: { name: string } | null
-  creator?: { full_name: string; email: string } | null
 }
 
 interface Blackout {
@@ -192,6 +191,7 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
             <tr className="border-b border-[#1e5080] text-[#93b8d8] text-xs">
               <th className="px-4 py-3 text-left font-medium">Space</th>
               <th className="px-4 py-3 text-left font-medium">Title</th>
+              <th className="px-4 py-3 text-left font-medium">Creator</th>
               <th className="px-4 py-3 text-left font-medium">Start</th>
               <th className="px-4 py-3 text-left font-medium">End</th>
               <th className="px-4 py-3 text-left font-medium">Attendees</th>
@@ -203,6 +203,7 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
               <tr key={b.id} className="border-b border-[#1e5080]/50 last:border-0 hover:bg-white/5">
                 <td className="px-4 py-3 text-[#f0f6ff]">{b.spaces?.name ?? '—'}</td>
                 <td className="px-4 py-3 text-[#f0f6ff] font-medium">{b.title}</td>
+                <td className="px-4 py-3 text-[#93b8d8]">{b.creator_name ?? '—'}</td>
                 <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.start_time)}</td>
                 <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.end_time)}</td>
                 <td className="px-4 py-3 text-[#93b8d8]">{(b.attendee_ids ?? []).length}</td>
