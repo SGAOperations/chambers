@@ -127,13 +127,31 @@ export default async function LoginPage() {
       {/* Subtle grid texture */}
       <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #ffffff 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
 
+      {/* Decorative key graphic — right side, behind all content */}
+      <div className="absolute hidden lg:block top-1/2 z-0 pointer-events-none select-none" style={{ left: '75%', transform: 'translateX(-50%) translateY(-50%)' }}>
+        <svg
+          width="700"
+          viewBox="-220 -125 450 255"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ transform: 'scaleX(-1) rotate(-60deg)', opacity: 0.17 }}
+        >
+          <circle cx="-100" cy="0" r="95" fill="none" stroke="white" strokeWidth="40" />
+          <circle cx="-100" cy="0" r="38" fill="#0a1628" />
+          <rect x="-15" y="-22" width="230" height="44" rx="10" fill="white" />
+          <rect x="80" y="-22" width="40" height="90" rx="8" fill="white" />
+          <rect x="130" y="-22" width="40" height="72" rx="8" fill="white" />
+          <rect x="180" y="-22" width="40" height="110" rx="8" fill="white" />
+        </svg>
+      </div>
+
       {/* Left column: login card — always visible, vertically centered */}
       <div className="flex items-center justify-center lg:justify-end min-h-screen lg:min-h-0 relative z-10 px-4 lg:pr-2">
         <LoginCard />
       </div>
 
       {/* Right column: fact — desktop only */}
-      <div className="hidden lg:flex items-center justify-start pl-2 relative z-10">
+      <div className="hidden lg:flex items-center justify-start pl-16 relative z-10">
         {leftFact && <FactDisplay fact={leftFact} />}
       </div>
     </div>
