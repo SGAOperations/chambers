@@ -5,7 +5,8 @@ interface SpaceBookingCancelledParams {
   spaceName: string
   startTime: string // ISO timestamptz
   endTime: string   // ISO timestamptz
-  recipients: string[]
+  to: string
+  cc?: string[]
 }
 
 function formatDateTime(iso: string): string {
@@ -18,19 +19,20 @@ function formatDateTime(iso: string): string {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-    timeZone: 'America/New_York',
+    timeZone: 'UTC',
   })
 }
 
 export async function sendSpaceBookingCancelledEmail(params: SpaceBookingCancelledParams) {
-  const { title, spaceName, startTime, endTime, recipients } = params
-  if (!recipients.length) return
+  const { title, spaceName, startTime, endTime, to, cc } = params
+  if (!to) return
 
   await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL!,
-    to: recipients,
+    to,
+    ...(cc?.length ? { cc } : {}),
     subject: `Chambers \u2014 SGA Space Booking Cancelled: ${title}`,
-    text: `An SGA Space booking has been cancelled.
+    text: `Your SGA Space booking has been cancelled.
 
 Booking Title: ${title}
 Space: ${spaceName}

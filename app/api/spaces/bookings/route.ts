@@ -30,23 +30,14 @@ function minutesOf(iso: string): number {
 
 // Returns true if any part of [start, end) falls in 00:00–07:00 local ET
 function touchesDeadZone(startIso: string, endIso: string): boolean {
-  // Check every hour boundary within the range
-  const start = new Date(startIso)
-  const end = new Date(endIso)
-  const etOffset = -5 * 60 // EST; close enough for hard-block purposes
-  const startLocal = new Date(start.getTime() + etOffset * 60000)
-  const endLocal = new Date(end.getTime() + etOffset * 60000)
-  const startHour = startLocal.getUTCHours() + startLocal.getUTCMinutes() / 60
-  const endHour = endLocal.getUTCHours() + endLocal.getUTCMinutes() / 60
-  // Dead zone: [0, 7)
-  // A booking touches it if startHour < 7 OR (the booking spans midnight into it)
-  // Simplified: if start hour < 7 or end hour > 0 and < 7 (same day) — we check start and end both in ET
-  if (startHour < 7) return true
-  if (endHour > 0 && endHour <= 7 && endHour < startHour) return true // crosses midnight into dead zone
-  // Check if booking spans more than a day and inevitably crosses midnight
-  const durationMs = end.getTime() - start.getTime()
-  if (durationMs >= 17 * 60 * 60 * 1000) return true // >= 17 hrs means it must cross 12am–7am
-  return false
+  // Times are stored as UTC wall-clock (8 AM displayed = T08:00Z). No offset needed.
+  // Block if the booking spans into a different UTC date (crosses midnight)
+  const startDate = startIso.slice(0, 10)
+  const endDate = endIso.slice(0, 10)
+  if (endDate > startDate) return true
+  // Same UTC day: block if start is before 07:00
+  const startHour = new Date(startIso).getUTCHours() + new Date(startIso).getUTCMinutes() / 60
+  return startHour < 7
 }
 
 export async function GET(request: Request) {

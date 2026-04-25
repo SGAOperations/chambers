@@ -46,7 +46,7 @@ export default function LoginCard() {
 
     const { data: profile } = await supabase
       .from('users')
-      .select('is_active, has_completed_onboarding')
+      .select('is_active, has_completed_onboarding, otp_expires_at')
       .eq('id', data.user.id)
       .single()
 
@@ -57,7 +57,19 @@ export default function LoginCard() {
       return
     }
 
-    router.push(profile?.has_completed_onboarding ? '/my-rooms' : '/onboarding')
+    if (!profile?.has_completed_onboarding) {
+      if (profile?.otp_expires_at && new Date(profile.otp_expires_at) < new Date()) {
+        await supabase.auth.signOut()
+        setError('Your invitation has expired. Please contact an administrator for a new invite.')
+        setLoading(false)
+        return
+      }
+      await fetch('/api/onboarding/invalidate-otp', { method: 'POST' })
+      router.push('/onboarding')
+      return
+    }
+
+    router.push('/my-rooms')
   }
 
   const handleResetPassword = async () => {

@@ -97,7 +97,7 @@ export default async function LoginPage() {
   const pool: Fact[] = [
     { kind: 'static', text: 'SGA has represented Northeastern students since 1926.' },
     { kind: 'static', text: 'SGA oversees $4.8M in annual student organization funding.' },
-    { kind: 'static', text: 'Northeastern has over 600 recognized student organizations.' },
+    { kind: 'static', text: 'Northeastern has over 500 recognized student organizations.' },
     { kind: 'static', text: "SGA's Senate meets 10–15 times per semester." },
     { kind: 'static', text: "The Division of Operational Affairs manages all of SGA's digital infrastructure." },
     { kind: 'static', text: 'Chambers was built in three months, two weeks, and four days.' },

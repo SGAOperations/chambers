@@ -32,6 +32,6 @@ Time of Reservation: ${startTime} to ${endTime}
 
 Contacts: ${contacts.join(', ')}
 
-For further information, please reach out to the Vice President of Operational Affairs and/or the Comptroller.`,
+For further information, please reach out to the Comptroller.`,
   })
 }

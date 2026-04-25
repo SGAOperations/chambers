@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+import { randomBytes, createHash } from 'crypto'
+import { sendOtpInviteEmail } from '@/lib/emails/otp-invite'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -46,10 +48,13 @@ export async function POST(request: Request) {
 
   const { email, full_name, admin_role, iems_role } = await request.json()
 
-  // Create auth user with default password
+  const otp = randomBytes(8).toString('base64url').slice(0, 12)
+  const otpHash = createHash('sha256').update(otp).digest('hex')
+  const otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+
   const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
     email,
-    password: 'SGAistheBest',
+    password: otp,
     email_confirm: true,
     user_metadata: { full_name },
   })
@@ -70,10 +75,22 @@ export async function POST(request: Request) {
   // Update users table (trigger creates the row)
   const { error: updateError } = await adminSupabase
     .from('users')
-    .update({ admin_role: admin_role || null, iems_role: iems_role || null, full_name })
+    .update({
+      admin_role: admin_role || null,
+      iems_role: iems_role || null,
+      full_name,
+      otp_hash: otpHash,
+      otp_expires_at: otpExpiresAt,
+    })
     .eq('id', authData.user.id)
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+
+  try {
+    await sendOtpInviteEmail({ to: email, otp })
+  } catch (emailError) {
+    console.error('Failed to send OTP invite email:', emailError)
+  }
 
   return NextResponse.json({ success: true })
 }

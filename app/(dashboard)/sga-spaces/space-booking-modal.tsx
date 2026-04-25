@@ -16,6 +16,10 @@ interface SpaceBookingModalProps {
   initialEnd: string   // ISO
   onClose: () => void
   onSuccess: () => void
+  // Edit mode — when provided, PATCH is used instead of POST
+  editBookingId?: string
+  initialTitle?: string
+  initialAttendees?: User[]
 }
 
 function isoToDateAndTime(iso: string): { date: string; time: string } {
@@ -36,15 +40,20 @@ export default function SpaceBookingModal({
   initialEnd,
   onClose,
   onSuccess,
+  editBookingId,
+  initialTitle = '',
+  initialAttendees = [],
 }: SpaceBookingModalProps) {
+  const isEditing = !!editBookingId
+
   const { date: initDate, time: initStartTime } = isoToDateAndTime(initialStart)
   const { time: initEndTime } = isoToDateAndTime(initialEnd)
 
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(initialTitle)
   const [date, setDate] = useState(initDate)
   const [startTime, setStartTime] = useState(initStartTime)
   const [endTime, setEndTime] = useState(initEndTime)
-  const [attendees, setAttendees] = useState<User[]>([])
+  const [attendees, setAttendees] = useState<User[]>(initialAttendees)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<User[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -82,7 +91,7 @@ export default function SpaceBookingModal({
     setAttendees(prev => prev.filter(a => a.id !== id))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setError(null)
 
@@ -94,17 +103,23 @@ export default function SpaceBookingModal({
       const start_time = dateAndTimeToIso(date, startTime)
       const end_time = dateAndTimeToIso(date, endTime)
 
-      const res = await fetch('/api/spaces/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          space_id: spaceId,
-          title: title.trim(),
-          start_time,
-          end_time,
-          attendee_ids: attendees.map(a => a.id),
-        }),
-      })
+      const res = isEditing
+        ? await fetch(`/api/spaces/bookings/${editBookingId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: title.trim(), start_time, end_time, attendee_ids: attendees.map(a => a.id) }),
+          })
+        : await fetch('/api/spaces/bookings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              space_id: spaceId,
+              title: title.trim(),
+              start_time,
+              end_time,
+              attendee_ids: attendees.map(a => a.id),
+            }),
+          })
 
       const data = await res.json()
       if (!res.ok) {
@@ -129,7 +144,12 @@ export default function SpaceBookingModal({
       >
         <div className="flex items-center justify-between p-5 border-b border-[#1e5080]">
           <div>
-            <h2 className="text-lg font-semibold text-[#f0f6ff]">Book {spaceName}</h2>
+            <h2 className="text-lg font-semibold text-[#f0f6ff]">
+              {isEditing ? 'Edit Booking' : `Book ${spaceName}`}
+            </h2>
+            {isEditing && (
+              <p className="text-xs text-[#93b8d8] mt-0.5">{spaceName}</p>
+            )}
           </div>
           <button onClick={onClose} className="text-[#93b8d8] hover:text-[#f0f6ff] transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -253,7 +273,7 @@ export default function SpaceBookingModal({
               disabled={submitting}
               className="flex-1 py-2.5 px-4 bg-[#c8102e] hover:bg-[#a50d26] disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
             >
-              {submitting ? 'Booking…' : 'Confirm Booking'}
+              {submitting ? (isEditing ? 'Saving…' : 'Booking…') : (isEditing ? 'Save Changes' : 'Confirm Booking')}
             </button>
           </div>
         </form>

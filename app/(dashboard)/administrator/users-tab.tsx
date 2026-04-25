@@ -34,7 +34,6 @@ const ADMIN_ROLES = [
 
 const IEMS_ROLES = [
   'Vice President of External Affairs',
-  'Assistant Vice President of External Affairs',
   'Director of Events',
 ]
 
@@ -244,7 +243,12 @@ export default function UsersTab() {
       {users.length === 0 ? (
         <p className="text-[#6a96bb] text-sm">No users found.</p>
       ) : (
-        users.map(u => (
+        [...users]
+          .sort((a, b) => {
+            const lastName = (name: string) => name.trim().split(' ').at(-1) ?? ''
+            return lastName(a.full_name).localeCompare(lastName(b.full_name))
+          })
+          .map(u => (
           <div key={u.id} className="border border-[#1e5080] rounded-xl bg-[#184073] shadow-sm">
             {/* User row */}
             <div

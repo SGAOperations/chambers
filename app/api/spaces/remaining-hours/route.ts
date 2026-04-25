@@ -48,5 +48,5 @@ export async function GET() {
   const limit = override?.weekly_hours_limit ?? DEFAULT_WEEKLY_HOURS
   const remaining = Math.max(0, limit - usedHours)
 
-  return NextResponse.json({ used: usedHours, limit, remaining })
+  return NextResponse.json({ used: usedHours, limit, remaining, user_id: user.id })
 }

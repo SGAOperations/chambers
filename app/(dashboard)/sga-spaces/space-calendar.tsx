@@ -4,10 +4,12 @@ import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 
 interface Booking {
   id: string
+  space_id: string
   creator_id: string
   title: string
   start_time: string
   end_time: string
+  attendee_ids: string[]
   creator_name: string | null
 }
 
@@ -22,7 +24,9 @@ interface SpaceCalendarProps {
   weekStart: Date // Sunday 00:00 UTC
   bookings: Booking[]
   blackouts: Blackout[]
+  currentUserId?: string
   onSlotClick: (startIso: string, endIso: string) => void
+  onBookingClick?: (booking: Booking) => void
 }
 
 // Total slots: 24 hours * 4 slots/hour = 96
@@ -70,7 +74,7 @@ interface DragPreview {
   endSlot: number // exclusive
 }
 
-export default function SpaceCalendar({ weekStart, bookings, blackouts, onSlotClick }: SpaceCalendarProps) {
+export default function SpaceCalendar({ weekStart, bookings, blackouts, currentUserId, onSlotClick, onBookingClick }: SpaceCalendarProps) {
   const today = new Date()
   const todayDay = today.getUTCDay()
   const todaySun = new Date(today)
@@ -134,10 +138,20 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, onSlotCl
   const handleColumnMouseDown = useCallback((e: React.MouseEvent, dayIdx: number) => {
     e.preventDefault()
     const slot = slotFromClientY(e.clientY)
-    if (isSlotBlocked(dayIdx, slot) || isSlotBooked(dayIdx, slot)) return
+    if (isSlotBlocked(dayIdx, slot)) return
+    // If clicking an owned booking, open the edit modal instead of dragging
+    if (isSlotBooked(dayIdx, slot)) {
+      if (currentUserId && onBookingClick) {
+        const hit = bookingsByDay[dayIdx].find(bs => slot >= bs.startSlot && slot < bs.endSlot)
+        if (hit && hit.booking.creator_id === currentUserId) {
+          onBookingClick(hit.booking)
+        }
+      }
+      return
+    }
     dragRef.current = { dayIdx, startSlot: slot, currentSlot: slot }
     setDragPreview({ dayIdx, startSlot: slot, endSlot: slot + 1 })
-  }, [slotFromClientY, isSlotBlocked, isSlotBooked])
+  }, [slotFromClientY, isSlotBlocked, isSlotBooked, currentUserId, onBookingClick, bookingsByDay])
 
   // Clamp endSlot so drag preview stops before blocked/booked slots
   const clampEndSlot = useCallback((dayIdx: number, startSlot: number, rawEnd: number): number => {

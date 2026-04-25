@@ -35,6 +35,15 @@ interface ModalSlot {
   end: string
 }
 
+interface EditBooking {
+  id: string
+  spaceId: string
+  title: string
+  start: string
+  end: string
+  attendees: { id: string; full_name: string; email: string }[]
+}
+
 // Skeleton shown on initial page load before spaces are fetched
 function SGASpacesSkeleton() {
   return (
@@ -141,7 +150,9 @@ export default function SGASpacesPage() {
   })
   const [remainingHours, setRemainingHours] = useState<number | null>(null)
   const [limitHours, setLimitHours] = useState<number>(18)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null)
+  const [editBooking, setEditBooking] = useState<EditBooking | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
 
   const isTodayWeek = (() => {
@@ -169,6 +180,7 @@ export default function SGASpacesPage() {
       .then(data => {
         setRemainingHours(data.remaining)
         setLimitHours(data.limit)
+        if (data.user_id) setCurrentUserId(data.user_id)
       })
   }, [bookings])
 
@@ -190,6 +202,24 @@ export default function SGASpacesPage() {
   useEffect(() => {
     fetchCalendarData()
   }, [fetchCalendarData])
+
+  const handleBookingClick = useCallback(async (booking: Booking) => {
+    const space = spaces.find(s => s.id === booking.space_id)
+    if (!space) return
+    let attendees: { id: string; full_name: string; email: string }[] = []
+    if (booking.attendee_ids.length > 0) {
+      const res = await fetch(`/api/users/by-ids?ids=${booking.attendee_ids.join(',')}`)
+      if (res.ok) attendees = await res.json()
+    }
+    setEditBooking({
+      id: booking.id,
+      spaceId: booking.space_id,
+      title: booking.title,
+      start: booking.start_time,
+      end: booking.end_time,
+      attendees,
+    })
+  }, [spaces])
 
   const advanceWeek = () => {
     setWeekStart(prev => {
@@ -293,12 +323,14 @@ export default function SGASpacesPage() {
               weekStart={weekStart}
               bookings={bookings}
               blackouts={blackouts}
+              currentUserId={currentUserId ?? undefined}
               onSlotClick={(start, end) => setModalSlot({ start, end })}
+              onBookingClick={handleBookingClick}
             />
           )
         )}
 
-        {/* Booking modal */}
+        {/* Create booking modal */}
         {modalSlot && selectedSpaceId && selectedSpace && (
           <SpaceBookingModal
             spaceId={selectedSpaceId}
@@ -308,6 +340,24 @@ export default function SGASpacesPage() {
             onClose={() => setModalSlot(null)}
             onSuccess={() => {
               setModalSlot(null)
+              fetchCalendarData()
+            }}
+          />
+        )}
+
+        {/* Edit booking modal */}
+        {editBooking && (
+          <SpaceBookingModal
+            spaceId={editBooking.spaceId}
+            spaceName={spaces.find(s => s.id === editBooking.spaceId)?.name ?? 'SGA Space'}
+            initialStart={editBooking.start}
+            initialEnd={editBooking.end}
+            editBookingId={editBooking.id}
+            initialTitle={editBooking.title}
+            initialAttendees={editBooking.attendees}
+            onClose={() => setEditBooking(null)}
+            onSuccess={() => {
+              setEditBooking(null)
               fetchCalendarData()
             }}
           />
