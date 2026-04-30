@@ -22,7 +22,7 @@ export async function sendMissedReservationEmail(params: MissedReservationEmailP
 
   await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL!,
-    to: process.env.EVP_EMAIL!,
+    to: process.env.OPS_EMAIL!,
     subject: 'Chambers Alert - Reservation Missed',
     text: `This is an automatic alert that a SGA reservation was marked as missed by a Chambers administrator.
 

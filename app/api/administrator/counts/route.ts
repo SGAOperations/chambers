@@ -13,20 +13,15 @@ export async function GET() {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { count: requestCount } = await supabase
-    .from('room_requests')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'Pending')
-
-  const { count: cancellationCount } = await supabase
-    .from('cancellation_requests')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'Pending')
-
-  const { count: revisionCount } = await supabase
-    .from('revision_requests')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'Pending')
+  const [
+    { count: requestCount },
+    { count: cancellationCount },
+    { count: revisionCount },
+  ] = await Promise.all([
+    supabase.from('room_requests').select('*', { count: 'exact', head: true }).eq('status', 'Pending'),
+    supabase.from('cancellation_requests').select('*', { count: 'exact', head: true }).eq('status', 'Pending'),
+    supabase.from('revision_requests').select('*', { count: 'exact', head: true }).eq('status', 'Pending'),
+  ])
 
   return NextResponse.json({
     requests: requestCount || 0,

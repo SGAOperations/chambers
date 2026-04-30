@@ -134,10 +134,11 @@ export default function RequestPage() {
   useEffect(() => {
     const fetchBodies = async () => {
       const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const [{ data: { user } }, res] = await Promise.all([
+        supabase.auth.getUser(),
+        fetch('/api/request'),
+      ])
       const isAdmin = user?.app_metadata?.is_admin ?? false
-
-      const res = await fetch('/api/request')
       const data = await res.json()
       setMinDaysRoom(data.minDaysRoom ?? 0)
       setMinDaysTabling(data.minDaysTabling ?? 0)

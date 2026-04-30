@@ -24,74 +24,43 @@ function FactDisplay({ fact }: { fact: Fact }) {
 export default async function LoginPage() {
   const supabase = await createClient()
 
+  const now = new Date()
+  const todayDate = now.toISOString().split('T')[0]           // 'YYYY-MM-DD'
+  const nowTime   = now.toTimeString().split(' ')[0].slice(0, 5) // 'HH:MM'
+
+  // Run all independent queries in parallel
+  const [comptrollerResult, semResult, c1Result, c2Result, c3Result] = await Promise.allSettled([
+    supabase.from('users').select('full_name').eq('admin_role', 'Comptroller').eq('is_active', true).limit(1).single(),
+    supabase.from('semesters').select('id').eq('is_active', true).single(),
+    supabase.from('one_time_room_bookings').select('id', { count: 'exact', head: true }).eq('booking_date', todayDate).lte('start_time', nowTime).gte('end_time', nowTime).eq('status', 'Confirmed'),
+    supabase.from('weekly_room_occurrences').select('id', { count: 'exact', head: true }).eq('occurrence_date', todayDate).lte('start_time', nowTime).gte('end_time', nowTime).eq('status', 'Confirmed'),
+    supabase.from('tabling_sessions').select('id', { count: 'exact', head: true }).eq('session_date', todayDate).lte('start_time', nowTime).gte('end_time', nowTime).eq('status', 'Confirmed'),
+  ])
+
   // Comptroller name (for static fact #8)
   let comptrollerName: string | null = null
-  try {
-    const { data } = await supabase
-      .from('users')
-      .select('full_name')
-      .eq('admin_role', 'Comptroller')
-      .eq('is_active', true)
-      .limit(1)
-      .single()
-    if (data?.full_name) comptrollerName = data.full_name
-  } catch {}
+  if (comptrollerResult.status === 'fulfilled' && comptrollerResult.value.data?.full_name) {
+    comptrollerName = comptrollerResult.value.data.full_name
+  }
 
-  // Bookings this semester
+  // Bookings this semester (depends on sem.id — second wave)
   let bookingsThisSemester: number | null = null
-  try {
-    const { data: sem } = await supabase
-      .from('semesters')
-      .select('id')
-      .eq('is_active', true)
-      .single()
-    if (sem) {
+  const sem = semResult.status === 'fulfilled' ? semResult.value.data : null
+  if (sem) {
+    try {
       const { count } = await supabase
         .from('bookings')
         .select('id', { count: 'exact', head: true })
         .eq('semester_id', sem.id)
       if (typeof count === 'number') bookingsThisSemester = count
-    }
-  } catch {}
+    } catch {}
+  }
 
   // Active reservations right now
   let activeNow = 0
-  const now = new Date()
-  const todayDate = now.toISOString().split('T')[0]           // 'YYYY-MM-DD'
-  const nowTime   = now.toTimeString().split(' ')[0].slice(0, 5) // 'HH:MM'
-
-  try {
-    const { count: c1 } = await supabase
-      .from('one_time_room_bookings')
-      .select('id', { count: 'exact', head: true })
-      .eq('booking_date', todayDate)
-      .lte('start_time', nowTime)
-      .gte('end_time', nowTime)
-      .eq('status', 'Confirmed')
-    if (typeof c1 === 'number') activeNow += c1
-  } catch {}
-
-  try {
-    const { count: c2 } = await supabase
-      .from('weekly_room_occurrences')
-      .select('id', { count: 'exact', head: true })
-      .eq('occurrence_date', todayDate)
-      .lte('start_time', nowTime)
-      .gte('end_time', nowTime)
-      .eq('status', 'Confirmed')
-    if (typeof c2 === 'number') activeNow += c2
-  } catch {}
-
-  try {
-    const { count: c3 } = await supabase
-      .from('tabling_sessions')
-      .select('id', { count: 'exact', head: true })
-      .eq('session_date', todayDate)
-      .lte('start_time', nowTime)
-      .gte('end_time', nowTime)
-      .eq('status', 'Confirmed')
-    if (typeof c3 === 'number') activeNow += c3
-  } catch {}
+  if (c1Result.status === 'fulfilled' && typeof c1Result.value.count === 'number') activeNow += c1Result.value.count
+  if (c2Result.status === 'fulfilled' && typeof c2Result.value.count === 'number') activeNow += c2Result.value.count
+  if (c3Result.status === 'fulfilled' && typeof c3Result.value.count === 'number') activeNow += c3Result.value.count
 
   // Build fact pool
   const pool: Fact[] = [

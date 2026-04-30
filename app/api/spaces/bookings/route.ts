@@ -55,18 +55,19 @@ export async function GET(request: Request) {
 
   const weekEnd = new Date(new Date(weekStart).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  // Fetch bookings (no join — creator FK points to auth.users which PostgREST can't reach)
-  const { data: bookings, error: bookingsError } = await adminSupabase
-    .from('space_bookings')
-    .select('*')
-    .eq('space_id', spaceId)
-    .lt('start_time', weekEnd)
-    .gt('end_time', weekStart)
-    .order('start_time')
+  // Fetch bookings and blackouts in parallel (no join — creator FK points to auth.users which PostgREST can't reach)
+  const [
+    { data: bookings, error: bookingsError },
+    { data: blackouts, error: blackoutsError },
+  ] = await Promise.all([
+    adminSupabase.from('space_bookings').select('*').eq('space_id', spaceId).lt('start_time', weekEnd).gt('end_time', weekStart).order('start_time'),
+    adminSupabase.from('space_blackouts').select('*').or(`space_id.eq.${spaceId},space_id.is.null`).lt('start_time', weekEnd).gt('end_time', weekStart).order('start_time'),
+  ])
 
   if (bookingsError) return NextResponse.json({ error: bookingsError.message }, { status: 500 })
+  if (blackoutsError) return NextResponse.json({ error: blackoutsError.message }, { status: 500 })
 
-  // Fetch creator display names from public.users
+  // Fetch creator display names from public.users (depends on bookings result)
   const creatorIds = [...new Set((bookings ?? []).map((b: { creator_id: string }) => b.creator_id))]
   const creatorMap: Record<string, string> = {}
   if (creatorIds.length > 0) {
@@ -78,17 +79,6 @@ export async function GET(request: Request) {
       creatorMap[c.id] = c.full_name
     }
   }
-
-  // Fetch blackouts for this space (space-specific or all-spaces)
-  const { data: blackouts, error: blackoutsError } = await adminSupabase
-    .from('space_blackouts')
-    .select('*')
-    .or(`space_id.eq.${spaceId},space_id.is.null`)
-    .lt('start_time', weekEnd)
-    .gt('end_time', weekStart)
-    .order('start_time')
-
-  if (blackoutsError) return NextResponse.json({ error: blackoutsError.message }, { status: 500 })
 
   // Admins see all creator names; regular users only see their own
   const isAdmin = !!user.app_metadata?.is_admin
@@ -129,41 +119,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Bookings may not start or end between 12:00 AM and 7:00 AM.' }, { status: 400 })
   }
 
-  // Overlap check
-  const { data: overlapping } = await adminSupabase
-    .from('space_bookings')
-    .select('id')
-    .eq('space_id', space_id)
-    .lt('start_time', end_time)
-    .gt('end_time', start_time)
-    .limit(1)
+  // Run all validation checks in parallel
+  const { weekStart, weekEnd } = getWeekBounds(start_time)
+
+  const [
+    { data: overlapping },
+    { data: blackoutHit },
+    { data: weekBookings },
+    { data: override },
+  ] = await Promise.all([
+    adminSupabase.from('space_bookings').select('id').eq('space_id', space_id).lt('start_time', end_time).gt('end_time', start_time).limit(1),
+    adminSupabase.from('space_blackouts').select('id').or(`space_id.eq.${space_id},space_id.is.null`).lt('start_time', end_time).gt('end_time', start_time).limit(1),
+    adminSupabase.from('space_bookings').select('start_time, end_time').eq('creator_id', user.id).lt('start_time', weekEnd).gt('end_time', weekStart),
+    adminSupabase.from('space_weekly_limit_overrides').select('weekly_hours_limit').eq('user_id', user.id).maybeSingle(),
+  ])
 
   if (overlapping && overlapping.length > 0) {
     return NextResponse.json({ error: 'This time slot overlaps with an existing booking for this space.' }, { status: 400 })
   }
 
-  // Blackout check
-  const { data: blackoutHit } = await adminSupabase
-    .from('space_blackouts')
-    .select('id')
-    .or(`space_id.eq.${space_id},space_id.is.null`)
-    .lt('start_time', end_time)
-    .gt('end_time', start_time)
-    .limit(1)
-
   if (blackoutHit && blackoutHit.length > 0) {
     return NextResponse.json({ error: 'This time slot falls within a blackout window.' }, { status: 400 })
   }
-
-  // Weekly hour limit check
-  const { weekStart, weekEnd } = getWeekBounds(start_time)
-
-  const { data: weekBookings } = await adminSupabase
-    .from('space_bookings')
-    .select('start_time, end_time')
-    .eq('creator_id', user.id)
-    .lt('start_time', weekEnd)
-    .gt('end_time', weekStart)
 
   const usedMs = (weekBookings ?? []).reduce((acc: number, b: { start_time: string; end_time: string }) => {
     return acc + (new Date(b.end_time).getTime() - new Date(b.start_time).getTime())
@@ -171,12 +148,6 @@ export async function POST(request: Request) {
   const usedHours = usedMs / (1000 * 60 * 60)
 
   const newDurationHours = (new Date(end_time).getTime() - new Date(start_time).getTime()) / (1000 * 60 * 60)
-
-  const { data: override } = await adminSupabase
-    .from('space_weekly_limit_overrides')
-    .select('weekly_hours_limit')
-    .eq('user_id', user.id)
-    .maybeSingle()
 
   const limitHours = override?.weekly_hours_limit ?? DEFAULT_WEEKLY_HOURS
   const remainingHours = limitHours - usedHours
@@ -205,12 +176,11 @@ export async function POST(request: Request) {
 
   // Send confirmation email
   try {
-    const { data: space } = await adminSupabase.from('spaces').select('name').eq('id', space_id).single()
     const allUserIds: string[] = [user.id, ...(attendee_ids ?? [])]
-    const { data: emailUsers } = await adminSupabase
-      .from('users')
-      .select('email')
-      .in('id', allUserIds)
+    const [{ data: space }, { data: emailUsers }] = await Promise.all([
+      adminSupabase.from('spaces').select('name').eq('id', space_id).single(),
+      adminSupabase.from('users').select('email').in('id', allUserIds),
+    ])
     const emails = (emailUsers ?? []).map((u: { email: string }) => u.email).filter(Boolean)
     await sendSpaceBookingConfirmedEmail({
       title,

@@ -86,6 +86,8 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
   const headerRef = useRef<HTMLDivElement>(null)
   const dragRef = useRef<DragState | null>(null)
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null)
+  const [overlayCursor, setOverlayCursor] = useState<string>('crosshair')
+  const [hoveredBookingId, setHoveredBookingId] = useState<string | null>(null)
 
   const dayLabels = useMemo(() => {
     return DAYS.map((name, i) => {
@@ -112,11 +114,26 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
   const blackoutsByDay: BlackoutSpan[][] = useMemo(() => {
     const days: BlackoutSpan[][] = Array.from({ length: 7 }, () => [])
     for (const bl of blackouts) {
-      const dayIdx = dayOfWeekUTC(bl.start_time)
-      days[dayIdx].push({ blackout: bl, startSlot: slotIndex(bl.start_time), endSlot: slotIndex(bl.end_time) })
+      const blStart = new Date(bl.start_time)
+      const blEnd = new Date(bl.end_time)
+      // Clip the blackout to each day of the current week it overlaps
+      for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+        const dayStart = new Date(weekStart)
+        dayStart.setUTCDate(weekStart.getUTCDate() + dayIdx)
+        dayStart.setUTCHours(0, 0, 0, 0)
+        const dayEnd = new Date(dayStart)
+        dayEnd.setUTCDate(dayStart.getUTCDate() + 1)
+        if (blStart >= dayEnd || blEnd <= dayStart) continue
+        const effStart = blStart > dayStart ? blStart : dayStart
+        const effEnd = blEnd < dayEnd ? blEnd : dayEnd
+        const startSlot = effStart.getUTCHours() * 4 + Math.floor(effStart.getUTCMinutes() / 15)
+        const rawEndSlot = effEnd.getUTCHours() * 4 + Math.floor(effEnd.getUTCMinutes() / 15)
+        const endSlot = rawEndSlot === 0 ? TOTAL_SLOTS : rawEndSlot // midnight → fill to end of column
+        days[dayIdx].push({ blackout: bl, startSlot, endSlot })
+      }
     }
     return days
-  }, [blackouts])
+  }, [blackouts, weekStart])
 
   const isSlotBlocked = useCallback((dayIdx: number, slot: number): boolean => {
     if (slot >= DEAD_ZONE_START && slot < DEAD_ZONE_END) return true
@@ -134,6 +151,25 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
     const y = clientY - rect.top - headerHeight + scrollRef.current.scrollTop
     return Math.max(0, Math.min(TOTAL_SLOTS - 1, Math.floor(y / SLOT_HEIGHT)))
   }, [])
+
+  const handleOverlayMouseMove = useCallback((e: React.MouseEvent, dayIdx: number) => {
+    const slot = slotFromClientY(e.clientY)
+    if (isSlotBlocked(dayIdx, slot)) {
+      setOverlayCursor('default')
+    } else if (isSlotBooked(dayIdx, slot)) {
+      const hit = bookingsByDay[dayIdx].find(bs => slot >= bs.startSlot && slot < bs.endSlot)
+      if (hit && hit.booking.creator_id === currentUserId) {
+        setOverlayCursor('pointer')
+        setHoveredBookingId(hit.booking.id)
+      } else {
+        setOverlayCursor('default')
+        setHoveredBookingId(null)
+      }
+    } else {
+      setOverlayCursor('crosshair')
+      setHoveredBookingId(null)
+    }
+  }, [slotFromClientY, isSlotBlocked, isSlotBooked, bookingsByDay, currentUserId])
 
   const handleColumnMouseDown = useCallback((e: React.MouseEvent, dayIdx: number) => {
     e.preventDefault()
@@ -297,7 +333,7 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
                     height: (bs.endSlot - bs.startSlot) * SLOT_HEIGHT,
                   }}
                 >
-                  <div className="h-full mx-0.5 rounded bg-[#c8102e]/80 border border-[#c8102e] flex flex-col px-1 pt-0.5 overflow-hidden">
+                  <div className={`h-full mx-0.5 rounded border border-[#c8102e] flex flex-col px-1 pt-0.5 overflow-hidden transition-opacity ${hoveredBookingId === bs.booking.id ? 'bg-[#c8102e]/60 opacity-80' : 'bg-[#c8102e]/80'}`}>
                     <span className="text-[9px] text-white font-semibold truncate leading-tight">{bs.booking.title}</span>
                     {bs.booking.creator_name && (
                       <span className="text-[8px] text-white/70 truncate leading-tight">{bs.booking.creator_name}</span>
@@ -325,7 +361,10 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
 
               {/* Drag capture overlay — full-column, topmost, handles all mouse events */}
               <div
-                className="absolute inset-0 z-50 cursor-crosshair"
+                className="absolute inset-0 z-50"
+                style={{ cursor: overlayCursor }}
+                onMouseMove={e => handleOverlayMouseMove(e, dayIdx)}
+                onMouseLeave={() => { setOverlayCursor('crosshair'); setHoveredBookingId(null) }}
                 onMouseDown={e => handleColumnMouseDown(e, dayIdx)}
               />
             </div>

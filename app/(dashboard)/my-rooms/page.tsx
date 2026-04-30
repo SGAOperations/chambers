@@ -165,11 +165,13 @@ export default function MyRoomsPage() {
 
   const fetchBookings = async () => {
       setLoading(true)
-      const res = await fetch('/api/my-rooms')
+      const supabase = createClient()
+      const [res, { data: { user } }] = await Promise.all([
+        fetch('/api/my-rooms'),
+        supabase.auth.getUser(),
+      ])
       const data = await res.json()
 
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
       const { data: memberships } = await supabase
         .from('board_memberships')
         .select('body_id')
@@ -291,23 +293,34 @@ export default function MyRoomsPage() {
           <p className="text-[#6a96bb] text-sm">No upcoming spaces in this range.</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredUpcoming.map(b => (
-              <div key={b.id} className={`rounded-xl p-5 shadow-sm border ${statusColors[b.status] || 'bg-[#184073] border-[#1e5080]'}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6a96bb]">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
-                  <span className={`text-xs font-semibold ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
+            {filteredUpcoming.map(b => {
+              const cardContent = (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6a96bb]">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
+                    <span className={`text-xs font-semibold ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
+                  </div>
+                  <p className="font-semibold text-[#f0f6ff]">{b.bodyName}</p>
+                  <p className="text-sm text-[#93b8d8] mt-0.5">{b.location}</p>
+                  <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                    {b.senateType && (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#c8102e] text-white">{b.senateType}</span>
+                    )}
+                  </div>
+                </>
+              )
+              return b.bodyName === 'Senate' ? (
+                <a key={b.id} href="https://attendance.northeasternsga.com" target="_blank" rel="noopener noreferrer" className={`block rounded-xl p-5 shadow-sm border cursor-pointer hover:bg-transparent transition-colors ${statusColors[b.status] || 'bg-[#184073] border-[#1e5080]'}`}>
+                  {cardContent}
+                </a>
+              ) : (
+                <div key={b.id} className={`rounded-xl p-5 shadow-sm border ${statusColors[b.status] || 'bg-[#184073] border-[#1e5080]'}`}>
+                  {cardContent}
                 </div>
-                <p className="font-semibold text-[#f0f6ff]">{b.bodyName}</p>
-                <p className="text-sm text-[#93b8d8] mt-0.5">{b.location}</p>
-                <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
-                  {b.senateType && (
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#c8102e] text-white">{b.senateType}</span>
-                  )}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </section>

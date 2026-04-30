@@ -149,16 +149,17 @@ export async function PATCH(request: Request) {
     .select('id')
     .single()
 
-  const { data: parentBooking } = await adminSupabase
-    .from('bookings')
-    .select('body_id, bodies(name)')
-    .eq('id', booking_id)
+  const { data: bodyData } = await adminSupabase
+    .from('bodies')
+    .select('name')
+    .eq('id', body_id)
     .single()
+  const bodyName = bodyData?.name ?? 'Unknown'
 
   const { data: members } = await adminSupabase
     .from('board_memberships')
-    .select('user_id, users(email)')
-    .eq('body_id', parentBooking?.body_id)
+    .select('user_id, users(email, is_active)')
+    .eq('body_id', body_id)
 
   if (members?.length && auditLog) {
     const changedOcc = newOccurrences.find(
@@ -177,11 +178,9 @@ export async function PATCH(request: Request) {
   }
 
   try {
-    const bodies = parentBooking?.bodies as { name: string }[] | undefined
-    const bodyName = bodies?.[0]?.name ?? 'Unknown'
     const emails = (members ?? [])
-      .flatMap((m: { users: { email: string } | { email: string }[] | null }) =>
-        Array.isArray(m.users) ? m.users.map(u => u.email) : m.users ? [m.users.email] : []
+      .flatMap((m: { users: { email: string; is_active: boolean } | { email: string; is_active: boolean }[] | null }) =>
+        Array.isArray(m.users) ? m.users.filter(u => u.is_active).map(u => u.email) : m.users?.is_active ? [m.users.email] : []
       )
       .filter(Boolean) as string[]
     await sendBookingUpdatedEmail({
@@ -209,16 +208,13 @@ export async function PATCH(request: Request) {
     try {
       const { data: leaders } = await adminSupabase
         .from('board_memberships')
-        .select('users(full_name)')
-        .eq('body_id', parentBooking?.body_id)
+        .select('users(full_name, is_active)')
+        .eq('body_id', body_id)
         .eq('role', 'Leadership')
 
       const contacts = (leaders ?? [])
-        .flatMap((l: { users: { full_name: string }[] }) => l.users.map(u => u.full_name))
+        .flatMap((l: { users: { full_name: string; is_active: boolean }[] }) => l.users.filter(u => u.is_active).map(u => u.full_name))
         .filter(Boolean) as string[]
-
-      const bodies = parentBooking?.bodies as { name: string }[] | undefined
-      const bodyName = bodies?.[0]?.name ?? 'Unknown'
 
       await sendMissedReservationEmail({
         bodyName,

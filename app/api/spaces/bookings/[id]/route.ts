@@ -75,55 +75,34 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Bookings may not start or end between 12:00 AM and 7:00 AM.' }, { status: 400 })
   }
 
-  // Overlap check — exclude self
-  const { data: overlapping } = await adminSupabase
-    .from('space_bookings')
-    .select('id')
-    .eq('space_id', existing.space_id)
-    .neq('id', id)
-    .lt('start_time', end_time)
-    .gt('end_time', start_time)
-    .limit(1)
+  // Run all validation checks in parallel
+  const { weekStart, weekEnd } = getWeekBounds(start_time)
+
+  const [
+    { data: overlapping },
+    { data: blackoutHit },
+    { data: weekBookings },
+    { data: override },
+  ] = await Promise.all([
+    adminSupabase.from('space_bookings').select('id').eq('space_id', existing.space_id).neq('id', id).lt('start_time', end_time).gt('end_time', start_time).limit(1),
+    adminSupabase.from('space_blackouts').select('id').or(`space_id.eq.${existing.space_id},space_id.is.null`).lt('start_time', end_time).gt('end_time', start_time).limit(1),
+    adminSupabase.from('space_bookings').select('start_time, end_time').eq('creator_id', existing.creator_id).neq('id', id).lt('start_time', weekEnd).gt('end_time', weekStart),
+    adminSupabase.from('space_weekly_limit_overrides').select('weekly_hours_limit').eq('user_id', existing.creator_id).maybeSingle(),
+  ])
 
   if (overlapping && overlapping.length > 0) {
     return NextResponse.json({ error: 'This time slot overlaps with an existing booking for this space.' }, { status: 400 })
   }
 
-  // Blackout check
-  const { data: blackoutHit } = await adminSupabase
-    .from('space_blackouts')
-    .select('id')
-    .or(`space_id.eq.${existing.space_id},space_id.is.null`)
-    .lt('start_time', end_time)
-    .gt('end_time', start_time)
-    .limit(1)
-
   if (blackoutHit && blackoutHit.length > 0) {
     return NextResponse.json({ error: 'This time slot falls within a blackout window.' }, { status: 400 })
   }
-
-  // Weekly limit check — exclude self from used hours
-  const { weekStart, weekEnd } = getWeekBounds(start_time)
-
-  const { data: weekBookings } = await adminSupabase
-    .from('space_bookings')
-    .select('start_time, end_time')
-    .eq('creator_id', existing.creator_id)
-    .neq('id', id)
-    .lt('start_time', weekEnd)
-    .gt('end_time', weekStart)
 
   const usedMs = (weekBookings ?? []).reduce((acc: number, b: { start_time: string; end_time: string }) => {
     return acc + (new Date(b.end_time).getTime() - new Date(b.start_time).getTime())
   }, 0)
   const usedHours = usedMs / (1000 * 60 * 60)
   const newDurationHours = (new Date(end_time).getTime() - new Date(start_time).getTime()) / (1000 * 60 * 60)
-
-  const { data: override } = await adminSupabase
-    .from('space_weekly_limit_overrides')
-    .select('weekly_hours_limit')
-    .eq('user_id', existing.creator_id)
-    .maybeSingle()
 
   const limitHours = override?.weekly_hours_limit ?? DEFAULT_WEEKLY_HOURS
   const remainingHours = limitHours - usedHours
