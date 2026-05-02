@@ -8,6 +8,7 @@ type Body = { id: string; name: string; division: string }
 
 export default function OnboardingPage() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
+  const [hasMemberships, setHasMemberships] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -53,6 +54,14 @@ export default function OnboardingPage() {
       }
 
       setFullName(profile?.full_name ?? '')
+
+      const { data: memberships } = await supabase
+        .from('board_memberships')
+        .select('id')
+        .eq('user_id', user.id)
+        .limit(1)
+      if (memberships && memberships.length > 0) setHasMemberships(true)
+
       setLoading(false)
     }
     init()
@@ -96,7 +105,7 @@ export default function OnboardingPage() {
       setError(data.error ?? 'Something went wrong.')
       return
     }
-    setStep(3)
+    setStep(hasMemberships ? 4 : 3)
   }
 
   const handleSaveMemberships = async () => {
@@ -178,7 +187,7 @@ export default function OnboardingPage() {
         {/* Brand */}
         <div className="text-center">
           <span className="text-[#c8102e] font-bold text-3xl tracking-tight">Chambers</span>
-          <p className="text-[#93b8d8] text-xs mt-1">Step {step} of 4</p>
+          <p className="text-[#93b8d8] text-xs mt-1">Step {hasMemberships && step === 4 ? 3 : step} of {hasMemberships ? 3 : 4}</p>
         </div>
 
         {/* Step 1 — Welcome */}
