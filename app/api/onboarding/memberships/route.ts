@@ -25,6 +25,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Onboarding already completed' }, { status: 403 })
   }
 
+  // If the user already has any memberships (e.g. admin-assigned Leadership roles),
+  // skip self-assignment to avoid unique constraint violations on (user_id, body_id).
+  const { count } = await adminSupabase
+    .from('board_memberships')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+
+  if (count && count > 0) {
+    return NextResponse.json({ success: true })
+  }
+
   const { body_ids } = await request.json()
 
   // Remove existing Member-level memberships before re-inserting (idempotent)
