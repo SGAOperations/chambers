@@ -25,6 +25,7 @@ export async function GET() {
     .from('users')
     .select(`
       id, email, full_name, admin_role, iems_role, is_active, created_at,
+      has_completed_onboarding, otp_expires_at,
       board_memberships(
         id, role,
         bodies(id, name, division)

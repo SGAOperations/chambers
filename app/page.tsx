@@ -8,14 +8,14 @@ type Fact = StaticFact | LiveFact
 function FactDisplay({ fact }: { fact: Fact }) {
   if (fact.kind === 'live') {
     return (
-      <div className="text-center px-8 max-w-sm" style={{ animation: 'factFadeIn 1.4s ease both' }}>
+      <div className="text-center px-8 w-80" style={{ animation: 'factFadeIn 1.4s ease both' }}>
         <p className="text-sm text-white/30 uppercase tracking-widest mb-3">{fact.label}</p>
         <p className="text-4xl text-white/40 leading-snug">{fact.value.toLocaleString()}</p>
       </div>
     )
   }
   return (
-    <div className="text-center px-8 max-w-sm" style={{ animation: 'factFadeIn 1.4s ease both' }}>
+    <div className="text-center px-8 w-80" style={{ animation: 'factFadeIn 1.4s ease both' }}>
       <p className="text-4xl text-white/40 leading-snug">{fact.text}</p>
     </div>
   )
@@ -64,7 +64,7 @@ export default async function LoginPage() {
 
   // Build fact pool
   const pool: Fact[] = [
-    { kind: 'static', text: 'SGA has represented Northeastern students since 1926.' },
+    { kind: 'static', text: 'SGA has represented Northeastern students since 1924.' },
     { kind: 'static', text: 'SGA oversees $4.8M in annual student organization funding.' },
     { kind: 'static', text: 'Northeastern has over 500 recognized student organizations.' },
     { kind: 'static', text: "SGA's Senate meets 10–15 times per semester." },
@@ -72,7 +72,7 @@ export default async function LoginPage() {
     { kind: 'static', text: 'Chambers was built in three months, two weeks, and four days.' },
     { kind: 'static', text: 'SGA serves an undergraduate student body of over 20,000.' },
     ...(comptrollerName
-      ? [{ kind: 'static' as const, text: `For questions, contact the Comptroller, ${comptrollerName}.` }]
+      ? [{ kind: 'static' as const, text: `Got questions? Contact the Comptroller, ${comptrollerName}.` }]
       : []),
     ...(bookingsThisSemester !== null && bookingsThisSemester > 0
       ? [{ kind: 'live' as const, label: 'Bookings this semester', value: bookingsThisSemester }]

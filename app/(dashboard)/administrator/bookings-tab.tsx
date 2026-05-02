@@ -219,7 +219,7 @@ export default function BookingsTab() {
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               subTab === tab
                 ? 'border-[#c8102e] text-[#f0f6ff] font-semibold'
-                : 'border-transparent text-[#93b8d8] hover:text-[#f0f6ff]'
+                : 'border-transparent text-[#93b8d8] hover:text-[#c8102e]'
             }`}
           >
             {tab === 'One-Time Rooms' ? 'One-Time/Multiple Rooms' : tab}

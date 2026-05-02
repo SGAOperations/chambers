@@ -1,4 +1,5 @@
 import { resend } from '@/lib/resend'
+import { sanitize } from './utils'
 
 interface SpaceBookingConfirmedParams {
   title: string
@@ -26,13 +27,15 @@ export async function sendSpaceBookingConfirmedEmail(params: SpaceBookingConfirm
   const { title, spaceName, startTime, endTime, recipients } = params
   if (!recipients.length) return
 
+  const sTitle = sanitize(title)
+
   await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL!,
     to: recipients,
-    subject: `Chambers \u2014 SGA Space Booking Confirmed: ${title}`,
+    subject: `Chambers \u2014 SGA Space Booking Confirmed: ${sTitle}`,
     text: `Your SGA Space booking has been confirmed.
 
-Booking Title: ${title}
+Booking Title: ${sTitle}
 Space: ${spaceName}
 Start: ${formatDateTime(startTime)}
 End: ${formatDateTime(endTime)}

@@ -55,6 +55,8 @@ interface User {
   iems_role: string | null
   is_active: boolean
   created_at: string
+  has_completed_onboarding: boolean
+  otp_expires_at: string | null
   board_memberships: Membership[]
 }
 
@@ -76,6 +78,8 @@ export default function UsersTab() {
   const [newMembership, setNewMembership] = useState({ body_id: '', role: 'Member' })
   const [adminRoleError, setAdminRoleError] = useState<string | null>(null)
   const [togglingActive, setTogglingActive] = useState<string | null>(null)
+  const [resendingInvite, setResendingInvite] = useState<string | null>(null)
+  const [sentInvite, setSentInvite] = useState<Set<string>>(new Set())
 
   const fetchUsers = async () => {
     const res = await fetch('/api/administrator/users')
@@ -165,6 +169,18 @@ export default function UsersTab() {
     })
     await fetchUsers()
     setTogglingActive(null)
+  }
+
+  const resendInvite = async (userId: string) => {
+    setResendingInvite(userId)
+    await fetch('/api/administrator/users/resend-invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: userId }),
+    })
+    setResendingInvite(null)
+    setSentInvite(prev => new Set(prev).add(userId))
+    setTimeout(() => setSentInvite(prev => { const next = new Set(prev); next.delete(userId); return next }), 2000)
   }
 
   const toggleMembershipRole = async (membershipId: string, currentRole: string) => {
@@ -325,6 +341,20 @@ export default function UsersTab() {
                       : u.is_active ? 'Deactivate User' : 'Activate User'}
                   </button>
                 </div>
+                {/* Resend invite */}
+                {u.is_active && !u.has_completed_onboarding && (!u.otp_expires_at || new Date(u.otp_expires_at) < new Date()) && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-[#f0f6ff] mb-2">Pending Invite</h4>
+                    <p className="text-xs text-[#6a96bb] mb-2">This user has not completed onboarding. Their invite has expired or was never sent.</p>
+                    <button
+                      onClick={() => resendInvite(u.id)}
+                      disabled={resendingInvite === u.id || sentInvite.has(u.id)}
+                      className="px-4 py-2 text-sm rounded-lg font-medium transition-colors disabled:opacity-50 bg-[#1e5080] text-[#f0f6ff] hover:bg-[#1a4d8a]"
+                    >
+                      {resendingInvite === u.id ? 'Sending…' : sentInvite.has(u.id) ? 'Sent!' : 'Resend Invite'}
+                    </button>
+                  </div>
+                )}
                 {/* Body memberships */}
                 <div>
                   <h4 className="text-sm font-semibold text-[#f0f6ff] mb-2">Body Memberships</h4>

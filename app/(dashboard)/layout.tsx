@@ -134,7 +134,7 @@ export default function DashboardLayout({
         className={`group relative flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium overflow-hidden transition-colors ${
           isActive
             ? 'bg-white/15 text-white'
-            : 'text-slate-400 hover:text-white'
+            : 'text-slate-400 hover:text-[#c8102e]'
           }`}
       >
         {!isActive && (
@@ -201,7 +201,7 @@ export default function DashboardLayout({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.10.2</p>
+            <p className="text-slate-600 text-xs mt-1">v1.10.3</p>
             {userName && (
               <p className="text-slate-500 text-xs mt-2 italic">{getGreeting()},<br />{userName}</p>
             )}

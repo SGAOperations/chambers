@@ -1,4 +1,5 @@
 import { resend } from '@/lib/resend'
+import { sanitize } from './utils'
 
 interface BookingUpdatedEmailParams {
   bodyName: string
@@ -30,17 +31,21 @@ export async function sendBookingUpdatedEmail(params: BookingUpdatedEmailParams)
   const { bodyName, roomOrTable, date, startTime, endTime, status, recipients } = params
   if (!recipients.length) return
 
+  const sBodyName = sanitize(bodyName)
+  const sRoomOrTable = sanitize(roomOrTable)
+  const sStatus = sanitize(status)
+
   await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL!,
     to: recipients,
     subject: 'Chambers \u2014 Your Booking Has Been Updated',
-    text: `Your ${bodyName} booking has been updated by a Chambers administrator.
+    text: `Your ${sBodyName} booking has been updated by a Chambers administrator.
 
-Body: ${bodyName}
-Room/Table: ${roomOrTable}
+Body: ${sBodyName}
+Room/Table: ${sRoomOrTable}
 Date: ${formatDate(date)}
 Time: ${formatTime(startTime)} to ${formatTime(endTime)}
-Status: ${status}
+Status: ${sStatus}
 
 If you have questions, please reach out to sgaOperations@northeastern.edu.`,
   })
