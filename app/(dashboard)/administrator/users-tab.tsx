@@ -29,6 +29,7 @@ const ADMIN_ROLES = [
   'Executive Vice President',
   'Vice President of Operational Affairs',
   'Comptroller',
+  'Digital Innovation Manager',
   'Digital Innovation Project Member',
 ]
 
