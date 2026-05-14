@@ -19,13 +19,27 @@ export async function POST(request: Request) {
 
   const { booking_id, occurrence_id, scope, cancellation_type = 'Cancellation' } = await request.json()
 
-  // Fetch booking type upfront — needed for both scope paths
   const { data: bookingRow } = await adminSupabase
     .from('bookings')
-    .select('type')
+    .select('body_id, type')
     .eq('id', booking_id)
     .single()
-  const bookingType = bookingRow?.type
+
+  if (!bookingRow) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+
+  if (!user.app_metadata?.is_admin) {
+    const { data: membership } = await supabase
+      .from('board_memberships')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('body_id', bookingRow.body_id)
+      .eq('role', 'Leadership')
+      .maybeSingle()
+
+    if (!membership) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const bookingType = bookingRow.type
 
   // Create cancellation request
   const { error: requestError } = await adminSupabase

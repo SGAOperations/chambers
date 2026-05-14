@@ -81,6 +81,7 @@ export default function UsersTab() {
   const [togglingActive, setTogglingActive] = useState<string | null>(null)
   const [resendingInvite, setResendingInvite] = useState<string | null>(null)
   const [sentInvite, setSentInvite] = useState<Set<string>>(new Set())
+  const [searchQuery, setSearchQuery] = useState('')
 
   const fetchUsers = async () => {
     const res = await fetch('/api/administrator/users')
@@ -198,13 +199,29 @@ export default function UsersTab() {
 
   const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 
+  const filteredUsers = searchQuery
+    ? users.filter(u => {
+        const q = searchQuery.toLowerCase()
+        return u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+      })
+    : users
+
   return (
     <div className="space-y-4">
-      {/* Create user button */}
-      <div className="flex justify-end">
+      {/* Search + Create user button */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <input
+            type="text"
+            placeholder="Search users..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className={inputCls}
+          />
+        </div>
         <button
           onClick={() => setShowCreateForm(!showCreateForm)}
-          className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors"
+          className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors whitespace-nowrap"
         >
           + New User
         </button>
@@ -257,10 +274,10 @@ export default function UsersTab() {
       )}
 
       {/* Users list */}
-      {users.length === 0 ? (
+      {filteredUsers.length === 0 ? (
         <p className="text-[#6a96bb] text-sm">No users found.</p>
       ) : (
-        [...users]
+        [...filteredUsers]
           .sort((a, b) => {
             const lastName = (name: string) => name.trim().split(' ').at(-1) ?? ''
             return lastName(a.full_name).localeCompare(lastName(b.full_name))
@@ -363,7 +380,12 @@ export default function UsersTab() {
                     <p className="text-sm text-[#6a96bb]">No memberships assigned.</p>
                   ) : (
                     <div className="space-y-2">
-                      {u.board_memberships.map(m => (
+                      {[...u.board_memberships]
+                        .sort((a, b) => {
+                          if (a.role !== b.role) return a.role === 'Leadership' ? -1 : 1
+                          return (a.bodies?.name ?? '').localeCompare(b.bodies?.name ?? '')
+                        })
+                        .map(m => (
                         <div key={m.id} className="flex items-center justify-between text-sm">
                           <span className="text-[#93b8d8]">{m.bodies?.name}</span>
                           <div className="flex items-center gap-2">

@@ -11,7 +11,7 @@ export async function GET() {
 
   const { data: bodies } = await supabase
     .from('bodies')
-    .select('id, name, division')
+    .select('id, name, division, body_open')
     .eq('is_active', true)
     .neq('division', 'Non-Divisional')
     .order('name', { ascending: true })

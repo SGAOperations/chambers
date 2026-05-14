@@ -25,6 +25,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Onboarding already completed' }, { status: 403 })
   }
 
+  const { body_ids } = await request.json()
+
+  // Validate that all submitted bodies are open for self-assignment
+  if (Array.isArray(body_ids) && body_ids.length > 0) {
+    const { data: closedBodies } = await adminSupabase
+      .from('bodies')
+      .select('id')
+      .in('id', body_ids)
+      .eq('body_open', false)
+
+    if (closedBodies && closedBodies.length > 0) {
+      return NextResponse.json(
+        { error: 'One or more selected bodies are not open for self-assignment.' },
+        { status: 403 }
+      )
+    }
+  }
+
   // If the user already has any memberships (e.g. admin-assigned Leadership roles),
   // skip self-assignment to avoid unique constraint violations on (user_id, body_id).
   const { count } = await adminSupabase
@@ -35,8 +53,6 @@ export async function POST(request: Request) {
   if (count && count > 0) {
     return NextResponse.json({ success: true })
   }
-
-  const { body_ids } = await request.json()
 
   // Remove existing Member-level memberships before re-inserting (idempotent)
   await adminSupabase

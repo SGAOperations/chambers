@@ -42,6 +42,7 @@ interface Body {
   name: string
   division: string
   is_active: boolean
+  body_open: boolean
 }
 
 export default function BodiesTab() {
@@ -51,7 +52,7 @@ export default function BodiesTab() {
   const [newBody, setNewBody] = useState({ name: '', division: '' })
   const [creating, setCreating] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editValues, setEditValues] = useState({ name: '', division: '', is_active: true })
+  const [editValues, setEditValues] = useState({ name: '', division: '', is_active: true, body_open: false })
 
   const fetchBodies = async () => {
     const res = await fetch('/api/administrator/bodies')
@@ -89,7 +90,7 @@ export default function BodiesTab() {
 
   const startEdit = (body: Body) => {
     setEditingId(body.id)
-    setEditValues({ name: body.name, division: body.division, is_active: body.is_active })
+    setEditValues({ name: body.name, division: body.division, is_active: body.is_active, body_open: body.body_open ?? false })
   }
 
   if (loading) return <BodiesTabSkeleton />
@@ -180,6 +181,15 @@ export default function BodiesTab() {
                     />
                     <label htmlFor={`active-${b.id}`} className="text-sm text-[#f0f6ff]">Active</label>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={editValues.body_open}
+                      onChange={e => setEditValues({ ...editValues, body_open: e.target.checked })}
+                      id={`open-${b.id}`}
+                    />
+                    <label htmlFor={`open-${b.id}`} className="text-sm text-[#f0f6ff]">Open for self-signup</label>
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => saveEdit(b.id)}
@@ -201,9 +211,12 @@ export default function BodiesTab() {
                     <p className="font-semibold text-[#f0f6ff]">{b.name}</p>
                     <p className="text-sm text-[#93b8d8]">{b.division}</p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${b.is_active ? 'bg-[#0f3d20] text-[#4ade80]' : 'bg-[#3d0f0f] text-[#f87171]'}`}>
                       {b.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${b.body_open ? 'bg-[#0f3d20] text-[#4ade80]' : 'bg-[#1e3a5f] text-[#93b8d8]'}`}>
+                      {b.body_open ? 'Open' : 'Closed'}
                     </span>
                     <button
                       onClick={() => startEdit(b)}

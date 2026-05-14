@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 export default function LoginCard() {
   const [email, setEmail] = useState('')
@@ -129,6 +130,11 @@ export default function LoginCard() {
             >
               Forgot password?
             </button>
+          </div>
+          <div className="flex justify-end">
+            <Link href="/signup" className="text-xs text-[#6a96bb] hover:text-[#93b8d8] transition">
+              I&apos;m New to Chambers — Sign Up
+            </Link>
           </div>
           {error && <p className="text-[#c8102e] text-sm">{error}</p>}
           <button

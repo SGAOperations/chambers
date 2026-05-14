@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
-type Body = { id: string; name: string; division: string }
+type Body = { id: string; name: string; division: string; body_open: boolean }
 
 export default function OnboardingPage() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
@@ -242,29 +243,50 @@ export default function OnboardingPage() {
             {bodies.length === 0 ? (
               <p className="text-[#6a96bb] text-sm text-center py-4">Loading bodies…</p>
             ) : (
-              <div className="max-h-64 overflow-y-auto space-y-4 pr-1">
-                {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([division, divBodies]) => (
-                  <div key={division}>
-                    <p className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wider mb-1.5">{division}</p>
-                    <div className="space-y-1">
-                      {divBodies.map(body => (
-                        <label
-                          key={body.id}
-                          className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-white/5 transition"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedBodyIds.has(body.id)}
-                            onChange={() => toggleBody(body.id)}
-                            className="accent-[#c8102e] w-4 h-4 flex-shrink-0"
-                          />
-                          <span className="text-sm text-[#f0f6ff]">{body.name}</span>
-                        </label>
-                      ))}
+              <>
+                <Link
+                  href="/faq"
+                  target="_blank"
+                  className="block text-xs font-medium text-center text-[#93b8d8] bg-[#0f2a4a] border border-[#1e5080] rounded-md px-3 py-2 hover:bg-[#1a3a5c] hover:text-[#f0f6ff] transition"
+                >
+                  Why Can&apos;t I Select My Body?
+                </Link>
+                <div className="max-h-64 overflow-y-auto space-y-4 pr-1">
+                  {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([division, divBodies]) => (
+                    <div key={division}>
+                      <p className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wider mb-1.5">{division}</p>
+                      <div className="space-y-1">
+                        {divBodies.map(body => (
+                          body.body_open ? (
+                            <label
+                              key={body.id}
+                              className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-white/5 transition"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedBodyIds.has(body.id)}
+                                onChange={() => toggleBody(body.id)}
+                                className="accent-[#c8102e] w-4 h-4 flex-shrink-0"
+                              />
+                              <span className="text-sm text-[#f0f6ff]">{body.name}</span>
+                            </label>
+                          ) : (
+                            <div
+                              key={body.id}
+                              className="flex items-center gap-3 px-3 py-2 rounded-lg opacity-40 cursor-not-allowed"
+                            >
+                              <svg className="w-4 h-4 flex-shrink-0 text-[#6a96bb]" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
+                              </svg>
+                              <span className="text-sm text-[#f0f6ff]">{body.name}</span>
+                            </div>
+                          )
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </>
             )}
 
             {error && <p className="text-[#c8102e] text-sm">{error}</p>}

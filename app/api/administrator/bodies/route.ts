@@ -15,7 +15,7 @@ export async function GET() {
 
   const { data: bodies } = await supabase
     .from('bodies')
-    .select('id, name, division, is_active')
+    .select('id, name, division, is_active, body_open')
     .order('name', { ascending: true })
 
   return NextResponse.json({ bodies: bodies || [] })
@@ -54,11 +54,11 @@ export async function PATCH(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { id, name, division, is_active } = await request.json()
+  const { id, name, division, is_active, body_open } = await request.json()
 
   const { error } = await supabase
     .from('bodies')
-    .update({ name, division, is_active })
+    .update({ name, division, is_active, body_open })
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

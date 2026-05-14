@@ -22,6 +22,7 @@ export async function GET(request: Request) {
     .select('id, full_name, email')
     .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
     .neq('id', user.id)
+    .eq('is_active', true)
     .limit(10)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
