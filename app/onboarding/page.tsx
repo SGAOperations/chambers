@@ -173,6 +173,8 @@ export default function OnboardingPage() {
     return acc
   }, {})
 
+  const hasClosedBodies = bodies.some(b => !b.body_open)
+
   if (loading) return null
 
   const inputClass =
@@ -236,7 +238,7 @@ export default function OnboardingPage() {
             <div>
               <h2 className="text-[#f0f6ff] font-semibold text-lg mb-1">Your Bodies</h2>
               <p className="text-[#93b8d8] text-sm mb-4">
-                Select the SGA bodies you belong to. You&apos;ll be added as a Member — to be assigned Leadership access, please contact the Vice President of Operational Affairs.
+                Select the SGA bodies you belong to. Open bodies add you as a Member immediately. Bodies marked with a lock require admin approval.
               </p>
             </div>
 
@@ -271,15 +273,23 @@ export default function OnboardingPage() {
                               <span className="text-sm text-[#f0f6ff]">{body.name}</span>
                             </label>
                           ) : (
-                            <div
+                            <label
                               key={body.id}
-                              className="flex items-center gap-3 px-3 py-2 rounded-lg opacity-40 cursor-not-allowed"
+                              className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-white/5 transition"
                             >
-                              <svg className="w-4 h-4 flex-shrink-0 text-[#6a96bb]" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
-                              </svg>
-                              <span className="text-sm text-[#f0f6ff]">{body.name}</span>
-                            </div>
+                              <div className="relative w-4 h-4 flex-shrink-0">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedBodyIds.has(body.id)}
+                                  onChange={() => toggleBody(body.id)}
+                                  className="accent-[#c8102e] w-4 h-4"
+                                />
+                                <svg className="absolute inset-0 w-4 h-4 text-[#6a96bb] pointer-events-none" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                              <span className="text-sm text-[#6a96bb]">{body.name}</span>
+                            </label>
                           )
                         ))}
                       </div>
@@ -289,6 +299,11 @@ export default function OnboardingPage() {
               </>
             )}
 
+            {hasClosedBodies && (
+              <p className="text-xs text-[#6a96bb]">
+                Some bodies require admin approval to join and will be submitted as requests.
+              </p>
+            )}
             {error && <p className="text-[#c8102e] text-sm">{error}</p>}
             <button onClick={handleSaveMemberships} disabled={submitting || bodies.length === 0} className={btnClass}>
               {submitting ? 'Saving…' : 'Next'}

@@ -10,6 +10,12 @@ const adminSupabase = createAdminClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+const ROLE_EDITORS = [
+  'Executive Vice President',
+  'Vice President of Operational Affairs',
+  'Digital Innovation Manager',
+]
+
 export async function GET() {
   const supabase = await createClient()
 
@@ -109,6 +115,17 @@ export async function PATCH(request: Request) {
 
   const body = await request.json()
   const { id } = body
+
+  if ('admin_role' in body || 'iems_role' in body) {
+    const { data: requesterRow } = await adminSupabase
+      .from('users')
+      .select('admin_role')
+      .eq('id', user.id)
+      .single()
+    if (!requesterRow || !ROLE_EDITORS.includes(requesterRow.admin_role ?? '')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
 
   const updateData: Record<string, unknown> = {}
   if ('admin_role' in body) {

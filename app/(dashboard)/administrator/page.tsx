@@ -11,7 +11,7 @@ import SGASpacesTab from './sga-spaces-tab'
 type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'SGA Spaces' | 'Advanced Settings'
 
 export default function AdministratorPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('Requests')
+  const [activeTab, setActiveTab] = useState<Tab>('Bookings')
   const [counts, setCounts] = useState({ requests: 0, cancellations: 0, revisions: 0, total: 0 })
 
   useEffect(() => {
@@ -37,7 +37,7 @@ export default function AdministratorPage() {
         <h1 className="text-2xl font-bold text-[#f0f6ff]">Administrator</h1>
 
         <div className="flex gap-1 border-b border-[#1e5080]">
-          {(['Requests', 'Cancellations', 'Bookings', 'SGA Spaces', 'Advanced Settings'] as Tab[]).map(tab => (
+          {(['Bookings', 'SGA Spaces', 'Cancellations', 'Requests', 'Advanced Settings'] as Tab[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}

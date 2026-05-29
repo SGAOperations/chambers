@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
+import { createClient } from '@/lib/supabase/client'
 
 function UsersTabSkeleton() {
   return (
@@ -38,6 +39,12 @@ const IEMS_ROLES = [
   'Director of Events',
 ]
 
+const ROLE_EDITORS = [
+  'Executive Vice President',
+  'Vice President of Operational Affairs',
+  'Digital Innovation Manager',
+]
+
 interface Membership {
   id: string
   role: 'Leadership' | 'Member'
@@ -67,6 +74,13 @@ interface Body {
   division: string
 }
 
+interface MembershipRequest {
+  id: string
+  created_at: string
+  users: { full_name: string; email: string } | null
+  bodies: { name: string } | null
+}
+
 export default function UsersTab() {
   const [users, setUsers] = useState<User[]>([])
   const [bodies, setBodies] = useState<Body[]>([])
@@ -78,10 +92,14 @@ export default function UsersTab() {
   const [addingMembership, setAddingMembership] = useState<string | null>(null)
   const [newMembership, setNewMembership] = useState({ body_id: '', role: 'Member' })
   const [adminRoleError, setAdminRoleError] = useState<string | null>(null)
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
   const [togglingActive, setTogglingActive] = useState<string | null>(null)
   const [resendingInvite, setResendingInvite] = useState<string | null>(null)
   const [sentInvite, setSentInvite] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
+  const [membershipRequests, setMembershipRequests] = useState<MembershipRequest[]>([])
+  const [requestsLoading, setRequestsLoading] = useState(true)
+  const [resolvingRequest, setResolvingRequest] = useState<string | null>(null)
 
   const fetchUsers = async () => {
     const res = await fetch('/api/administrator/users')
@@ -99,6 +117,11 @@ export default function UsersTab() {
   useEffect(() => {
     fetchUsers()
     fetchBodies()
+    fetchMembershipRequests()
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setCurrentUserRole(user?.app_metadata?.admin_role ?? null)
+    })
   }, [])
 
   const createUser = async () => {
@@ -185,6 +208,25 @@ export default function UsersTab() {
     setTimeout(() => setSentInvite(prev => { const next = new Set(prev); next.delete(userId); return next }), 2000)
   }
 
+  const fetchMembershipRequests = async () => {
+    const res = await fetch('/api/administrator/membership-requests')
+    const data = await res.json()
+    setMembershipRequests(data.requests || [])
+    setRequestsLoading(false)
+  }
+
+  const resolveRequest = async (id: string, status: 'approved' | 'denied') => {
+    setResolvingRequest(id)
+    await fetch(`/api/administrator/membership-requests/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    await fetchMembershipRequests()
+    if (status === 'approved') await fetchUsers()
+    setResolvingRequest(null)
+  }
+
   const toggleMembershipRole = async (membershipId: string, currentRole: string) => {
     const newRole = currentRole === 'Leadership' ? 'Member' : 'Leadership'
     await fetch('/api/administrator/users/memberships', {
@@ -198,6 +240,7 @@ export default function UsersTab() {
   if (loading) return <UsersTabSkeleton />
 
   const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
+  const canEditRoles = currentUserRole !== null && ROLE_EDITORS.includes(currentUserRole)
 
   const filteredUsers = searchQuery
     ? users.filter(u => {
@@ -207,7 +250,63 @@ export default function UsersTab() {
     : users
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+
+      {/* Membership Requests */}
+      {(requestsLoading || membershipRequests.length > 0) && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-[#f0f6ff]">Membership Requests</h3>
+          {requestsLoading ? (
+            <div className="border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073] animate-pulse">
+              {[0, 1].map(i => (
+                <div key={i} className={`flex items-center justify-between p-4 ${i !== 0 ? 'border-t border-[#1e5080]' : ''}`}>
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-4 w-36" />
+                    <Skeleton className="h-3.5 w-24" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Skeleton className="h-7 w-16 rounded-lg" />
+                    <Skeleton className="h-7 w-14 rounded-lg" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073]">
+              {membershipRequests.map((req, i) => (
+                <div key={req.id} className={`flex items-center justify-between p-4 gap-4 ${i !== 0 ? 'border-t border-[#1e5080]' : ''}`}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#f0f6ff] truncate">
+                      {req.users?.full_name || req.users?.email} — <span className="text-[#93b8d8]">{req.bodies?.name}</span>
+                    </p>
+                    <p className="text-xs text-[#6a96bb] mt-0.5">
+                      {req.users?.email} · {new Date(req.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => resolveRequest(req.id, 'approved')}
+                      disabled={resolvingRequest === req.id}
+                      className="px-3 py-1.5 bg-[#0f3d20] hover:bg-[#1a5c30] text-[#4ade80] text-xs rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      onClick={() => resolveRequest(req.id, 'denied')}
+                      disabled={resolvingRequest === req.id}
+                      className="px-3 py-1.5 border border-[#1e5080] hover:bg-[#1a4d8a] text-[#f0f6ff] text-xs rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-4">
       {/* Search + Create user button */}
       <div className="flex items-center gap-3">
         <div className="flex-1">
@@ -316,31 +415,41 @@ export default function UsersTab() {
                   {adminRoleError && (
                     <p className="text-xs text-[#f87171] mb-2">{adminRoleError}</p>
                   )}
-                  <select
-                    value={u.admin_role ?? ''}
-                    onChange={e => updateAdminRole(u.id, e.target.value)}
-                    className={inputCls}
-                  >
-                    <option value="">No Admin Role</option>
-                    {ADMIN_ROLES.map(r => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </select>
+                  {canEditRoles ? (
+                    <select
+                      value={u.admin_role ?? ''}
+                      onChange={e => updateAdminRole(u.id, e.target.value)}
+                      className={inputCls}
+                    >
+                      <option value="">No Admin Role</option>
+                      {ADMIN_ROLES.map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm text-[#93b8d8]">{u.admin_role ?? 'None'}</p>
+                  )}
                 </div>
                 {/* IEMS role */}
                 <div>
                   <h4 className="text-sm font-semibold text-[#f0f6ff] mb-1">IEMS Role</h4>
-                  <p className="text-xs text-[#6a96bb] mb-2">Mutually exclusive with Admin Role.</p>
-                  <select
-                    value={u.iems_role ?? ''}
-                    onChange={e => updateIEMSRole(u.id, e.target.value)}
-                    className={inputCls}
-                  >
-                    <option value="">No IEMS Role</option>
-                    {IEMS_ROLES.map(r => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </select>
+                  {canEditRoles && (
+                    <p className="text-xs text-[#6a96bb] mb-2">Mutually exclusive with Admin Role.</p>
+                  )}
+                  {canEditRoles ? (
+                    <select
+                      value={u.iems_role ?? ''}
+                      onChange={e => updateIEMSRole(u.id, e.target.value)}
+                      className={inputCls}
+                    >
+                      <option value="">No IEMS Role</option>
+                      {IEMS_ROLES.map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-sm text-[#93b8d8]">{u.iems_role ?? 'None'}</p>
+                  )}
                 </div>
                 {/* Active status */}
                 <div>
@@ -462,6 +571,7 @@ export default function UsersTab() {
           </div>
         ))
       )}
+      </div>
     </div>
   )
 }

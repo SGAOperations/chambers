@@ -27,21 +27,18 @@ export async function POST(request: Request) {
 
   const { body_ids } = await request.json()
 
-  // Validate that all submitted bodies are open for self-assignment
-  if (Array.isArray(body_ids) && body_ids.length > 0) {
-    const { data: closedBodies } = await adminSupabase
-      .from('bodies')
-      .select('id')
-      .in('id', body_ids)
-      .eq('body_open', false)
-
-    if (closedBodies && closedBodies.length > 0) {
-      return NextResponse.json(
-        { error: 'One or more selected bodies are not open for self-assignment.' },
-        { status: 403 }
-      )
-    }
+  if (!Array.isArray(body_ids) || body_ids.length === 0) {
+    return NextResponse.json({ success: true, requested: 0 })
   }
+
+  // Fetch body_open status for all submitted IDs
+  const { data: bodyRows } = await adminSupabase
+    .from('bodies')
+    .select('id, body_open')
+    .in('id', body_ids)
+
+  const openIds = bodyRows?.filter(b => b.body_open).map(b => b.id) ?? []
+  const closedIds = bodyRows?.filter(b => !b.body_open).map(b => b.id) ?? []
 
   // If the user already has any memberships (e.g. admin-assigned Leadership roles),
   // skip self-assignment to avoid unique constraint violations on (user_id, body_id).
@@ -50,30 +47,43 @@ export async function POST(request: Request) {
     .select('id', { count: 'exact', head: true })
     .eq('user_id', user.id)
 
-  if (count && count > 0) {
-    return NextResponse.json({ success: true })
+  if (!count || count === 0) {
+    // Remove existing Member-level memberships before re-inserting (idempotent)
+    await adminSupabase
+      .from('board_memberships')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('role', 'Member')
+
+    if (openIds.length > 0) {
+      const rows = openIds.map((body_id: string) => ({
+        user_id: user.id,
+        body_id,
+        role: 'Member' as const,
+      }))
+
+      const { error } = await adminSupabase
+        .from('board_memberships')
+        .insert(rows)
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    }
   }
 
-  // Remove existing Member-level memberships before re-inserting (idempotent)
-  await adminSupabase
-    .from('board_memberships')
-    .delete()
-    .eq('user_id', user.id)
-    .eq('role', 'Member')
-
-  if (Array.isArray(body_ids) && body_ids.length > 0) {
-    const rows = body_ids.map((body_id: string) => ({
+  // Queue requests for closed bodies (upsert to handle re-runs of onboarding)
+  if (closedIds.length > 0) {
+    const requestRows = closedIds.map((body_id: string) => ({
       user_id: user.id,
       body_id,
-      role: 'Member' as const,
+      status: 'pending' as const,
     }))
 
     const { error } = await adminSupabase
-      .from('board_memberships')
-      .insert(rows)
+      .from('membership_requests')
+      .upsert(requestRows, { onConflict: 'user_id,body_id' })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, requested: closedIds.length })
 }
