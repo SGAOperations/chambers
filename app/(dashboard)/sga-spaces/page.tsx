@@ -38,6 +38,7 @@ interface ModalSlot {
 interface EditBooking {
   id: string
   spaceId: string
+  creatorId: string
   title: string
   start: string
   end: string
@@ -216,6 +217,7 @@ export default function SGASpacesPage() {
     setEditBooking({
       id: booking.id,
       spaceId: booking.space_id,
+      creatorId: booking.creator_id,
       title: booking.title,
       start: booking.start_time,
       end: booking.end_time,
@@ -270,9 +272,11 @@ export default function SGASpacesPage() {
                   {remainingHours.toFixed(1)} / {limitHours} hrs remaining
                 </span>
               </div>
-              <div className="flex items-center gap-2 bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-4 py-2">
-                <span className="text-sm text-[#93b8d8]">{minHoursAdvance}h advance notice required</span>
-              </div>
+              {minHoursAdvance > 0 && (
+                <div className="flex items-center gap-2 bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-4 py-2">
+                  <span className="text-sm text-[#93b8d8]">{minHoursAdvance}h advance notice required</span>
+                </div>
+              )}
             </div>
           ) : (
             <Skeleton className="h-9 w-48 border border-[#1e5080] animate-pulse" />
@@ -368,6 +372,15 @@ export default function SGASpacesPage() {
               setEditBooking(null)
               fetchCalendarData()
             }}
+            onCancelBooking={editBooking.creatorId === currentUserId ? async () => {
+              const res = await fetch(`/api/spaces/bookings/${editBooking.id}`, { method: 'DELETE' })
+              if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error ?? 'Failed to cancel booking.')
+              }
+              setEditBooking(null)
+              fetchCalendarData()
+            } : undefined}
           />
         )}
       </div>

@@ -66,10 +66,12 @@ export default function LoginCard() {
         return
       }
       await fetch('/api/onboarding/invalidate-otp', { method: 'POST' })
+      localStorage.removeItem('chambers_last_active')
       router.push('/onboarding')
       return
     }
 
+    localStorage.removeItem('chambers_last_active')
     router.push('/my-rooms')
   }
 

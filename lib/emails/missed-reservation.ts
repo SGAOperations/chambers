@@ -1,5 +1,5 @@
 import { resend } from '@/lib/resend'
-import { sanitize } from './utils'
+import { sanitize, buildEmailHtml } from './utils'
 
 interface MissedReservationEmailParams {
   bodyName: string
@@ -37,5 +37,14 @@ Time of Reservation: ${startTime} to ${endTime}
 Contacts: ${sContacts}
 
 For further information, please reach out to the Comptroller.`,
+    html: buildEmailHtml(`
+      <p style="margin:0 0 16px;">This is an automatic alert that a SGA reservation was marked as missed by a Chambers administrator.</p>
+      <p style="margin:0;line-height:1.8;">
+        <strong>Responsible Body:</strong> ${sBodyName}<br>
+        <strong>Date of Reservation:</strong> ${date}<br>
+        <strong>Time of Reservation:</strong> ${startTime} to ${endTime}<br>
+        <strong>Contacts:</strong> ${sContacts}
+      </p>
+    `, 'For further information, please reach out to the Comptroller.'),
   })
 }

@@ -92,10 +92,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     adminSupabase.from('app_settings').select('min_hours_advance_spaces').eq('id', 1).single(),
   ])
 
-  // Advance notice check — only enforce if start_time changed
+  // Advance notice check — only enforce if start_time changed and limit > 0
   const minHours: number = settings?.min_hours_advance_spaces ?? 24
   const startTimeChanged = start_time !== existing.start_time
-  if (startTimeChanged) {
+  if (minHours > 0 && startTimeChanged) {
     const earliestAllowed = new Date(Date.now() + minHours * 60 * 60 * 1000)
     if (new Date(start_time) < earliestAllowed) {
       return NextResponse.json({
@@ -177,6 +177,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     const spaceName = (booking.spaces as { name: string } | null)?.name ?? 'SGA Space'
     if (creatorEmail) {
       await sendSpaceBookingCancelledEmail({
+        bookingId: id,
         title: booking.title,
         spaceName,
         startTime: booking.start_time,

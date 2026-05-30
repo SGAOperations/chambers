@@ -136,10 +136,10 @@ export async function POST(request: Request) {
     adminSupabase.from('app_settings').select('min_hours_advance_spaces').eq('id', 1).single(),
   ])
 
-  // Advance notice check
+  // Advance notice check (skipped when limit is 0)
   const minHours: number = settings?.min_hours_advance_spaces ?? 24
   const earliestAllowed = new Date(Date.now() + minHours * 60 * 60 * 1000)
-  if (new Date(start_time) < earliestAllowed) {
+  if (minHours > 0 && new Date(start_time) < earliestAllowed) {
     return NextResponse.json({
       error: `Bookings must be made at least ${minHours} hour${minHours === 1 ? '' : 's'} in advance.`,
     }, { status: 400 })
@@ -194,6 +194,7 @@ export async function POST(request: Request) {
     ])
     const emails = (emailUsers ?? []).map((u: { email: string }) => u.email).filter(Boolean)
     await sendSpaceBookingConfirmedEmail({
+      bookingId: booking.id,
       title,
       spaceName: space?.name ?? 'SGA Space',
       startTime: start_time,

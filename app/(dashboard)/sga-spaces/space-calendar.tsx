@@ -379,23 +379,30 @@ export default function SpaceCalendar({
                 ))}
 
                 {/* Booking overlays */}
-                {bookingsByDay[dayIdx].map((bs, i) => (
-                  <div
-                    key={i}
-                    className="absolute inset-x-0 z-30 pointer-events-none"
-                    style={{
-                      top: bs.startSlot * SLOT_HEIGHT,
-                      height: (bs.endSlot - bs.startSlot) * SLOT_HEIGHT,
-                    }}
-                  >
-                    <div className={`h-full mx-0.5 rounded border border-[#c8102e] flex flex-col px-1 pt-0.5 overflow-hidden transition-opacity ${hoveredBookingId === bs.booking.id ? 'bg-[#c8102e]/60 opacity-80' : 'bg-[#c8102e]/80'}`}>
-                      <span className="text-[9px] text-white font-semibold truncate leading-tight">{bs.booking.title}</span>
-                      {bs.booking.creator_name && (
-                        <span className="text-[8px] text-white/70 truncate leading-tight">{bs.booking.creator_name}</span>
-                      )}
+                {bookingsByDay[dayIdx].map((bs, i) => {
+                  const isShort = (bs.endSlot - bs.startSlot) <= 2
+                  return (
+                    <div
+                      key={i}
+                      className="absolute inset-x-0 z-30 pointer-events-none"
+                      style={{
+                        top: bs.startSlot * SLOT_HEIGHT,
+                        height: (bs.endSlot - bs.startSlot) * SLOT_HEIGHT,
+                      }}
+                    >
+                      <div className={`h-full mx-0.5 rounded border border-[#c8102e] flex px-1 overflow-hidden transition-opacity ${
+                        isShort ? 'flex-row items-center gap-1' : 'flex-col items-start pt-0.5'
+                      } ${hoveredBookingId === bs.booking.id ? 'bg-[#c8102e]/60 opacity-80' : 'bg-[#c8102e]/80'}`}>
+                        <span className="text-[9px] text-white font-semibold truncate leading-none min-w-0">{bs.booking.title}</span>
+                        {bs.booking.creator_name && (
+                          <span className={`text-[8px] text-white/70 leading-none ${isShort ? 'flex-shrink-0 truncate' : 'truncate w-full'}`}>
+                            {bs.booking.creator_name}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
 
                 {/* Current time line — only on today's column */}
                 {isToday && (

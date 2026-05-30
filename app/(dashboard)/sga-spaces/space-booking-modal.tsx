@@ -20,6 +20,7 @@ interface SpaceBookingModalProps {
   editBookingId?: string
   initialTitle?: string
   initialAttendees?: User[]
+  onCancelBooking?: () => Promise<void>
 }
 
 function isoToDateAndTime(iso: string): { date: string; time: string } {
@@ -43,6 +44,7 @@ export default function SpaceBookingModal({
   editBookingId,
   initialTitle = '',
   initialAttendees = [],
+  onCancelBooking,
 }: SpaceBookingModalProps) {
   const isEditing = !!editBookingId
 
@@ -59,6 +61,9 @@ export default function SpaceBookingModal({
   const [searchLoading, setSearchLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [cancelConfirm, setCancelConfirm] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const searchUsers = useCallback(async (q: string) => {
@@ -89,6 +94,19 @@ export default function SpaceBookingModal({
 
   const removeAttendee = (id: string) => {
     setAttendees(prev => prev.filter(a => a.id !== id))
+  }
+
+  const handleCancelBooking = async () => {
+    if (!onCancelBooking) return
+    setCancelling(true)
+    setCancelError(null)
+    try {
+      await onCancelBooking()
+    } catch (e) {
+      setCancelError(e instanceof Error ? e.message : 'Failed to cancel booking.')
+      setCancelling(false)
+      setCancelConfirm(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -266,7 +284,7 @@ export default function SpaceBookingModal({
               onClick={onClose}
               className="flex-1 py-2.5 px-4 border border-[#1e5080] text-[#93b8d8] text-sm font-medium rounded-lg hover:text-[#f0f6ff] hover:border-[#93b8d8] transition-colors"
             >
-              Cancel
+              Close
             </button>
             <button
               type="submit"
@@ -276,6 +294,44 @@ export default function SpaceBookingModal({
               {submitting ? (isEditing ? 'Saving…' : 'Booking…') : (isEditing ? 'Save Changes' : 'Confirm Booking')}
             </button>
           </div>
+
+          {/* Cancel booking (edit mode, own bookings only) */}
+          {isEditing && onCancelBooking && (
+            <div className="pt-3 border-t border-[#1e5080]">
+              {!cancelConfirm ? (
+                <button
+                  type="button"
+                  onClick={() => setCancelConfirm(true)}
+                  className="text-sm text-[#6a96bb] hover:text-[#f87171] transition-colors"
+                >
+                  Cancel this booking
+                </button>
+              ) : (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-sm text-[#93b8d8]">Cancel this booking?</span>
+                  <button
+                    type="button"
+                    onClick={handleCancelBooking}
+                    disabled={cancelling}
+                    className="text-sm font-medium text-[#f87171] hover:text-red-400 disabled:opacity-60 transition-colors"
+                  >
+                    {cancelling ? 'Cancelling…' : 'Yes, cancel'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCancelConfirm(false)}
+                    disabled={cancelling}
+                    className="text-sm text-[#6a96bb] hover:text-[#f0f6ff] transition-colors"
+                  >
+                    No, keep it
+                  </button>
+                </div>
+              )}
+              {cancelError && (
+                <p className="text-xs text-[#f87171] mt-1">{cancelError}</p>
+              )}
+            </div>
+          )}
         </form>
       </div>
     </div>

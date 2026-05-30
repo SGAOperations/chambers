@@ -1,5 +1,5 @@
 import { resend } from '@/lib/resend'
-import { sanitize } from './utils'
+import { sanitize, buildEmailHtml } from './utils'
 
 interface BookingUpdatedEmailParams {
   bodyName: string
@@ -48,5 +48,15 @@ Time: ${formatTime(startTime)} to ${formatTime(endTime)}
 Status: ${sStatus}
 
 If you have questions, please reach out to sgaOperations@northeastern.edu.`,
+    html: buildEmailHtml(`
+      <p style="margin:0 0 16px;">Your ${sBodyName} booking has been updated by a Chambers administrator.</p>
+      <p style="margin:0;line-height:1.8;">
+        <strong>Body:</strong> ${sBodyName}<br>
+        <strong>Room/Table:</strong> ${sRoomOrTable}<br>
+        <strong>Date:</strong> ${formatDate(date)}<br>
+        <strong>Time:</strong> ${formatTime(startTime)} to ${formatTime(endTime)}<br>
+        <strong>Status:</strong> ${sStatus}
+      </p>
+    `),
   })
 }
