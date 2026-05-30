@@ -38,8 +38,10 @@ export async function GET() {
     .neq('division', 'Non-Divisional')
     .order('name', { ascending: true })
 
-  const activeMemberBodyIds = new Set((profile.board_memberships ?? []).map((m: { bodies: { id: string } | null }) => m.bodies?.id).filter(Boolean))
-  const pendingBodyIds = new Set((pendingRequests ?? []).map((r: { bodies: { id: string } | null }) => r.bodies?.id).filter(Boolean))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const activeMemberBodyIds = new Set((profile.board_memberships ?? []).map((m: any) => (m.bodies as { id: string } | null)?.id).filter(Boolean))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pendingBodyIds = new Set((pendingRequests ?? []).map((r: any) => (r.bodies as { id: string } | null)?.id).filter(Boolean))
 
   const availableBodies = (allBodies ?? []).filter(
     (b: { id: string }) => !activeMemberBodyIds.has(b.id) && !pendingBodyIds.has(b.id)
