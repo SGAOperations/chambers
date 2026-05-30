@@ -23,7 +23,7 @@ export async function GET(
   const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
   const todayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
 
-  const [spaceResult, bookingsResult] = await Promise.all([
+  const [spaceResult, bookingsResult, blackoutsResult] = await Promise.all([
     adminSupabase
       .from('spaces')
       .select('id, name, capacity')
@@ -35,6 +35,13 @@ export async function GET(
       .eq('space_id', spaceId)
       .gte('start_time', todayStart.toISOString())
       .lt('start_time', todayEnd.toISOString())
+      .order('start_time', { ascending: true }),
+    adminSupabase
+      .from('space_blackouts')
+      .select('id, start_time, end_time')
+      .or(`space_id.eq.${spaceId},space_id.is.null`)
+      .lt('start_time', todayEnd.toISOString())
+      .gt('end_time', todayStart.toISOString())
       .order('start_time', { ascending: true }),
   ])
 
@@ -62,6 +69,11 @@ export async function GET(
 
   return NextResponse.json({
     space: spaceResult.data,
+    blackouts: (blackoutsResult.data ?? []).map((b) => ({
+      id: b.id,
+      start_time: b.start_time,
+      end_time: b.end_time,
+    })),
     bookings: rawBookings.map((b) => ({
       id: b.id,
       title: b.title,

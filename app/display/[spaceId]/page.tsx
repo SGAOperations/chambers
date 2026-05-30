@@ -21,6 +21,12 @@ interface Booking {
   attendee_names?: string[]
 }
 
+interface Blackout {
+  id: string
+  start_time: string
+  end_time: string
+}
+
 // Timeline spans 7am–midnight (17 hours = 1020 minutes)
 const BAR_START_MINS = 7 * 60
 const BAR_END_MINS = 24 * 60
@@ -60,6 +66,17 @@ function formatTimeRange(start: string, end: string): string {
   return `${formatTime(start)} – ${formatTime(end)}`
 }
 
+// Formats wall-clock minutes (0–1440) as a time string.
+// 1440 (midnight end-of-day) is displayed as 11:59 PM to indicate "all day".
+function formatMins(mins: number): string {
+  const clamped = Math.min(mins, 23 * 60 + 59)
+  const h = Math.floor(clamped / 60)
+  const m = (clamped % 60).toString().padStart(2, '0')
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const hour = h % 12 || 12
+  return `${hour}:${m} ${ampm}`
+}
+
 function formatClock(d: Date): string {
   const h = d.getHours()
   const m = d.getMinutes().toString().padStart(2, '0')
@@ -83,6 +100,7 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
 
   const [space, setSpace] = useState<Space | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [blackouts, setBlackouts] = useState<Blackout[]>([])
   const [now, setNow] = useState(new Date())
   const [accessDenied, setAccessDenied] = useState(false)
   const [notFound, setNotFound] = useState(false)
@@ -114,6 +132,7 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
       const data = await res.json()
       setSpace(data.space)
       setBookings(data.bookings)
+      setBlackouts(data.blackouts ?? [])
       setLoading(false)
     }
 
@@ -126,6 +145,25 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
   // Compare using local minutes-from-midnight vs. the stored UTC hours/minutes.
   const nowLocalMins = now.getHours() * 60 + now.getMinutes()
 
+  // UTC date string for today — used to clamp multi-day blackouts to the visible range.
+  const todayUtcStr = now.toISOString().slice(0, 10)
+
+  // Returns start/end in wall-clock minutes, clamped to [0, 1440] for today.
+  function blackoutMins(b: Blackout): { start: number; end: number } {
+    const startDate = b.start_time.slice(0, 10)
+    const endDate = b.end_time.slice(0, 10)
+    return {
+      start: startDate < todayUtcStr ? 0 : minsFromMidnight(b.start_time),
+      end: endDate > todayUtcStr ? 24 * 60 : minsFromMidnight(b.end_time),
+    }
+  }
+
+  const activeBlackout = blackouts.find((b) => {
+    const { start, end } = blackoutMins(b)
+    return start <= nowLocalMins && nowLocalMins < end
+  })
+  const isBlackedOut = !!activeBlackout
+
   const currentBooking = bookings.find((b) => {
     const start = minsFromMidnight(b.start_time)
     const end = minsFromMidnight(b.end_time)
@@ -136,7 +174,7 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
   const nextBooking = futureBookings[0]
   const upcomingBookings = futureBookings.slice(1)
 
-  const bgGradient = isOccupied
+  const bgGradient = isBlackedOut || isOccupied
     ? 'from-[#4a0d0d] via-[#2e0707] to-[#1a0404]'
     : 'from-[#0d4a22] via-[#093318] to-[#051a0d]'
 
@@ -226,6 +264,21 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
                   </div>
                 )
               })}
+              {/* Blackout segments */}
+              {blackouts.map((b) => {
+                const { start, end } = blackoutMins(b)
+                const startPct = toBarPercent(start)
+                const endPct = toBarPercent(end)
+                const heightPct = endPct - startPct
+                if (heightPct <= 0) return null
+                return (
+                  <div
+                    key={b.id}
+                    className="absolute left-0 w-full bg-black/70 rounded-sm"
+                    style={{ top: `${startPct}%`, height: `${heightPct}%` }}
+                  />
+                )
+              })}
               {/* Current time marker */}
               <div
                 className="absolute left-0 w-full h-0.5 bg-white/80"
@@ -249,7 +302,14 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
               <p className="text-sm">&nbsp;</p>
             </div>
             {/* Status — sits at same vertical level as the clock */}
-            {isOccupied ? (
+            {isBlackedOut ? (
+              <>
+                <p className="text-5xl font-bold text-[#f87171] mt-6">Unavailable</p>
+                <p className="text-sm text-[#93b8d8] mt-1">
+                  {(() => { const { start, end } = blackoutMins(activeBlackout!); return `${formatMins(start)} – ${formatMins(end)}` })()}
+                </p>
+              </>
+            ) : isOccupied ? (
               <>
                 <p className="text-5xl font-bold text-[#f87171] mt-6">Reserved</p>
                 <p className="text-xl text-[#f0f6ff] mt-1">{currentBooking!.title}</p>
@@ -271,7 +331,7 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
 
           {/* Details — sits in bar area, clips at midnight */}
           <div className="flex-1 mt-8 min-h-0 overflow-hidden">
-            {isOccupied && (
+            {!isBlackedOut && isOccupied && (
               <>
                 {currentBooking!.creator_name && (
                   <p className="text-sm text-[#93b8d8]">{currentBooking!.creator_name}</p>
@@ -284,7 +344,7 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
               </>
             )}
             {nextBooking && (
-              <div className={isOccupied ? 'mt-6 border-t border-white/10 pt-6' : ''}>
+              <div className={!isBlackedOut && isOccupied ? 'mt-6 border-t border-white/10 pt-6' : ''}>
                 <p className="text-xs font-medium text-[#6a96bb] uppercase tracking-widest">Next:</p>
                 <p className="text-lg text-[#93b8d8]">{nextBooking.title}</p>
                 <p className="text-sm text-[#6a96bb]">

@@ -206,7 +206,7 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
                 <td className="px-4 py-3 text-[#93b8d8]">{b.creator_name ?? '—'}</td>
                 <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.start_time)}</td>
                 <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.end_time)}</td>
-                <td className="px-4 py-3 text-[#93b8d8]">{(b.attendee_ids ?? []).length}</td>
+                <td className="px-4 py-3 text-[#93b8d8]">{(b.attendee_ids ?? []).length + 1}</td>
                 <td className="px-4 py-3">
                   <button
                     onClick={() => cancelBooking(b.id)}

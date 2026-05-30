@@ -129,7 +129,11 @@ export default function SpaceCalendar({
     const days: BookingSpan[][] = Array.from({ length: 7 }, () => [])
     for (const b of bookings) {
       const dayIdx = dayOfWeekUTC(b.start_time)
-      days[dayIdx].push({ booking: b, startSlot: slotIndex(b.start_time), endSlot: slotIndex(b.end_time) })
+      const rawEndSlot = slotIndex(b.end_time)
+      // Booking ending at next-day midnight has slotIndex 0 — fill to end of column instead
+      const endsNextDayMidnight = rawEndSlot === 0 && b.end_time.slice(0, 10) > b.start_time.slice(0, 10)
+      const endSlot = endsNextDayMidnight ? TOTAL_SLOTS : rawEndSlot
+      days[dayIdx].push({ booking: b, startSlot: slotIndex(b.start_time), endSlot })
     }
     return days
   }, [bookings])

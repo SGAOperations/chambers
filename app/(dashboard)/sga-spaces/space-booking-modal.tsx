@@ -34,6 +34,13 @@ function dateAndTimeToIso(date: string, time: string): string {
   return new Date(`${date}T${time}:00Z`).toISOString()
 }
 
+// End time of 00:00 means "end of day" — store as next-day midnight, not same-day midnight
+function endTimeToIso(date: string, time: string): string {
+  const d = new Date(`${date}T${time}:00Z`)
+  if (time === '00:00') d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString()
+}
+
 export default function SpaceBookingModal({
   spaceId,
   spaceName,
@@ -119,7 +126,7 @@ export default function SpaceBookingModal({
     setSubmitting(true)
     try {
       const start_time = dateAndTimeToIso(date, startTime)
-      const end_time = dateAndTimeToIso(date, endTime)
+      const end_time = endTimeToIso(date, endTime)
 
       const res = isEditing
         ? await fetch(`/api/spaces/bookings/${editBookingId}`, {

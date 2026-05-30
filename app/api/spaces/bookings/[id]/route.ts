@@ -24,7 +24,14 @@ function minutesOf(iso: string): number {
 function touchesDeadZone(startIso: string, endIso: string): boolean {
   const startDate = startIso.slice(0, 10)
   const endDate = endIso.slice(0, 10)
-  if (endDate > startDate) return true
+  if (endDate > startDate) {
+    const end = new Date(endIso)
+    const endsAtMidnight = end.getUTCHours() === 0 && end.getUTCMinutes() === 0 && end.getUTCSeconds() === 0
+    const nextDay = new Date(`${startDate}T00:00:00Z`)
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1)
+    const isConsecutiveDay = endDate === nextDay.toISOString().slice(0, 10)
+    if (!endsAtMidnight || !isConsecutiveDay) return true
+  }
   const startHour = new Date(startIso).getUTCHours() + new Date(startIso).getUTCMinutes() / 60
   return startHour < 7
 }
