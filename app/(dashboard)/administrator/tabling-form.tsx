@@ -19,6 +19,12 @@ interface Body {
   name: string
 }
 
+interface Semester {
+  id: string
+  name: string
+  is_active: boolean
+}
+
 interface Session {
   location: string
   session_date: string
@@ -29,6 +35,7 @@ interface Session {
 
 interface TablingFormProps {
   bodies: Body[]
+  semesters: Semester[]
   onClose: () => void
   onSuccess: () => void
 }
@@ -44,7 +51,9 @@ const emptySession = (): Session => ({
   status: 'Reserved',
 })
 
-export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormProps) {
+export default function TablingForm({ bodies, semesters, onClose, onSuccess }: TablingFormProps) {
+  const defaultSemesterId = semesters.find(s => s.is_active)?.id ?? ''
+  const [semesterId, setSemesterId] = useState(defaultSemesterId)
   const [form, setForm] = useState({
     body_id: '',
     purpose: '',
@@ -66,6 +75,10 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
   }
 
   const handleSubmit = async () => {
+    if (!semesterId) {
+      setError('Please select a semester.')
+      return
+    }
     if (!form.body_id || !form.purpose) {
       setError('Please fill out all required fields.')
       return
@@ -82,7 +95,7 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
     const res = await fetch('/api/administrator/bookings/tabling', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, sessions }),
+      body: JSON.stringify({ ...form, sessions, semester_id: semesterId }),
     })
 
     if (res.ok) {
@@ -97,6 +110,24 @@ export default function TablingForm({ bodies, onClose, onSuccess }: TablingFormP
 
   return (
     <div className="space-y-4">
+      <div>
+        <label className={labelCls}>Semester *</label>
+        {semesters.length === 0 ? (
+          <p className="text-sm text-[#f87171]">No semesters available. Create one in Advanced Settings.</p>
+        ) : (
+          <select
+            value={semesterId}
+            onChange={e => setSemesterId(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">Select Semester</option>
+            {semesters.map(sem => (
+              <option key={sem.id} value={sem.id}>{sem.name}{sem.is_active ? ' (Active)' : ''}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
       <div>
         <label className={labelCls}>Body *</label>
         <select

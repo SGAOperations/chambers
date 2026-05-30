@@ -23,6 +23,36 @@ function formatDateTime(iso: string): string {
   })
 }
 
+function toIcsDateTime(iso: string): string {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}Z`
+}
+
+function escapeIcs(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
+}
+
+function buildIcs(title: string, spaceName: string, startTime: string, endTime: string): Buffer {
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Chambers//SGA Room Manager//EN',
+    'METHOD:REQUEST',
+    'BEGIN:VEVENT',
+    `UID:${Date.now()}@chambers.northeasternsga.com`,
+    `DTSTAMP:${toIcsDateTime(new Date().toISOString())}`,
+    `DTSTART:${toIcsDateTime(startTime)}`,
+    `DTEND:${toIcsDateTime(endTime)}`,
+    `SUMMARY:${escapeIcs(title)}`,
+    `LOCATION:${escapeIcs(spaceName)}`,
+    'DESCRIPTION:SGA Space booking confirmed via Chambers.',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ]
+  return Buffer.from(lines.join('\r\n'))
+}
+
 export async function sendSpaceBookingConfirmedEmail(params: SpaceBookingConfirmedParams) {
   const { title, spaceName, startTime, endTime, recipients } = params
   if (!recipients.length) return
@@ -41,5 +71,10 @@ Start: ${formatDateTime(startTime)}
 End: ${formatDateTime(endTime)}
 
 If you have questions, please reach out to sgaOperations@northeastern.edu.`,
+    attachments: [{
+      filename: 'booking.ics',
+      content: buildIcs(title, spaceName, startTime, endTime),
+      contentType: 'text/calendar; method=REQUEST',
+    }],
   })
 }

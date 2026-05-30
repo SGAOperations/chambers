@@ -139,6 +139,9 @@ export async function PATCH(request: Request) {
     if (body.iems_role) updateData.admin_role = null
   }
   if ('is_active' in body) updateData.is_active = body.is_active
+  if ('full_name' in body && typeof body.full_name === 'string' && body.full_name.trim()) {
+    updateData.full_name = body.full_name.trim()
+  }
 
   const { error } = await adminSupabase
     .from('users')
@@ -157,6 +160,12 @@ export async function PATCH(request: Request) {
         admin_role: isSettingAdmin ? body.admin_role : null,
         iems_role: isSettingIEMS ? body.iems_role : null,
       },
+    })
+  }
+
+  if ('full_name' in updateData) {
+    await adminSupabase.auth.admin.updateUserById(id, {
+      user_metadata: { full_name: updateData.full_name },
     })
   }
 

@@ -27,9 +27,10 @@ export async function GET() {
 
   const { weekStart, weekEnd } = getWeekBounds()
 
-  const [{ data: weekBookings }, { data: override }] = await Promise.all([
+  const [{ data: weekBookings }, { data: override }, { data: settings }] = await Promise.all([
     adminSupabase.from('space_bookings').select('start_time, end_time').eq('creator_id', user.id).lt('start_time', weekEnd).gt('end_time', weekStart),
     adminSupabase.from('space_weekly_limit_overrides').select('weekly_hours_limit').eq('user_id', user.id).maybeSingle(),
+    adminSupabase.from('app_settings').select('min_hours_advance_spaces').eq('id', 1).single(),
   ])
 
   const usedMs = (weekBookings ?? []).reduce((acc: number, b: { start_time: string; end_time: string }) => {
@@ -40,5 +41,6 @@ export async function GET() {
   const limit = override?.weekly_hours_limit ?? DEFAULT_WEEKLY_HOURS
   const remaining = Math.max(0, limit - usedHours)
 
-  return NextResponse.json({ used: usedHours, limit, remaining, user_id: user.id })
+  const minHoursAdvance: number = settings?.min_hours_advance_spaces ?? 24
+  return NextResponse.json({ used: usedHours, limit, remaining, user_id: user.id, min_hours_advance: minHoursAdvance })
 }

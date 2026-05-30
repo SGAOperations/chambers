@@ -45,6 +45,7 @@ export default function BookingSettingsTab() {
   const [saving, setSaving] = useState(false)
   const [minDaysRoom, setMinDaysRoom] = useState(0)
   const [minDaysTabling, setMinDaysTabling] = useState(0)
+  const [minHoursSpaces, setMinHoursSpaces] = useState(24)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
 
@@ -75,6 +76,7 @@ export default function BookingSettingsTab() {
       .then(data => {
         setMinDaysRoom(data.min_days_advance_room ?? 0)
         setMinDaysTabling(data.min_days_advance_tabling ?? 0)
+        setMinHoursSpaces(data.min_hours_advance_spaces ?? 24)
         setLoading(false)
       })
 
@@ -113,6 +115,7 @@ export default function BookingSettingsTab() {
       body: JSON.stringify({
         min_days_advance_room: minDaysRoom,
         min_days_advance_tabling: minDaysTabling,
+        min_hours_advance_spaces: minHoursSpaces,
       }),
     })
 
@@ -216,6 +219,16 @@ export default function BookingSettingsTab() {
               min={0}
               value={minDaysTabling}
               onChange={e => { setSuccess(false); setMinDaysTabling(Math.max(0, parseInt(e.target.value) || 0)) }}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Minimum Hours Advance Notice — SGA Spaces</label>
+            <input
+              type="number"
+              min={0}
+              value={minHoursSpaces}
+              onChange={e => { setSuccess(false); setMinHoursSpaces(Math.max(0, parseInt(e.target.value) || 0)) }}
               className={inputCls}
             />
           </div>

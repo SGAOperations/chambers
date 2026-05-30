@@ -19,6 +19,12 @@ interface Body {
   name: string
 }
 
+interface Semester {
+  id: string
+  name: string
+  is_active: boolean
+}
+
 interface OneTimeBooking {
   id: string
   body_id: string
@@ -147,6 +153,7 @@ export default function BookingsTab() {
   const [weekly, setWeekly] = useState<WeeklyBooking[]>([])
   const [tabling, setTabling] = useState<TablingBooking[]>([])
   const [bodies, setBodies] = useState<Body[]>([])
+  const [semesters, setSemesters] = useState<Semester[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingBooking, setEditingBooking] = useState<OneTimeBooking | null>(null)
@@ -156,8 +163,6 @@ export default function BookingsTab() {
     booking: { id: string; type: 'One-Time Room' | 'Tabling'; bodyName: string; purpose: string }
     sessions: { id: string; label: string }[]
   } | null>(null)
-  // undefined = loading, null = none found, object = found
-  const [activeSemester, setActiveSemester] = useState<{ id: string; name: string } | null | undefined>(undefined)
 
   const fetchBookings = async () => {
     const res = await fetch('/api/administrator/bookings')
@@ -165,7 +170,6 @@ export default function BookingsTab() {
     setOneTime(data.oneTime || [])
     setWeekly(data.weekly || [])
     setTabling(data.tabling || [])
-    setActiveSemester(data.activeSemester ?? null)
     setLoading(false)
   }
 
@@ -173,6 +177,12 @@ export default function BookingsTab() {
     const res = await fetch('/api/administrator/bodies')
     const data = await res.json()
     setBodies(data.bodies || [])
+  }
+
+  const fetchSemesters = async () => {
+    const res = await fetch('/api/administrator/semesters')
+    const data = await res.json()
+    setSemesters(data.semesters || [])
   }
 
   const toggleEvent = async (id: string, current: boolean) => {
@@ -189,6 +199,7 @@ export default function BookingsTab() {
   useEffect(() => {
     fetchBookings()
     fetchBodies()
+    fetchSemesters()
   }, [])
 
   const sortedWeekly = loading ? [] : [...weekly].sort((a, b) => {
@@ -203,13 +214,6 @@ export default function BookingsTab() {
 
   return (
     <div className="space-y-4">
-      {/* Semester error banner */}
-      {!loading && activeSemester === null && (
-        <div className="flex items-center gap-2 bg-[#3d0f0f] border border-[#c8102e] text-[#f87171] text-sm rounded-lg px-4 py-3">
-          <span className="font-semibold">Semester Error:</span> No active semester is set. Please activate a semester in Other Settings before creating new bookings.
-        </div>
-      )}
-
       {/* Sub-tab bar */}
       <div className="flex gap-1 border-b border-[#1e5080]">
         {(['One-Time Rooms', 'Weekly Rooms', 'Tables'] as BookingSubTab[]).map(tab => (
@@ -231,7 +235,7 @@ export default function BookingsTab() {
       <div className="flex justify-end">
         <button
           onClick={() => setShowModal(true)}
-          disabled={loading || activeSemester === null}
+          disabled={loading}
           className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + New Booking
@@ -247,6 +251,7 @@ export default function BookingsTab() {
           {subTab === 'One-Time Rooms' && (
             <OneTimeForm
               bodies={bodies}
+              semesters={semesters}
               onClose={() => setShowModal(false)}
               onSuccess={fetchBookings}
             />
@@ -254,6 +259,7 @@ export default function BookingsTab() {
           {subTab === 'Weekly Rooms' && (
             <WeeklyForm
                 bodies={bodies}
+                semesters={semesters}
                 onClose={() => setShowModal(false)}
                 onSuccess={fetchBookings}
             />
@@ -261,6 +267,7 @@ export default function BookingsTab() {
           {subTab === 'Tables' && (
             <TablingForm
                 bodies={bodies}
+                semesters={semesters}
                 onClose={() => setShowModal(false)}
                 onSuccess={fetchBookings}
             />

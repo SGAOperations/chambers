@@ -31,7 +31,8 @@ export default function OnboardingPage() {
   // Auth guard + onboarding check
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { session } } = await supabase.auth.getSession()
+      const user = session?.user ?? null
       if (!user) {
         router.push('/')
         return
@@ -186,7 +187,7 @@ export default function OnboardingPage() {
     <div className="min-h-screen bg-gradient-to-br from-[#112244] via-[#0a1628] to-[#060e1a] flex items-center justify-center px-4 relative">
       <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #ffffff 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
 
-      <div className="bg-[#184073] rounded-2xl shadow-2xl w-full max-w-md p-10 space-y-6 relative z-10">
+      <div className="bg-[#184073] rounded-2xl shadow-2xl w-full max-w-lg p-12 space-y-6 relative z-10">
         {/* Brand */}
         <div className="text-center">
           <span className="text-[#c8102e] font-bold text-3xl tracking-tight">Chambers</span>
@@ -251,7 +252,7 @@ export default function OnboardingPage() {
                   target="_blank"
                   className="block text-xs font-medium text-center text-[#93b8d8] bg-[#0f2a4a] border border-[#1e5080] rounded-md px-3 py-2 hover:bg-[#1a3a5c] hover:text-[#f0f6ff] transition"
                 >
-                  Why Can&apos;t I Select My Body?
+                  Why Do I Need Admin Approval?
                 </Link>
                 <div className="max-h-64 overflow-y-auto space-y-4 pr-1">
                   {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([division, divBodies]) => (
@@ -262,7 +263,7 @@ export default function OnboardingPage() {
                           body.body_open ? (
                             <label
                               key={body.id}
-                              className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-white/5 transition"
+                              className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition ${selectedBodyIds.has(body.id) ? 'bg-[#0f3d20] hover:bg-[#0f3d20]' : 'hover:bg-white/5'}`}
                             >
                               <input
                                 type="checkbox"
@@ -270,25 +271,30 @@ export default function OnboardingPage() {
                                 onChange={() => toggleBody(body.id)}
                                 className="accent-[#c8102e] w-4 h-4 flex-shrink-0"
                               />
-                              <span className="text-sm text-[#f0f6ff]">{body.name}</span>
+                              <span className={`text-sm ${selectedBodyIds.has(body.id) ? 'text-[#4ade80]' : 'text-[#f0f6ff]'}`}>{body.name}</span>
                             </label>
                           ) : (
                             <label
                               key={body.id}
-                              className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-white/5 transition"
+                              className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition ${selectedBodyIds.has(body.id) ? 'bg-[#1e3a5f] hover:bg-[#1e3a5f]' : 'hover:bg-white/5'}`}
                             >
-                              <div className="relative w-4 h-4 flex-shrink-0">
-                                <input
-                                  type="checkbox"
-                                  checked={selectedBodyIds.has(body.id)}
-                                  onChange={() => toggleBody(body.id)}
-                                  className="accent-[#c8102e] w-4 h-4"
-                                />
-                                <svg className="absolute inset-0 w-4 h-4 text-[#6a96bb] pointer-events-none" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                              <span className="text-sm text-[#6a96bb]">{body.name}</span>
+                              <input
+                                type="checkbox"
+                                checked={selectedBodyIds.has(body.id)}
+                                onChange={() => toggleBody(body.id)}
+                                className="accent-[#c8102e] w-4 h-4 flex-shrink-0"
+                              />
+                              <span className="flex flex-col">
+                                <span className={`flex items-center gap-1.5 text-sm ${selectedBodyIds.has(body.id) ? 'text-[#f59b0e]' : 'text-[#6a96bb]'}`}>
+                                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M10 1a4.5 4.5 0 00-4.5 4.5V9H5a2 2 0 00-2 2v6a2 2 0 002 2h10a2 2 0 002-2v-6a2 2 0 00-2-2h-.5V5.5A4.5 4.5 0 0010 1zm3 8V5.5a3 3 0 10-6 0V9h6z" clipRule="evenodd" />
+                                  </svg>
+                                  {body.name}
+                                </span>
+                                {selectedBodyIds.has(body.id) && (
+                                  <span className="text-xs text-[#6a96bb] ml-5">Requires approval - will submit a request</span>
+                                )}
+                              </span>
                             </label>
                           )
                         ))}

@@ -127,12 +127,23 @@ export async function POST(request: Request) {
     { data: blackoutHit },
     { data: weekBookings },
     { data: override },
+    { data: settings },
   ] = await Promise.all([
     adminSupabase.from('space_bookings').select('id').eq('space_id', space_id).lt('start_time', end_time).gt('end_time', start_time).limit(1),
     adminSupabase.from('space_blackouts').select('id').or(`space_id.eq.${space_id},space_id.is.null`).lt('start_time', end_time).gt('end_time', start_time).limit(1),
     adminSupabase.from('space_bookings').select('start_time, end_time').eq('creator_id', user.id).lt('start_time', weekEnd).gt('end_time', weekStart),
     adminSupabase.from('space_weekly_limit_overrides').select('weekly_hours_limit').eq('user_id', user.id).maybeSingle(),
+    adminSupabase.from('app_settings').select('min_hours_advance_spaces').eq('id', 1).single(),
   ])
+
+  // Advance notice check
+  const minHours: number = settings?.min_hours_advance_spaces ?? 24
+  const earliestAllowed = new Date(Date.now() + minHours * 60 * 60 * 1000)
+  if (new Date(start_time) < earliestAllowed) {
+    return NextResponse.json({
+      error: `Bookings must be made at least ${minHours} hour${minHours === 1 ? '' : 's'} in advance.`,
+    }, { status: 400 })
+  }
 
   if (overlapping && overlapping.length > 0) {
     return NextResponse.json({ error: 'This time slot overlaps with an existing booking for this space.' }, { status: 400 })

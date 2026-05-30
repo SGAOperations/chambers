@@ -13,6 +13,29 @@ interface Body {
   name: string
 }
 
+interface MyRequest {
+  id: string
+  type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
+  purpose: string
+  status: 'Pending' | 'Fulfilled' | 'Denied'
+  notes: string | null
+  created_at: string
+  bodies: { name: string } | null
+  room_request_details: {
+    room_name: string | null
+    start_date: string
+    start_time: string
+    end_time: string
+    end_date: string | null
+  }[] | null
+  tabling_request_sessions: {
+    session_date: string
+    start_time: string
+    end_time: string
+  }[] | null
+  user_alerts: { denial_reason: string | null }[] | null
+}
+
 interface TablingSession {
   session_date: string
   start_time: string
@@ -100,6 +123,32 @@ function GuidelinesPanel({ type }: { type: RequestType }) {
   )
 }
 
+function formatTime(time: string) {
+  const [h, m] = time.split(':')
+  const hour = parseInt(h)
+  const ampm = hour >= 12 ? 'PM' : 'AM'
+  const displayHour = hour % 12 || 12
+  return `${displayHour}:${m} ${ampm}`
+}
+
+function formatDate(date: string) {
+  return new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
+}
+
+const requestStatusBarColors: Record<string, string> = {
+  'Pending': 'bg-[#fbbf24]',
+  'Fulfilled': 'bg-[#4ade80]',
+  'Denied': 'bg-[#f87171]',
+}
+
+const requestStatusTextColors: Record<string, string> = {
+  'Pending': 'text-[#fbbf24]',
+  'Fulfilled': 'text-[#4ade80]',
+  'Denied': 'text-[#f87171]',
+}
+
 function getMinDate(days: number): string {
   const d = new Date()
   d.setDate(d.getDate() + days)
@@ -116,6 +165,10 @@ export default function RequestPage() {
   const [error, setError] = useState('')
   const [minDaysRoom, setMinDaysRoom] = useState(0)
   const [minDaysTabling, setMinDaysTabling] = useState(0)
+  const [showMyRequests, setShowMyRequests] = useState(false)
+  const [myRequests, setMyRequests] = useState<MyRequest[]>([])
+  const [requestsLoading, setRequestsLoading] = useState(false)
+  const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     body_id: '',
@@ -152,6 +205,14 @@ export default function RequestPage() {
     }
     fetchBodies()
   }, [])
+
+  const fetchMyRequests = async () => {
+    setRequestsLoading(true)
+    const res = await fetch('/api/me/requests')
+    const data = await res.json()
+    setMyRequests(data.requests || [])
+    setRequestsLoading(false)
+  }
 
   const updateSession = (index: number, field: keyof TablingSession, value: string) => {
     setSessions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
@@ -303,174 +364,319 @@ export default function RequestPage() {
             {t === 'One-Time Room' ? 'One-Time/Multiple Room' : t}
           </button>
         ))}
+        <label className="ml-auto flex items-center gap-2.5 cursor-pointer pb-2 select-none">
+          <span className={`text-sm font-medium transition-colors ${showMyRequests ? 'text-[#f0f6ff]' : 'text-[#93b8d8]'}`}>
+            Viewing Previous Requests
+          </span>
+          <button
+            role="switch"
+            aria-checked={showMyRequests}
+            onClick={() => {
+              const next = !showMyRequests
+              setShowMyRequests(next)
+              if (next && myRequests.length === 0) fetchMyRequests()
+            }}
+            className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c8102e] ${
+              showMyRequests ? 'bg-[#c8102e]' : 'bg-[#1e5080]'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
+                showMyRequests ? 'translate-x-4' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </label>
       </div>
 
-      {/* Common fields */}
-      <div className="space-y-3">
-        <div>
-          <label className={labelCls}>Body *</label>
-          {bodiesLoading ? (
-            <Skeleton className="h-10 w-full animate-pulse bg-[#0f2a4a] border border-[#1e5080]" />
+      {showMyRequests ? (
+        <div className="space-y-3">
+          {requestsLoading ? (
+            [0, 1, 2].map(i => (
+              <div key={i} className="rounded-xl border border-[#1e5080] bg-[#184073] animate-pulse p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-36" />
+              </div>
+            ))
+          ) : myRequests.filter(r => r.type === type).length === 0 ? (
+            <p className="text-[#6a96bb] text-sm">No {type === 'One-Time Room' ? 'One-Time/Multiple Room' : type} requests submitted yet.</p>
           ) : (
-            <select value={form.body_id} onChange={e => setForm({ ...form, body_id: e.target.value })} className={inputCls}>
-              <option value="">Select Body</option>
-              {bodies.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
+            <div className="divide-y divide-[#1e5080] border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073]">
+              {myRequests.filter(r => r.type === type).map(req => {
+                const isExpanded = expandedRequestId === req.id
+                const firstDetail = req.room_request_details?.[0]
+                const firstSession = req.tabling_request_sessions?.[0]
+                const dateLabel = firstDetail
+                  ? formatDate(firstDetail.start_date)
+                  : firstSession
+                  ? formatDate(firstSession.session_date)
+                  : null
+
+                return (
+                  <div key={req.id}>
+                    <div
+                      onClick={() => setExpandedRequestId(isExpanded ? null : req.id)}
+                      className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a4d8a] transition-colors cursor-pointer"
+                    >
+                      <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${requestStatusBarColors[req.status] || 'bg-[#1e5080]'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-[#f0f6ff] truncate">{req.purpose}</p>
+                        <p className="text-sm text-[#6a96bb]">
+                          {req.bodies?.name}
+                          {dateLabel ? ` · ${dateLabel}` : ''}
+                        </p>
+                      </div>
+                      <span className="hidden md:inline text-xs text-[#6a96bb] flex-shrink-0">
+                        {req.type === 'One-Time Room' ? 'One-Time/Multiple Room' : req.type}
+                      </span>
+                      <span className={`text-xs font-semibold flex-shrink-0 ${requestStatusTextColors[req.status] || 'text-[#93b8d8]'}`}>
+                        {req.status}
+                      </span>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="bg-[#0f2a4a] rounded-b-xl px-5 py-4 space-y-2 border-t border-[#1e5080]">
+                        <div>
+                          <span className="text-xs font-medium text-[#93b8d8]">Body</span>
+                          <p className="text-sm text-[#f0f6ff]">{req.bodies?.name ?? '—'}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs font-medium text-[#93b8d8]">Type</span>
+                          <p className="text-sm text-[#f0f6ff]">{req.type === 'One-Time Room' ? 'One-Time/Multiple Room' : req.type}</p>
+                        </div>
+                        <div>
+                          <span className="text-xs font-medium text-[#93b8d8]">Submitted</span>
+                          <p className="text-sm text-[#f0f6ff]">
+                            {new Date(req.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </p>
+                        </div>
+
+                        {req.room_request_details && req.room_request_details.length > 0 && (
+                          <div>
+                            <span className="text-xs font-medium text-[#93b8d8]">Sessions</span>
+                            <div className="mt-1 space-y-0.5">
+                              {req.room_request_details.map((d, i) => (
+                                <p key={i} className="text-sm text-[#f0f6ff]">
+                                  {d.room_name ? `${d.room_name} · ` : ''}
+                                  {d.end_date && d.end_date !== d.start_date
+                                    ? `${formatDate(d.start_date)} – ${formatDate(d.end_date)}`
+                                    : formatDate(d.start_date)
+                                  }
+                                  {' · '}{formatTime(d.start_time)} – {formatTime(d.end_time)}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {req.tabling_request_sessions && req.tabling_request_sessions.length > 0 && (
+                          <div>
+                            <span className="text-xs font-medium text-[#93b8d8]">Sessions</span>
+                            <div className="mt-1 space-y-0.5">
+                              {req.tabling_request_sessions.map((s, i) => (
+                                <p key={i} className="text-sm text-[#f0f6ff]">
+                                  {formatDate(s.session_date)} · {formatTime(s.start_time)} – {formatTime(s.end_time)}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {req.status === 'Fulfilled' && req.notes && (
+                          <div>
+                            <span className="text-xs font-medium text-[#93b8d8]">Admin Notes</span>
+                            <p className="text-sm text-[#f0f6ff]">{req.notes}</p>
+                          </div>
+                        )}
+
+                        {req.status === 'Denied' && req.user_alerts?.[0]?.denial_reason && (
+                          <div>
+                            <span className="text-xs font-medium text-[#93b8d8]">Denial Reason</span>
+                            <p className="text-sm text-[#f0f6ff]">{req.user_alerts[0].denial_reason}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           )}
         </div>
-
-        <div>
-          <label className={labelCls}>Purpose *</label>
-          <input type="text" placeholder="e.g. Focus Group" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} className={inputCls} />
-        </div>
-
-        {/* One-Time Room fields */}
-        {type === 'One-Time Room' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-[#f0f6ff]">Sessions</span>
-              <button
-                onClick={() => setOneTimeSessions(prev => [...prev, emptyOneTimeSession()])}
-                className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
-              >
-                + Add Session
-              </button>
+      ) : (
+        <>
+          {/* Common fields */}
+          <div className="space-y-3">
+            <div>
+              <label className={labelCls}>Body *</label>
+              {bodiesLoading ? (
+                <Skeleton className="h-10 w-full animate-pulse bg-[#0f2a4a] border border-[#1e5080]" />
+              ) : (
+                <select value={form.body_id} onChange={e => setForm({ ...form, body_id: e.target.value })} className={inputCls}>
+                  <option value="">Select Body</option>
+                  {bodies.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              )}
             </div>
 
-            {oneTimeSessions.map((s, i) => (
-              <div key={i} className="border border-[#1e5080] rounded-xl p-4 space-y-3 bg-[#0f2a4a]">
+            <div>
+              <label className={labelCls}>Purpose *</label>
+              <input type="text" placeholder="e.g. Focus Group" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} className={inputCls} />
+            </div>
+
+            {/* One-Time Room fields */}
+            {type === 'One-Time Room' && (
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">Session {i + 1}</span>
-                  {oneTimeSessions.length > 1 && (
-                    <button
-                      onClick={() => setOneTimeSessions(prev => prev.filter((_, idx) => idx !== i))}
-                      className="text-xs text-[#6a96bb] hover:text-[#c8102e] transition-colors"
-                    >
-                      Remove
-                    </button>
-                  )}
+                  <span className="text-sm font-semibold text-[#f0f6ff]">Sessions</span>
+                  <button
+                    onClick={() => setOneTimeSessions(prev => [...prev, emptyOneTimeSession()])}
+                    className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+                  >
+                    + Add Session
+                  </button>
                 </div>
+
+                {oneTimeSessions.map((s, i) => (
+                  <div key={i} className="border border-[#1e5080] rounded-xl p-4 space-y-3 bg-[#0f2a4a]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">Session {i + 1}</span>
+                      {oneTimeSessions.length > 1 && (
+                        <button
+                          onClick={() => setOneTimeSessions(prev => prev.filter((_, idx) => idx !== i))}
+                          className="text-xs text-[#6a96bb] hover:text-[#c8102e] transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <div>
+                      <label className={labelCls}>Preferred Room</label>
+                      <input type="text" placeholder="Optional" value={s.room_name} onChange={e => updateOneTimeSession(i, 'room_name', e.target.value)} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Date *</label>
+                      <input type="date" value={s.session_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => updateOneTimeSession(i, 'session_date', e.target.value)} className={inputCls} />
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <label className={labelCls}>Start Time *</label>
+                        <TimePicker value={s.start_time} onChange={v => updateOneTimeSession(i, 'start_time', v)} />
+                      </div>
+                      <div className="flex-1">
+                        <label className={labelCls}>End Time *</label>
+                        <TimePicker value={s.end_time} onChange={v => updateOneTimeSession(i, 'end_time', v)} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Weekly Room fields */}
+            {type === 'Weekly Room' && (
+              <>
                 <div>
                   <label className={labelCls}>Preferred Room</label>
-                  <input type="text" placeholder="Optional" value={s.room_name} onChange={e => updateOneTimeSession(i, 'room_name', e.target.value)} className={inputCls} />
+                  <input type="text" placeholder="Optional" value={form.room_name} onChange={e => setForm({ ...form, room_name: e.target.value })} className={inputCls} />
                 </div>
-                <div>
-                  <label className={labelCls}>Date *</label>
-                  <input type="date" value={s.session_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => updateOneTimeSession(i, 'session_date', e.target.value)} className={inputCls} />
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label className={labelCls}>Start Date *</label>
+                    <input type="date" value={form.start_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => setForm({ ...form, start_date: e.target.value })} className={inputCls} />
+                  </div>
+                  <div className="flex-1">
+                    <label className={labelCls}>End Date *</label>
+                    <input type="date" value={form.end_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => setForm({ ...form, end_date: e.target.value })} className={inputCls} />
+                  </div>
                 </div>
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <label className={labelCls}>Start Time *</label>
-                    <TimePicker value={s.start_time} onChange={v => updateOneTimeSession(i, 'start_time', v)} />
+                    <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
                   </div>
                   <div className="flex-1">
                     <label className={labelCls}>End Time *</label>
-                    <TimePicker value={s.end_time} onChange={v => updateOneTimeSession(i, 'end_time', v)} />
+                    <TimePicker value={form.end_time} onChange={v => setForm({ ...form, end_time: v })} />
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              </>
+            )}
 
-        {/* Weekly Room fields */}
-        {type === 'Weekly Room' && (
-          <>
-            <div>
-              <label className={labelCls}>Preferred Room</label>
-              <input type="text" placeholder="Optional" value={form.room_name} onChange={e => setForm({ ...form, room_name: e.target.value })} className={inputCls} />
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className={labelCls}>Start Date *</label>
-                <input type="date" value={form.start_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => setForm({ ...form, start_date: e.target.value })} className={inputCls} />
-              </div>
-              <div className="flex-1">
-                <label className={labelCls}>End Date *</label>
-                <input type="date" value={form.end_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => setForm({ ...form, end_date: e.target.value })} className={inputCls} />
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className={labelCls}>Start Time *</label>
-                <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
-              </div>
-              <div className="flex-1">
-                <label className={labelCls}>End Time *</label>
-                <TimePicker value={form.end_time} onChange={v => setForm({ ...form, end_time: v })} />
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Tabling fields */}
-        {type === 'Tabling' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-[#f0f6ff]">Sessions</span>
-              <button
-                onClick={() => setSessions(prev => [...prev, emptySession()])}
-                className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
-              >
-                + Add Session
-              </button>
-            </div>
-
-            {sessions.map((s, i) => (
-              <div key={i} className="border border-[#1e5080] rounded-xl p-4 space-y-3 bg-[#0f2a4a]">
+            {/* Tabling fields */}
+            {type === 'Tabling' && (
+              <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">Session {i + 1}</span>
-                  {sessions.length > 1 && (
-                    <button
-                      onClick={() => setSessions(prev => prev.filter((_, idx) => idx !== i))}
-                      className="text-xs text-[#6a96bb] hover:text-[#c8102e] transition-colors"
-                    >
-                      Remove
-                    </button>
-                  )}
+                  <span className="text-sm font-semibold text-[#f0f6ff]">Sessions</span>
+                  <button
+                    onClick={() => setSessions(prev => [...prev, emptySession()])}
+                    className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+                  >
+                    + Add Session
+                  </button>
                 </div>
 
-                <div>
-                  <label className={labelCls}>Date *</label>
-                  <input type="date" value={s.session_date} min={minDaysTabling > 0 ? getMinDate(minDaysTabling) : undefined} onChange={e => updateSession(i, 'session_date', e.target.value)} className={inputCls} />
-                </div>
+                {sessions.map((s, i) => (
+                  <div key={i} className="border border-[#1e5080] rounded-xl p-4 space-y-3 bg-[#0f2a4a]">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#6a96bb] uppercase tracking-wide">Session {i + 1}</span>
+                      {sessions.length > 1 && (
+                        <button
+                          onClick={() => setSessions(prev => prev.filter((_, idx) => idx !== i))}
+                          className="text-xs text-[#6a96bb] hover:text-[#c8102e] transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
 
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label className={labelCls}>Start Time *</label>
-                    <TimePicker value={s.start_time} onChange={v => updateSession(i, 'start_time', v)} />
+                    <div>
+                      <label className={labelCls}>Date *</label>
+                      <input type="date" value={s.session_date} min={minDaysTabling > 0 ? getMinDate(minDaysTabling) : undefined} onChange={e => updateSession(i, 'session_date', e.target.value)} className={inputCls} />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <div className="flex-1">
+                        <label className={labelCls}>Start Time *</label>
+                        <TimePicker value={s.start_time} onChange={v => updateSession(i, 'start_time', v)} />
+                      </div>
+                      <div className="flex-1">
+                        <label className={labelCls}>End Time *</label>
+                        <TimePicker value={s.end_time} onChange={v => updateSession(i, 'end_time', v)} />
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <label className={labelCls}>End Time *</label>
-                    <TimePicker value={s.end_time} onChange={v => updateSession(i, 'end_time', v)} />
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            <div>
+              <label className={labelCls}>Additional Notes</label>
+              <textarea
+                placeholder="Optional"
+                value={form.notes}
+                onChange={e => setForm({ ...form, notes: e.target.value })}
+                rows={3}
+                className={inputCls}
+              />
+            </div>
           </div>
-        )}
 
-        <div>
-          <label className={labelCls}>Additional Notes</label>
-          <textarea
-            placeholder="Optional"
-            value={form.notes}
-            onChange={e => setForm({ ...form, notes: e.target.value })}
-            rows={3}
-            className={inputCls}
-          />
-        </div>
-      </div>
+          {error && <p className="text-[#c8102e] text-sm">{error}</p>}
 
-      {error && <p className="text-[#c8102e] text-sm">{error}</p>}
-
-      <button
-        onClick={handleSubmit}
-        disabled={submitting}
-        className="px-6 py-2.5 bg-[#c8102e] hover:bg-[#a00d24] hover:scale-105 text-white text-sm rounded-lg font-medium transition-all disabled:opacity-50"
-      >
-        {submitting ? 'Submitting...' : 'Submit Request'}
-      </button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="px-6 py-2.5 bg-[#c8102e] hover:bg-[#a00d24] hover:scale-105 text-white text-sm rounded-lg font-medium transition-all disabled:opacity-50"
+          >
+            {submitting ? 'Submitting...' : 'Submit Request'}
+          </button>
+        </>
+      )}
       </div>
 
       {/* Guidelines — right column, hidden on small screens */}

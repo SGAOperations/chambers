@@ -150,6 +150,7 @@ export default function SGASpacesPage() {
   })
   const [remainingHours, setRemainingHours] = useState<number | null>(null)
   const [limitHours, setLimitHours] = useState<number>(18)
+  const [minHoursAdvance, setMinHoursAdvance] = useState<number>(24)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null)
   const [editBooking, setEditBooking] = useState<EditBooking | null>(null)
@@ -181,6 +182,7 @@ export default function SGASpacesPage() {
         setRemainingHours(data.remaining)
         setLimitHours(data.limit)
         if (data.user_id) setCurrentUserId(data.user_id)
+        if (data.min_hours_advance != null) setMinHoursAdvance(data.min_hours_advance)
       })
   }, [bookings])
 
@@ -261,11 +263,16 @@ export default function SGASpacesPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h1 className="text-2xl font-bold text-[#f0f6ff]">SGA Spaces</h1>
           {remainingHours !== null ? (
-            <div className="flex items-center gap-2 bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-4 py-2">
-              <span className="text-sm text-[#93b8d8]">This week:</span>
-              <span className={`text-sm font-semibold ${remainingHours <= 2 ? 'text-[#c8102e]' : 'text-[#f0f6ff]'}`}>
-                {remainingHours.toFixed(1)} / {limitHours} hrs remaining
-              </span>
+            <div className="flex items-center gap-3 flex-wrap justify-end">
+              <div className="flex items-center gap-2 bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-4 py-2">
+                <span className="text-sm text-[#93b8d8]">This week:</span>
+                <span className={`text-sm font-semibold ${remainingHours <= 2 ? 'text-[#c8102e]' : 'text-[#f0f6ff]'}`}>
+                  {remainingHours.toFixed(1)} / {limitHours} hrs remaining
+                </span>
+              </div>
+              <div className="flex items-center gap-2 bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-4 py-2">
+                <span className="text-sm text-[#93b8d8]">{minHoursAdvance}h advance notice required</span>
+              </div>
             </div>
           ) : (
             <Skeleton className="h-9 w-48 border border-[#1e5080] animate-pulse" />
@@ -324,6 +331,7 @@ export default function SGASpacesPage() {
               bookings={bookings}
               blackouts={blackouts}
               currentUserId={currentUserId ?? undefined}
+              minHoursAdvance={minHoursAdvance}
               onSlotClick={(start, end) => setModalSlot({ start, end })}
               onBookingClick={handleBookingClick}
             />

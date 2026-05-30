@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import AuthGuard from './authguard'
+import SettingsModal from './settings-modal'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -25,6 +26,7 @@ export default function DashboardLayout({
   const [showIdleWarning, setShowIdleWarning] = useState(false)
   const [idleCountdown, setIdleCountdown] = useState(60)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
@@ -70,6 +72,7 @@ export default function DashboardLayout({
   }
 
   const handleLogout = async () => {
+    localStorage.removeItem('chambers_last_active')
     await supabase.auth.signOut()
     router.push('/')
   }
@@ -84,6 +87,7 @@ export default function DashboardLayout({
       if (remaining <= 0) {
         clearInterval(countdownIntervalRef.current!)
         countdownIntervalRef.current = null
+        localStorage.removeItem('chambers_last_active')
         supabase.auth.signOut().then(() => router.push('/'))
       }
     }, 1000)
@@ -98,10 +102,20 @@ export default function DashboardLayout({
     setShowIdleWarning(false)
     setIdleCountdown(60)
     idleTimerRef.current = setTimeout(startWarning, 44 * 60 * 1000)
+    localStorage.setItem('chambers_last_active', Date.now().toString())
   }
 
   useEffect(() => {
     const IDLE_MS = 44 * 60 * 1000
+
+    const storedLastActive = localStorage.getItem('chambers_last_active')
+    if (storedLastActive) {
+      const elapsed = Date.now() - parseInt(storedLastActive, 10)
+      if (elapsed >= IDLE_MS) {
+        supabase.auth.signOut().then(() => router.push('/'))
+        return
+      }
+    }
 
     const resetTimer = () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
@@ -112,14 +126,31 @@ export default function DashboardLayout({
         setIdleCountdown(60)
       }
       idleTimerRef.current = setTimeout(startWarning, IDLE_MS)
+      localStorage.setItem('chambers_last_active', Date.now().toString())
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const stored = localStorage.getItem('chambers_last_active')
+        if (stored) {
+          const elapsed = Date.now() - parseInt(stored, 10)
+          if (elapsed >= IDLE_MS) {
+            if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+            if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current)
+            supabase.auth.signOut().then(() => router.push('/'))
+          }
+        }
+      }
     }
 
     const events = ['mousemove', 'mousedown', 'keydown', 'touchstart'] as const
     events.forEach(e => window.addEventListener(e, resetTimer))
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     resetTimer()
 
     return () => {
       events.forEach(e => window.removeEventListener(e, resetTimer))
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current)
     }
@@ -201,9 +232,21 @@ export default function DashboardLayout({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.11.1-alpha</p>
+            <p className="text-slate-600 text-xs mt-1">v1.11.0</p>
             {userName && (
-              <p className="text-slate-500 text-xs mt-2 italic">{getGreeting()},<br />{userName}</p>
+              <div className="flex items-start justify-between mt-2">
+                <p className="text-slate-500 text-xs italic">{getGreeting()},<br />{userName}</p>
+                <button
+                  onClick={() => setShowSettings(true)}
+                  className="p-1 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0"
+                  aria-label="Settings"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-slate-500">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                  </svg>
+                </button>
+              </div>
             )}
           </div>
 
@@ -239,6 +282,7 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
     </AuthGuard>
   )
 }

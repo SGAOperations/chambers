@@ -34,17 +34,16 @@ export async function POST(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { body_id, purpose, room_name, start_date, end_date, start_time, end_time, reservation_code, status } = await request.json()
+  const { body_id, purpose, room_name, start_date, end_date, start_time, end_time, reservation_code, status, semester_id } = await request.json()
 
-  // Require an active semester
-  const { data: activeSemester } = await adminSupabase
+  const { data: semester } = await adminSupabase
     .from('semesters')
     .select('id')
-    .eq('is_active', true)
+    .eq('id', semester_id)
     .single()
 
-  if (!activeSemester) {
-    return NextResponse.json({ error: 'No active semester. Please activate a semester before creating bookings.' }, { status: 400 })
+  if (!semester) {
+    return NextResponse.json({ error: 'Invalid semester.' }, { status: 400 })
   }
 
   const { data: userData } = await adminSupabase
@@ -56,7 +55,7 @@ export async function POST(request: Request) {
   // Create parent booking
   const { data: booking, error: bookingError } = await adminSupabase
     .from('bookings')
-    .insert({ body_id, purpose, type: 'Weekly Room', created_by: user.id, creator_role: userData?.admin_role ?? null, semester_id: activeSemester.id })
+    .insert({ body_id, purpose, type: 'Weekly Room', created_by: user.id, creator_role: userData?.admin_role ?? null, semester_id })
     .select()
     .single()
 

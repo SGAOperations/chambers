@@ -100,6 +100,9 @@ export default function UsersTab() {
   const [membershipRequests, setMembershipRequests] = useState<MembershipRequest[]>([])
   const [requestsLoading, setRequestsLoading] = useState(true)
   const [resolvingRequest, setResolvingRequest] = useState<string | null>(null)
+  const [editingNames, setEditingNames] = useState<Record<string, string>>({})
+  const [savingName, setSavingName] = useState<string | null>(null)
+  const [savedName, setSavedName] = useState<Set<string>>(new Set())
 
   const fetchUsers = async () => {
     const res = await fetch('/api/administrator/users')
@@ -225,6 +228,21 @@ export default function UsersTab() {
     await fetchMembershipRequests()
     if (status === 'approved') await fetchUsers()
     setResolvingRequest(null)
+  }
+
+  const saveDisplayName = async (userId: string) => {
+    const name = editingNames[userId]?.trim()
+    if (!name) return
+    setSavingName(userId)
+    await fetch('/api/administrator/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: userId, full_name: name }),
+    })
+    setSavingName(null)
+    setSavedName(prev => new Set(prev).add(userId))
+    setTimeout(() => setSavedName(prev => { const next = new Set(prev); next.delete(userId); return next }), 2000)
+    await fetchUsers()
   }
 
   const toggleMembershipRole = async (membershipId: string, currentRole: string) => {
@@ -409,6 +427,26 @@ export default function UsersTab() {
             {/* Expanded section */}
             {expandedUser === u.id && (
               <div className="border-t border-[#1e5080] px-4 py-4 space-y-4 bg-[#0f2a4a]/50 rounded-b-xl">
+                {/* Display name */}
+                <div>
+                  <h4 className="text-sm font-semibold text-[#f0f6ff] mb-2">Display Name</h4>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={editingNames[u.id] ?? u.full_name}
+                      onChange={e => setEditingNames(prev => ({ ...prev, [u.id]: e.target.value }))}
+                      className={inputCls}
+                      placeholder="Full name"
+                    />
+                    <button
+                      onClick={() => saveDisplayName(u.id)}
+                      disabled={savingName === u.id || !(editingNames[u.id] ?? u.full_name).trim()}
+                      className="flex-shrink-0 px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
+                    >
+                      {savingName === u.id ? 'Saving…' : savedName.has(u.id) ? 'Saved!' : 'Save'}
+                    </button>
+                  </div>
+                </div>
                 {/* Admin role */}
                 <div>
                   <h4 className="text-sm font-semibold text-[#f0f6ff] mb-2">Admin Role</h4>

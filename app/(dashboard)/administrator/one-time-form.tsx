@@ -19,6 +19,12 @@ interface Body {
   name: string
 }
 
+interface Semester {
+  id: string
+  name: string
+  is_active: boolean
+}
+
 interface OneTimeSession {
   room_name: string
   booking_date: string
@@ -39,12 +45,15 @@ const emptySession = (): OneTimeSession => ({
 
 interface OneTimeFormProps {
   bodies: Body[]
+  semesters: Semester[]
   onClose: () => void
   onSuccess: () => void
 }
 
-export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormProps) {
+export default function OneTimeForm({ bodies, semesters, onClose, onSuccess }: OneTimeFormProps) {
+  const defaultSemesterId = semesters.find(s => s.is_active)?.id ?? ''
   const [form, setForm] = useState({ body_id: '', purpose: '' })
+  const [semesterId, setSemesterId] = useState(defaultSemesterId)
   const [sessions, setSessions] = useState<OneTimeSession[]>([emptySession()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -54,6 +63,10 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
   }
 
   const handleSubmit = async () => {
+    if (!semesterId) {
+      setError('Please select a semester.')
+      return
+    }
     if (!form.body_id || !form.purpose) {
       setError('Please fill out all required fields.')
       return
@@ -69,7 +82,7 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
     const res = await fetch('/api/administrator/bookings/one-time', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body_id: form.body_id, purpose: form.purpose, sessions }),
+      body: JSON.stringify({ body_id: form.body_id, purpose: form.purpose, sessions, semester_id: semesterId }),
     })
 
     if (res.ok) {
@@ -87,6 +100,24 @@ export default function OneTimeForm({ bodies, onClose, onSuccess }: OneTimeFormP
 
   return (
     <div className="space-y-3">
+      <div>
+        <label className={labelCls}>Semester *</label>
+        {semesters.length === 0 ? (
+          <p className="text-sm text-[#f87171]">No semesters available. Create one in Advanced Settings.</p>
+        ) : (
+          <select
+            value={semesterId}
+            onChange={e => setSemesterId(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">Select Semester</option>
+            {semesters.map(sem => (
+              <option key={sem.id} value={sem.id}>{sem.name}{sem.is_active ? ' (Active)' : ''}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
       <div>
         <label className={labelCls}>Body *</label>
         <select

@@ -25,6 +25,7 @@ interface SpaceCalendarProps {
   bookings: Booking[]
   blackouts: Blackout[]
   currentUserId?: string
+  minHoursAdvance?: number
   onSlotClick: (startIso: string, endIso: string) => void
   onBookingClick?: (booking: Booking) => void
 }
@@ -74,11 +75,32 @@ interface DragPreview {
   endSlot: number // exclusive
 }
 
-export default function SpaceCalendar({ weekStart, bookings, blackouts, currentUserId, onSlotClick, onBookingClick }: SpaceCalendarProps) {
-  const today = new Date()
-  const todayDay = today.getUTCDay()
-  const todaySun = new Date(today)
-  todaySun.setUTCDate(today.getUTCDate() - todayDay)
+export default function SpaceCalendar({
+  weekStart,
+  bookings,
+  blackouts,
+  currentUserId,
+  minHoursAdvance = 24,
+  onSlotClick,
+  onBookingClick,
+}: SpaceCalendarProps) {
+  const [now, setNow] = useState(() => new Date())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
+
+  // Re-express "now" in wall-clock UTC space so day/hour comparisons align with
+  // how the calendar stores times (local 2 PM → T14:00Z, not T18:00Z).
+  const wallClockNow = new Date(Date.UTC(
+    now.getFullYear(), now.getMonth(), now.getDate(),
+    now.getHours(), now.getMinutes(), now.getSeconds(),
+  ))
+
+  const todayDay = wallClockNow.getUTCDay()
+  const todaySun = new Date(wallClockNow)
+  todaySun.setUTCDate(wallClockNow.getUTCDate() - todayDay)
   todaySun.setUTCHours(0, 0, 0, 0)
   const isCurrentWeek = weekStart.getTime() === todaySun.getTime()
 
@@ -89,6 +111,7 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
   const [overlayCursor, setOverlayCursor] = useState<string>('crosshair')
   const [hoveredBookingId, setHoveredBookingId] = useState<string | null>(null)
 
+  // ── Day header labels ────────────────────────────────────────────────────────
   const dayLabels = useMemo(() => {
     return DAYS.map((name, i) => {
       const d = new Date(weekStart)
@@ -100,6 +123,7 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
     })
   }, [weekStart, isCurrentWeek, todayDay])
 
+  // ── Booking spans per day ────────────────────────────────────────────────────
   interface BookingSpan { booking: Booking; startSlot: number; endSlot: number }
   const bookingsByDay: BookingSpan[][] = useMemo(() => {
     const days: BookingSpan[][] = Array.from({ length: 7 }, () => [])
@@ -110,13 +134,13 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
     return days
   }, [bookings])
 
+  // ── Blackout spans per day (multi-day blackouts clipped per column) ───────────
   interface BlackoutSpan { blackout: Blackout; startSlot: number; endSlot: number }
   const blackoutsByDay: BlackoutSpan[][] = useMemo(() => {
     const days: BlackoutSpan[][] = Array.from({ length: 7 }, () => [])
     for (const bl of blackouts) {
       const blStart = new Date(bl.start_time)
       const blEnd = new Date(bl.end_time)
-      // Clip the blackout to each day of the current week it overlaps
       for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
         const dayStart = new Date(weekStart)
         dayStart.setUTCDate(weekStart.getUTCDate() + dayIdx)
@@ -128,17 +152,40 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
         const effEnd = blEnd < dayEnd ? blEnd : dayEnd
         const startSlot = effStart.getUTCHours() * 4 + Math.floor(effStart.getUTCMinutes() / 15)
         const rawEndSlot = effEnd.getUTCHours() * 4 + Math.floor(effEnd.getUTCMinutes() / 15)
-        const endSlot = rawEndSlot === 0 ? TOTAL_SLOTS : rawEndSlot // midnight → fill to end of column
+        const endSlot = rawEndSlot === 0 ? TOTAL_SLOTS : rawEndSlot
         days[dayIdx].push({ blackout: bl, startSlot, endSlot })
       }
     }
     return days
   }, [blackouts, weekStart])
 
+  // ── Advance notice zone: end slot per day up to (now + minHoursAdvance) ──────
+  const noticeZoneEndSlots: number[] = useMemo(() => {
+    const cutoff = new Date(wallClockNow.getTime() + minHoursAdvance * 60 * 60 * 1000)
+    return Array.from({ length: 7 }, (_, dayIdx) => {
+      const dayStart = new Date(weekStart)
+      dayStart.setUTCDate(weekStart.getUTCDate() + dayIdx)
+      dayStart.setUTCHours(0, 0, 0, 0)
+      const dayEnd = new Date(dayStart)
+      dayEnd.setUTCDate(dayStart.getUTCDate() + 1)
+      if (cutoff <= dayStart) return 0          // entire day is past the cutoff
+      if (cutoff >= dayEnd) return TOTAL_SLOTS  // entire day is within the window
+      return cutoff.getUTCHours() * 4 + Math.floor(cutoff.getUTCMinutes() / 15)
+    })
+  }, [now, minHoursAdvance, weekStart])
+
+  // Pixel-precise position of the current time within today's column
+  const todayLineTopPx = (wallClockNow.getUTCHours() * 60 + wallClockNow.getUTCMinutes()) / 15 * SLOT_HEIGHT
+
+  // ── Slot state helpers ───────────────────────────────────────────────────────
   const isSlotBlocked = useCallback((dayIdx: number, slot: number): boolean => {
     if (slot >= DEAD_ZONE_START && slot < DEAD_ZONE_END) return true
     return blackoutsByDay[dayIdx].some(bl => slot >= bl.startSlot && slot < bl.endSlot)
   }, [blackoutsByDay])
+
+  const isSlotInNoticeZone = useCallback((dayIdx: number, slot: number): boolean => {
+    return slot < noticeZoneEndSlots[dayIdx]
+  }, [noticeZoneEndSlots])
 
   const isSlotBooked = useCallback((dayIdx: number, slot: number): boolean => {
     return bookingsByDay[dayIdx].some(bs => slot >= bs.startSlot && bs.endSlot > slot)
@@ -152,10 +199,12 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
     return Math.max(0, Math.min(TOTAL_SLOTS - 1, Math.floor(y / SLOT_HEIGHT)))
   }, [])
 
+  // ── Mouse interaction ────────────────────────────────────────────────────────
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent, dayIdx: number) => {
     const slot = slotFromClientY(e.clientY)
-    if (isSlotBlocked(dayIdx, slot)) {
+    if (isSlotBlocked(dayIdx, slot) || isSlotInNoticeZone(dayIdx, slot)) {
       setOverlayCursor('default')
+      setHoveredBookingId(null)
     } else if (isSlotBooked(dayIdx, slot)) {
       const hit = bookingsByDay[dayIdx].find(bs => slot >= bs.startSlot && slot < bs.endSlot)
       if (hit && hit.booking.creator_id === currentUserId) {
@@ -169,38 +218,33 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
       setOverlayCursor('crosshair')
       setHoveredBookingId(null)
     }
-  }, [slotFromClientY, isSlotBlocked, isSlotBooked, bookingsByDay, currentUserId])
+  }, [slotFromClientY, isSlotBlocked, isSlotInNoticeZone, isSlotBooked, bookingsByDay, currentUserId])
 
   const handleColumnMouseDown = useCallback((e: React.MouseEvent, dayIdx: number) => {
     e.preventDefault()
     const slot = slotFromClientY(e.clientY)
-    if (isSlotBlocked(dayIdx, slot)) return
-    // If clicking an owned booking, open the edit modal instead of dragging
+    if (isSlotBlocked(dayIdx, slot) || isSlotInNoticeZone(dayIdx, slot)) return
     if (isSlotBooked(dayIdx, slot)) {
       if (currentUserId && onBookingClick) {
         const hit = bookingsByDay[dayIdx].find(bs => slot >= bs.startSlot && slot < bs.endSlot)
-        if (hit && hit.booking.creator_id === currentUserId) {
-          onBookingClick(hit.booking)
-        }
+        if (hit && hit.booking.creator_id === currentUserId) onBookingClick(hit.booking)
       }
       return
     }
     dragRef.current = { dayIdx, startSlot: slot, currentSlot: slot }
     setDragPreview({ dayIdx, startSlot: slot, endSlot: slot + 1 })
-  }, [slotFromClientY, isSlotBlocked, isSlotBooked, currentUserId, onBookingClick, bookingsByDay])
+  }, [slotFromClientY, isSlotBlocked, isSlotInNoticeZone, isSlotBooked, currentUserId, onBookingClick, bookingsByDay])
 
-  // Clamp endSlot so drag preview stops before blocked/booked slots
   const clampEndSlot = useCallback((dayIdx: number, startSlot: number, rawEnd: number): number => {
     let end = Math.max(startSlot + 1, rawEnd)
-    // Don't extend into dead zone from above (dead zone is slots 0-27, so stop at 28 minimum)
     for (let s = startSlot + 1; s < end; s++) {
-      if (isSlotBlocked(dayIdx, s) || isSlotBooked(dayIdx, s)) {
+      if (isSlotBlocked(dayIdx, s) || isSlotInNoticeZone(dayIdx, s) || isSlotBooked(dayIdx, s)) {
         end = s
         break
       }
     }
     return Math.min(end, TOTAL_SLOTS)
-  }, [isSlotBlocked, isSlotBooked])
+  }, [isSlotBlocked, isSlotInNoticeZone, isSlotBooked])
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -236,9 +280,8 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
 
   return (
     <div className="rounded-xl border border-[#1e5080] overflow-hidden bg-[#0a1628] select-none">
-      {/* Scroll container wraps both header and body so scrollbar width is shared */}
       <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: '648px' }}>
-        {/* Sticky day header — inside the scroll container so its width matches the body */}
+        {/* Sticky day header */}
         <div ref={headerRef} className="flex border-b border-[#1e5080] sticky top-0 z-50 bg-[#0a1628]">
           <div className="w-14 flex-shrink-0 border-r border-[#1e5080]" />
           {dayLabels.map((dl, i) => (
@@ -274,101 +317,127 @@ export default function SpaceCalendar({ weekStart, bookings, blackouts, currentU
           </div>
 
           {/* Day columns */}
-          {Array.from({ length: 7 }, (_, dayIdx) => (
-            <div
-              key={dayIdx}
-              className="flex-1 min-w-0 border-r border-[#1e5080] last:border-r-0 relative"
-              style={{ height: totalHeight }}
-            >
-              {/* Hour grid lines */}
-              {Array.from({ length: TOTAL_SLOTS }, (_, slot) => (
-                <div
-                  key={slot}
-                  className={`absolute inset-x-0 border-t ${
-                    slot % 4 === 0 ? 'border-[#1e5080]' : 'border-white/5'
-                  }`}
-                  style={{ top: slot * SLOT_HEIGHT, height: SLOT_HEIGHT }}
-                />
-              ))}
+          {Array.from({ length: 7 }, (_, dayIdx) => {
+            const noticeEndSlot = noticeZoneEndSlots[dayIdx]
+            const isToday = isCurrentWeek && dayIdx === todayDay
 
-              {/* Dead zone band */}
+            return (
               <div
-                className="absolute inset-x-0 bg-[#c8102e]/8 z-10 pointer-events-none"
-                style={{
-                  top: DEAD_ZONE_START * SLOT_HEIGHT,
-                  height: (DEAD_ZONE_END - DEAD_ZONE_START) * SLOT_HEIGHT,
-                }}
+                key={dayIdx}
+                className="flex-1 min-w-0 border-r border-[#1e5080] last:border-r-0 relative"
+                style={{ height: totalHeight }}
               >
-                <div className="flex items-center justify-center h-full">
-                  <span className="text-[9px] text-[#c8102e]/60 font-medium tracking-wide">CSC Closed</span>
-                </div>
-              </div>
-
-              {/* Blackout overlays */}
-              {blackoutsByDay[dayIdx].map((bl, i) => (
-                <div
-                  key={i}
-                  className="absolute inset-x-0 z-20 pointer-events-none"
-                  style={{
-                    top: bl.startSlot * SLOT_HEIGHT,
-                    height: (bl.endSlot - bl.startSlot) * SLOT_HEIGHT,
-                  }}
-                >
+                {/* Hour grid lines */}
+                {Array.from({ length: TOTAL_SLOTS }, (_, slot) => (
                   <div
-                    className="h-full mx-0.5 rounded bg-[#1e5080]/60 border border-[#1e5080] flex items-start px-1 pt-0.5 overflow-hidden"
-                    style={{ backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(30,80,128,0.3) 3px, rgba(30,80,128,0.3) 6px)' }}
+                    key={slot}
+                    className={`absolute inset-x-0 border-t ${
+                      slot % 4 === 0 ? 'border-[#1e5080]' : 'border-white/5'
+                    }`}
+                    style={{ top: slot * SLOT_HEIGHT, height: SLOT_HEIGHT }}
+                  />
+                ))}
+
+                {/* Advance notice zone — darkened band */}
+                {noticeEndSlot > 0 && (
+                  <div
+                    className="absolute inset-x-0 bg-black/[0.18] z-10 pointer-events-none"
+                    style={{ top: 0, height: noticeEndSlot * SLOT_HEIGHT }}
+                  />
+                )}
+
+                {/* Dead zone band */}
+                <div
+                  className="absolute inset-x-0 bg-[#c8102e]/8 z-10 pointer-events-none"
+                  style={{
+                    top: DEAD_ZONE_START * SLOT_HEIGHT,
+                    height: (DEAD_ZONE_END - DEAD_ZONE_START) * SLOT_HEIGHT,
+                  }}
+                >
+                  <div className="flex items-center justify-center h-full">
+                    <span className="text-[9px] text-[#c8102e]/60 font-medium tracking-wide">CSC Closed</span>
+                  </div>
+                </div>
+
+                {/* Blackout overlays */}
+                {blackoutsByDay[dayIdx].map((bl, i) => (
+                  <div
+                    key={i}
+                    className="absolute inset-x-0 z-20 pointer-events-none"
+                    style={{
+                      top: bl.startSlot * SLOT_HEIGHT,
+                      height: (bl.endSlot - bl.startSlot) * SLOT_HEIGHT,
+                    }}
                   >
-                    <span className="text-[8px] text-[#93b8d8] font-medium truncate">Blocked</span>
+                    <div
+                      className="h-full mx-0.5 rounded bg-[#1e5080]/60 border border-[#1e5080] flex items-start px-1 pt-0.5 overflow-hidden"
+                      style={{ backgroundImage: 'repeating-linear-gradient(135deg, transparent, transparent 3px, rgba(30,80,128,0.3) 3px, rgba(30,80,128,0.3) 6px)' }}
+                    >
+                      <span className="text-[8px] text-[#93b8d8] font-medium truncate">Blocked</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
 
-              {/* Booking overlays */}
-              {bookingsByDay[dayIdx].map((bs, i) => (
+                {/* Booking overlays */}
+                {bookingsByDay[dayIdx].map((bs, i) => (
+                  <div
+                    key={i}
+                    className="absolute inset-x-0 z-30 pointer-events-none"
+                    style={{
+                      top: bs.startSlot * SLOT_HEIGHT,
+                      height: (bs.endSlot - bs.startSlot) * SLOT_HEIGHT,
+                    }}
+                  >
+                    <div className={`h-full mx-0.5 rounded border border-[#c8102e] flex flex-col px-1 pt-0.5 overflow-hidden transition-opacity ${hoveredBookingId === bs.booking.id ? 'bg-[#c8102e]/60 opacity-80' : 'bg-[#c8102e]/80'}`}>
+                      <span className="text-[9px] text-white font-semibold truncate leading-tight">{bs.booking.title}</span>
+                      {bs.booking.creator_name && (
+                        <span className="text-[8px] text-white/70 truncate leading-tight">{bs.booking.creator_name}</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Current time line — only on today's column */}
+                {isToday && (
+                  <div
+                    className="absolute inset-x-0 z-35 pointer-events-none"
+                    style={{ top: todayLineTopPx }}
+                  >
+                    <div className="relative flex items-center">
+                      <div className="w-2 h-2 rounded-full bg-[#c8102e] flex-shrink-0 -translate-y-px" />
+                      <div className="flex-1 h-px bg-[#c8102e]" />
+                    </div>
+                  </div>
+                )}
+
+                {/* Drag selection preview */}
+                {dragPreview && dragPreview.dayIdx === dayIdx && (
+                  <div
+                    className="absolute inset-x-0 z-40 pointer-events-none"
+                    style={{
+                      top: dragPreview.startSlot * SLOT_HEIGHT,
+                      height: (dragPreview.endSlot - dragPreview.startSlot) * SLOT_HEIGHT,
+                    }}
+                  >
+                    <div className="h-full mx-0.5 rounded bg-[#c8102e]/25 border border-[#c8102e]/70 border-dashed flex items-start px-1 pt-0.5 overflow-hidden">
+                      <span className="text-[9px] text-[#c8102e] font-semibold">
+                        {slotToLabel(dragPreview.startSlot)} – {slotToLabel(dragPreview.endSlot)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Drag capture overlay */}
                 <div
-                  key={i}
-                  className="absolute inset-x-0 z-30 pointer-events-none"
-                  style={{
-                    top: bs.startSlot * SLOT_HEIGHT,
-                    height: (bs.endSlot - bs.startSlot) * SLOT_HEIGHT,
-                  }}
-                >
-                  <div className={`h-full mx-0.5 rounded border border-[#c8102e] flex flex-col px-1 pt-0.5 overflow-hidden transition-opacity ${hoveredBookingId === bs.booking.id ? 'bg-[#c8102e]/60 opacity-80' : 'bg-[#c8102e]/80'}`}>
-                    <span className="text-[9px] text-white font-semibold truncate leading-tight">{bs.booking.title}</span>
-                    {bs.booking.creator_name && (
-                      <span className="text-[8px] text-white/70 truncate leading-tight">{bs.booking.creator_name}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {/* Drag selection preview */}
-              {dragPreview && dragPreview.dayIdx === dayIdx && (
-                <div
-                  className="absolute inset-x-0 z-40 pointer-events-none"
-                  style={{
-                    top: dragPreview.startSlot * SLOT_HEIGHT,
-                    height: (dragPreview.endSlot - dragPreview.startSlot) * SLOT_HEIGHT,
-                  }}
-                >
-                  <div className="h-full mx-0.5 rounded bg-[#c8102e]/25 border border-[#c8102e]/70 border-dashed flex items-start px-1 pt-0.5 overflow-hidden">
-                    <span className="text-[9px] text-[#c8102e] font-semibold">
-                      {slotToLabel(dragPreview.startSlot)} – {slotToLabel(dragPreview.endSlot)}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Drag capture overlay — full-column, topmost, handles all mouse events */}
-              <div
-                className="absolute inset-0 z-50"
-                style={{ cursor: overlayCursor }}
-                onMouseMove={e => handleOverlayMouseMove(e, dayIdx)}
-                onMouseLeave={() => { setOverlayCursor('crosshair'); setHoveredBookingId(null) }}
-                onMouseDown={e => handleColumnMouseDown(e, dayIdx)}
-              />
-            </div>
-          ))}
+                  className="absolute inset-0 z-50"
+                  style={{ cursor: overlayCursor }}
+                  onMouseMove={e => handleOverlayMouseMove(e, dayIdx)}
+                  onMouseLeave={() => { setOverlayCursor('crosshair'); setHoveredBookingId(null) }}
+                  onMouseDown={e => handleColumnMouseDown(e, dayIdx)}
+                />
+              </div>
+            )
+          })}
         </div>
       </div>
     </div>

@@ -92,7 +92,7 @@ export default async function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#112244] via-[#0a1628] to-[#060e1a] lg:grid lg:grid-cols-2">
-      <style>{`@keyframes factFadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
+      <style>{`@keyframes factFadeIn { from { opacity: 0; } to { opacity: 1; } } @keyframes keyFlyIn { from { opacity: 0; translate: 150vw 0px; } to { opacity: 0.17; translate: 0px 0px; } } @keyframes keyBodyRotate { from { transform: rotate(-120deg); } to { transform: rotate(0deg); } }`}</style>
       {/* Subtle grid texture */}
       <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, #ffffff 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
 
@@ -103,14 +103,20 @@ export default async function LoginPage() {
           viewBox="-220 -125 450 255"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          style={{ transform: 'scaleX(-1) rotate(-60deg)', opacity: 0.17 }}
+          style={{ transform: 'scaleX(-1) rotate(-60deg)', opacity: 0.17, animation: 'keyFlyIn 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards' }}
         >
           <circle cx="-100" cy="0" r="95" fill="none" stroke="white" strokeWidth="40" />
           <circle cx="-100" cy="0" r="38" fill="#0a1628" />
-          <rect x="-15" y="-22" width="230" height="44" rx="10" fill="white" />
-          <rect x="80" y="-22" width="40" height="90" rx="8" fill="white" />
-          <rect x="130" y="-22" width="40" height="72" rx="8" fill="white" />
-          <rect x="180" y="-22" width="40" height="110" rx="8" fill="white" />
+          <g transform="translate(-100, 0)">
+            <g style={{ animation: 'keyBodyRotate 1.4s cubic-bezier(0.22, 1, 0.36, 1) forwards' }}>
+              <g transform="translate(100, 0)">
+                <rect x="-15" y="-22" width="230" height="44" rx="10" fill="white" />
+                <rect x="80" y="-22" width="40" height="90" rx="8" fill="white" />
+                <rect x="130" y="-22" width="40" height="72" rx="8" fill="white" />
+                <rect x="180" y="-22" width="40" height="110" rx="8" fill="white" />
+              </g>
+            </g>
+          </g>
         </svg>
       </div>
 

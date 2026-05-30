@@ -19,8 +19,15 @@ interface Body {
   name: string
 }
 
+interface Semester {
+  id: string
+  name: string
+  is_active: boolean
+}
+
 interface WeeklyFormProps {
   bodies: Body[]
+  semesters: Semester[]
   onClose: () => void
   onSuccess: () => void
 }
@@ -28,7 +35,9 @@ interface WeeklyFormProps {
 const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
-export default function WeeklyForm({ bodies, onClose, onSuccess }: WeeklyFormProps) {
+export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: WeeklyFormProps) {
+  const defaultSemesterId = semesters.find(s => s.is_active)?.id ?? ''
+  const [semesterId, setSemesterId] = useState(defaultSemesterId)
   const [form, setForm] = useState({
     body_id: '',
     purpose: '',
@@ -44,6 +53,10 @@ export default function WeeklyForm({ bodies, onClose, onSuccess }: WeeklyFormPro
   const [error, setError] = useState('')
 
   const handleSubmit = async () => {
+    if (!semesterId) {
+      setError('Please select a semester.')
+      return
+    }
     if (!form.body_id || !form.purpose || !form.room_name || !form.start_date || !form.end_date || !form.start_time || !form.end_time) {
       setError('Please fill out all required fields.')
       return
@@ -58,7 +71,7 @@ export default function WeeklyForm({ bodies, onClose, onSuccess }: WeeklyFormPro
     const res = await fetch('/api/administrator/bookings/weekly', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, semester_id: semesterId }),
     })
 
     if (res.ok) {
@@ -73,6 +86,24 @@ export default function WeeklyForm({ bodies, onClose, onSuccess }: WeeklyFormPro
 
   return (
     <div className="space-y-3">
+      <div>
+        <label className={labelCls}>Semester *</label>
+        {semesters.length === 0 ? (
+          <p className="text-sm text-[#f87171]">No semesters available. Create one in Advanced Settings.</p>
+        ) : (
+          <select
+            value={semesterId}
+            onChange={e => setSemesterId(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">Select Semester</option>
+            {semesters.map(sem => (
+              <option key={sem.id} value={sem.id}>{sem.name}{sem.is_active ? ' (Active)' : ''}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
       <div>
         <label className={labelCls}>Body *</label>
         <select
