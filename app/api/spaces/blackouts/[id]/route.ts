@@ -27,7 +27,7 @@ async function cascadeCancelBookings(spaceId: string | null, startTime: string, 
 
   await adminSupabase.from('space_bookings').delete().in('id', affected.map((b: { id: string }) => b.id))
 
-  await Promise.all(affected.map(async (b: { title: string; start_time: string; end_time: string; creator_id: string; attendee_ids: string[]; spaces: { name: string } | null }) => {
+  await Promise.all(affected.map(async (b: { title: string; start_time: string; end_time: string; creator_id: string; attendee_ids: string[]; spaces: { name: string }[] | null }) => {
     const creatorEmail = emailMap.get(b.creator_id)
     if (!creatorEmail) return
     const ccEmails = (b.attendee_ids ?? [])
@@ -35,7 +35,7 @@ async function cascadeCancelBookings(spaceId: string | null, startTime: string, 
       .filter((e): e is string => !!e && e !== creatorEmail)
     await sendSpaceBookingCancelledEmail({
       title: b.title,
-      spaceName: (b.spaces as { name: string } | null)?.name ?? 'SGA Space',
+      spaceName: (Array.isArray(b.spaces) ? b.spaces[0]?.name : null) ?? 'SGA Space',
       startTime: b.start_time,
       endTime: b.end_time,
       to: creatorEmail,
