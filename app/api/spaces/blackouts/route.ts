@@ -95,15 +95,16 @@ export async function POST(request: Request) {
         .in('id', affected.map((b: { id: string }) => b.id))
 
       // Send cancellation emails
-      await Promise.all(affected.map(async (b: { id: string; title: string; start_time: string; end_time: string; creator_id: string; attendee_ids: string[]; spaces: { name: string } | null }) => {
+      await Promise.all(affected.map(async (b: { id: string; title: string; start_time: string; end_time: string; creator_id: string; attendee_ids: string[]; spaces: { name: string }[] | null }) => {
         const creatorEmail = emailMap.get(b.creator_id)
         if (!creatorEmail) return
         const ccEmails = (b.attendee_ids ?? [])
           .map((id: string) => emailMap.get(id))
           .filter((e): e is string => !!e && e !== creatorEmail)
         await sendSpaceBookingCancelledEmail({
+          bookingId: b.id,
           title: b.title,
-          spaceName: (b.spaces as { name: string } | null)?.name ?? 'SGA Space',
+          spaceName: (Array.isArray(b.spaces) ? b.spaces[0]?.name : null) ?? 'SGA Space',
           startTime: b.start_time,
           endTime: b.end_time,
           to: creatorEmail,
