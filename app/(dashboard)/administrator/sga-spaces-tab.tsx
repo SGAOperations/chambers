@@ -227,6 +227,23 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
 
 // ─── Blackouts panel ─────────────────────────────────────────────────────────
 
+type EditBlackoutForm = {
+  id: string
+  space_id: string
+  start_date: string
+  start_time: string
+  end_date: string
+  end_time: string
+}
+
+function isoToFormDateTime(iso: string): { date: string; time: string } {
+  const d = new Date(iso)
+  return {
+    date: d.toISOString().slice(0, 10),
+    time: `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`,
+  }
+}
+
 function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
   const [blackouts, setBlackouts] = useState<Blackout[]>([])
   const [loading, setLoading] = useState(true)
@@ -240,6 +257,9 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
   })
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<EditBlackoutForm | null>(null)
+  const [editSubmitting, setEditSubmitting] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   const fetchBlackouts = useCallback(async () => {
     setLoading(true)
@@ -280,6 +300,35 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
     const res = await fetch(`/api/spaces/blackouts/${id}`, { method: 'DELETE' })
     if (res.ok) setBlackouts(prev => prev.filter(b => b.id !== id))
     setDeletingId(null)
+  }
+
+  const openEdit = (bl: Blackout) => {
+    const { date: start_date, time: start_time } = isoToFormDateTime(bl.start_time)
+    const { date: end_date, time: end_time } = isoToFormDateTime(bl.end_time)
+    setEditForm({ id: bl.id, space_id: bl.space_id ?? '', start_date, start_time, end_date, end_time })
+    setEditError(null)
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editForm) return
+    setEditError(null)
+    setEditSubmitting(true)
+    try {
+      const start_time = new Date(`${editForm.start_date}T${editForm.start_time}:00Z`).toISOString()
+      const end_time = new Date(`${editForm.end_date}T${editForm.end_time}:00Z`).toISOString()
+      const res = await fetch(`/api/spaces/blackouts/${editForm.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ space_id: editForm.space_id || null, start_time, end_time }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setEditError(data.error ?? 'Failed to update blackout.'); return }
+      setEditForm(null)
+      await fetchBlackouts()
+    } finally {
+      setEditSubmitting(false)
+    }
   }
 
   return (
@@ -356,13 +405,21 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
                     <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(bl.start_time)}</td>
                     <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(bl.end_time)}</td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => deleteBlackout(bl.id)}
-                        disabled={deletingId === bl.id}
-                        className="text-xs text-[#c8102e] hover:text-[#f87171] disabled:opacity-50 font-medium transition-colors"
-                      >
-                        {deletingId === bl.id ? 'Deleting…' : 'Delete'}
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => openEdit(bl)}
+                          className="text-xs text-[#93b8d8] hover:text-[#f0f6ff] font-medium transition-colors"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => deleteBlackout(bl.id)}
+                          disabled={deletingId === bl.id}
+                          className="text-xs text-[#c8102e] hover:text-[#f87171] disabled:opacity-50 font-medium transition-colors"
+                        >
+                          {deletingId === bl.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -371,6 +428,56 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
           </div>
         )}
       </div>
+
+      {/* Edit blackout modal */}
+      {editForm && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setEditForm(null)}>
+          <div className="bg-[#0a1628] border border-[#1e5080] rounded-xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-[#1e5080]">
+              <h3 className="text-base font-semibold text-[#f0f6ff]">Edit Blackout</h3>
+              <button onClick={() => setEditForm(null)} className="text-[#93b8d8] hover:text-[#f0f6ff] transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="p-5 space-y-4">
+              <div>
+                <label className={labelCls}>Space</label>
+                <select value={editForm.space_id} onChange={e => setEditForm(f => f && ({ ...f, space_id: e.target.value }))} className={inputCls}>
+                  <option value="">All Spaces</option>
+                  {spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Start Date</label>
+                  <input type="date" value={editForm.start_date} onChange={e => setEditForm(f => f && ({ ...f, start_date: e.target.value }))} className={inputCls} required />
+                </div>
+                <div>
+                  <label className={labelCls}>Start Time</label>
+                  <TimePicker value={editForm.start_time} onChange={v => setEditForm(f => f && ({ ...f, start_time: v }))} interval={15} />
+                </div>
+                <div>
+                  <label className={labelCls}>End Date</label>
+                  <input type="date" value={editForm.end_date} onChange={e => setEditForm(f => f && ({ ...f, end_date: e.target.value }))} className={inputCls} required />
+                </div>
+                <div>
+                  <label className={labelCls}>End Time</label>
+                  <TimePicker value={editForm.end_time} onChange={v => setEditForm(f => f && ({ ...f, end_time: v }))} interval={15} />
+                </div>
+              </div>
+              {editError && (
+                <div className="bg-[#c8102e]/10 border border-[#c8102e]/30 rounded-lg px-3 py-2 text-sm text-[#f87171]">{editError}</div>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button type="button" onClick={() => setEditForm(null)} className="flex-1 py-2.5 border border-[#1e5080] text-[#93b8d8] text-sm font-medium rounded-lg hover:text-[#f0f6ff] hover:border-[#93b8d8] transition-colors">Cancel</button>
+                <button type="submit" disabled={editSubmitting} className="flex-1 py-2.5 bg-[#c8102e] hover:bg-[#a50d26] disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors">
+                  {editSubmitting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

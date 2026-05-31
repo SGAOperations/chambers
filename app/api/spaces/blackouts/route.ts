@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -62,5 +63,57 @@ export async function POST(request: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Force-cancel all bookings that overlap with this blackout
+  try {
+    let bookingsQuery = adminSupabase
+      .from('space_bookings')
+      .select('id, title, start_time, end_time, creator_id, attendee_ids, spaces(name)')
+      .lt('start_time', end_time)
+      .gt('end_time', start_time)
+
+    if (space_id) {
+      bookingsQuery = bookingsQuery.eq('space_id', space_id)
+    }
+
+    const { data: affected } = await bookingsQuery
+    if (affected && affected.length > 0) {
+      // Collect all user IDs to fetch emails in one query
+      const allUserIds = [...new Set(affected.flatMap((b: { creator_id: string; attendee_ids: string[] }) =>
+        [b.creator_id, ...(b.attendee_ids ?? [])]
+      ))]
+      const { data: emailUsers } = await adminSupabase
+        .from('users')
+        .select('id, email')
+        .in('id', allUserIds)
+      const emailMap = new Map((emailUsers ?? []).map((u: { id: string; email: string }) => [u.id, u.email]))
+
+      // Delete all affected bookings at once
+      await adminSupabase
+        .from('space_bookings')
+        .delete()
+        .in('id', affected.map((b: { id: string }) => b.id))
+
+      // Send cancellation emails
+      await Promise.all(affected.map(async (b: { id: string; title: string; start_time: string; end_time: string; creator_id: string; attendee_ids: string[]; spaces: { name: string } | null }) => {
+        const creatorEmail = emailMap.get(b.creator_id)
+        if (!creatorEmail) return
+        const ccEmails = (b.attendee_ids ?? [])
+          .map((id: string) => emailMap.get(id))
+          .filter((e): e is string => !!e && e !== creatorEmail)
+        await sendSpaceBookingCancelledEmail({
+          title: b.title,
+          spaceName: (b.spaces as { name: string } | null)?.name ?? 'SGA Space',
+          startTime: b.start_time,
+          endTime: b.end_time,
+          to: creatorEmail,
+          cc: ccEmails,
+        })
+      }))
+    }
+  } catch (e) {
+    console.error('Blackout cascade cancellation failed:', e)
+  }
+
   return NextResponse.json({ success: true, blackout: data })
 }

@@ -49,6 +49,12 @@ function minsFromMidnight(iso: string): number {
   return d.getUTCHours() * 60 + d.getUTCMinutes()
 }
 
+// For end_time: midnight (0 mins) means end-of-day, not start-of-day.
+function endMins(iso: string): number {
+  const m = minsFromMidnight(iso)
+  return m === 0 ? 24 * 60 : m
+}
+
 function toBarPercent(mins: number): number {
   return Math.max(0, Math.min(100, ((mins - BAR_START_MINS) / BAR_RANGE) * 100))
 }
@@ -171,13 +177,26 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
 
   const currentBooking = bookings.find((b) => {
     const start = minsFromMidnight(b.start_time)
-    const end = minsFromMidnight(b.end_time)
+    const end = endMins(b.end_time)
     return start <= nowLocalMins && nowLocalMins < end
   })
   const isOccupied = !!currentBooking
   const futureBookings = bookings.filter((b) => minsFromMidnight(b.start_time) > nowLocalMins)
   const nextBooking = futureBookings[0]
   const upcomingBookings = futureBookings.slice(1)
+
+  // Earliest upcoming blackout start (after now, clamped to today)
+  const nextBlackoutMins = blackouts.reduce<number | null>((earliest, b) => {
+    const { start } = blackoutMins(b)
+    if (start <= nowLocalMins) return earliest
+    return earliest === null || start < earliest ? start : earliest
+  }, null)
+
+  // Earliest upcoming "unavailable" moment — booking or blackout, whichever comes first
+  const nextBookingMins = nextBooking ? minsFromMidnight(nextBooking.start_time) : null
+  const nextUnavailableMins =
+    nextBookingMins !== null && nextBlackoutMins !== null ? Math.min(nextBookingMins, nextBlackoutMins) :
+    nextBookingMins ?? nextBlackoutMins ?? null
 
   const bgGradient = isBlackedOut || isOccupied
     ? 'from-[#4a0d0d] via-[#2e0707] to-[#1a0404]'
@@ -249,24 +268,15 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
               {/* Booking segments */}
               {bookings.map((b) => {
                 const startPct = toBarPercent(minsFromMidnight(b.start_time))
-                const endPct = toBarPercent(minsFromMidnight(b.end_time))
+                const endPct = toBarPercent(endMins(b.end_time))
                 const heightPct = endPct - startPct
                 if (heightPct <= 0) return null
                 return (
                   <div
                     key={b.id}
-                    className="absolute left-0 w-full bg-[#c8102e]/70 rounded-sm overflow-hidden"
+                    className="absolute left-0 w-full bg-[#c8102e]/70 rounded-sm"
                     style={{ top: `${startPct}%`, height: `${heightPct}%` }}
-                  >
-                    {minsFromMidnight(b.end_time) - minsFromMidnight(b.start_time) >= 30 && (
-                      <div className="px-2 pt-1 leading-tight">
-                        <p className="text-xs font-semibold text-white truncate">{b.title}</p>
-                        {b.creator_name && (
-                          <p className="text-xs text-white/70 truncate">{b.creator_name}</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  />
                 )
               })}
               {/* Blackout segments */}
@@ -325,8 +335,8 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
             ) : (
               <>
                 <p className="text-5xl font-bold text-[#4ade80] mt-6">Available</p>
-                {nextBooking ? (
-                  <p className="text-xl text-[#93b8d8] mt-1">until {formatTime(nextBooking.start_time)}</p>
+                {nextUnavailableMins !== null ? (
+                  <p className="text-xl text-[#93b8d8] mt-1">until {formatMins(nextUnavailableMins)}</p>
                 ) : (
                   <p className="text-xl text-[#93b8d8] mt-1">for the rest of the day</p>
                 )}
