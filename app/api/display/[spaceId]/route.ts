@@ -19,9 +19,14 @@ export async function GET(
 
   const { spaceId } = await params
 
-  const now = new Date()
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
-  const todayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
+  // Use the client-supplied local date (YYYY-MM-DD) so "today" matches the
+  // display's clock rather than the server's UTC clock.
+  const dateParam = searchParams.get('date')
+  const [year, month, day] = dateParam
+    ? dateParam.split('-').map(Number)
+    : (() => { const n = new Date(); return [n.getUTCFullYear(), n.getUTCMonth() + 1, n.getUTCDate()] })()
+  const todayStart = new Date(Date.UTC(year, month - 1, day))
+  const todayEnd = new Date(Date.UTC(year, month - 1, day + 1))
 
   const [spaceResult, bookingsResult, blackoutsResult] = await Promise.all([
     adminSupabase

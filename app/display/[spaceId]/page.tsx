@@ -119,7 +119,10 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
     }
 
     async function fetchData() {
-      const res = await fetch(`/api/display/${spaceId}?key=${encodeURIComponent(key!)}`)
+      // Send the client's local date so the server knows which wall-clock day to fetch.
+      const localNow = new Date()
+      const localDate = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, '0')}-${String(localNow.getDate()).padStart(2, '0')}`
+      const res = await fetch(`/api/display/${spaceId}?key=${encodeURIComponent(key!)}&date=${localDate}`)
       if (res.status === 401) {
         setAccessDenied(true)
         return
@@ -145,8 +148,10 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
   // Compare using local minutes-from-midnight vs. the stored UTC hours/minutes.
   const nowLocalMins = now.getHours() * 60 + now.getMinutes()
 
-  // UTC date string for today — used to clamp multi-day blackouts to the visible range.
-  const todayUtcStr = now.toISOString().slice(0, 10)
+  // Wall-clock date string for today — used to clamp multi-day blackouts to the visible range.
+  // Must use local date components (not toISOString which is UTC and flips at 8 PM EDT).
+  const todayUtcStr = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+    .toISOString().slice(0, 10)
 
   // Returns start/end in wall-clock minutes, clamped to [0, 1440] for today.
   function blackoutMins(b: Blackout): { start: number; end: number } {

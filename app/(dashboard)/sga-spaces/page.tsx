@@ -143,10 +143,10 @@ export default function SGASpacesPage() {
   const [blackouts, setBlackouts] = useState<Blackout[]>([])
   const [weekStart, setWeekStart] = useState<Date>(() => {
     const now = new Date()
-    const day = now.getUTCDay()
-    const sun = new Date(now)
-    sun.setUTCDate(now.getUTCDate() - day)
-    sun.setUTCHours(0, 0, 0, 0)
+    // Use local date components so the week boundary matches the user's clock,
+    // not UTC (which is 4 hours ahead in EDT and would flip the week at 8 PM).
+    const sun = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+    sun.setUTCDate(sun.getUTCDate() - now.getDay())
     return sun
   })
   const [remainingHours, setRemainingHours] = useState<number | null>(null)
@@ -159,10 +159,8 @@ export default function SGASpacesPage() {
 
   const isTodayWeek = (() => {
     const now = new Date()
-    const day = now.getUTCDay()
-    const sun = new Date(now)
-    sun.setUTCDate(now.getUTCDate() - day)
-    sun.setUTCHours(0, 0, 0, 0)
+    const sun = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+    sun.setUTCDate(sun.getUTCDate() - now.getDay())
     return weekStart.getTime() === sun.getTime()
   })()
 
