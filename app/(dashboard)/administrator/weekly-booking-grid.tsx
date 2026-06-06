@@ -16,6 +16,7 @@ interface WeeklyBooking {
   body_id: string
   purpose: string
   is_event: boolean
+  hidden: boolean
   bodies: { name: string } | null
   creator_role: string | null
   weekly_room_bookings: {
