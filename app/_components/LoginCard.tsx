@@ -128,7 +128,7 @@ export default function LoginCard() {
             <button
               type="button"
               onClick={() => setShowForgot(true)}
-              className="text-xs text-[#6a96bb] hover:text-[#93b8d8] transition"
+              className="text-xs text-[#6a96bb] hover:text-[#93b8d8] transition cursor-pointer"
             >
               Forgot password?
             </button>

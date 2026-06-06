@@ -138,10 +138,9 @@ export default function SpaceCalendar({
     return days
   }, [bookings])
 
-  // ── Blackout spans per day (multi-day blackouts clipped per column) ───────────
-  interface BlackoutSpan { blackout: Blackout; startSlot: number; endSlot: number }
-  const blackoutsByDay: BlackoutSpan[][] = useMemo(() => {
-    const days: BlackoutSpan[][] = Array.from({ length: 7 }, () => [])
+  // ── Blackout spans per day (multi-day blackouts clipped per column, overlaps merged) ───────────
+  const blackoutsByDay: { startSlot: number; endSlot: number }[][] = useMemo(() => {
+    const days: { startSlot: number; endSlot: number }[][] = Array.from({ length: 7 }, () => [])
     for (const bl of blackouts) {
       const blStart = new Date(bl.start_time)
       const blEnd = new Date(bl.end_time)
@@ -157,10 +156,23 @@ export default function SpaceCalendar({
         const startSlot = effStart.getUTCHours() * 4 + Math.floor(effStart.getUTCMinutes() / 15)
         const rawEndSlot = effEnd.getUTCHours() * 4 + Math.floor(effEnd.getUTCMinutes() / 15)
         const endSlot = rawEndSlot === 0 ? TOTAL_SLOTS : rawEndSlot
-        days[dayIdx].push({ blackout: bl, startSlot, endSlot })
+        days[dayIdx].push({ startSlot, endSlot })
       }
     }
-    return days
+    return days.map(spans => {
+      if (spans.length <= 1) return spans
+      spans.sort((a, b) => a.startSlot - b.startSlot)
+      const merged: { startSlot: number; endSlot: number }[] = [{ ...spans[0] }]
+      for (let i = 1; i < spans.length; i++) {
+        const last = merged[merged.length - 1]
+        if (spans[i].startSlot <= last.endSlot) {
+          last.endSlot = Math.max(last.endSlot, spans[i].endSlot)
+        } else {
+          merged.push({ ...spans[i] })
+        }
+      }
+      return merged
+    })
   }, [blackouts, weekStart])
 
   // ── Advance notice zone: end slot per day up to (now + minHoursAdvance) ──────

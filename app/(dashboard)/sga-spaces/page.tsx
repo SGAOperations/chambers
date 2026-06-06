@@ -5,6 +5,7 @@ import AuthGuard from '../authguard'
 import SpaceCalendar from './space-calendar'
 import SpaceBookingModal from './space-booking-modal'
 import { Skeleton } from '@/app/_components/skeleton'
+import { createClient } from '@/lib/supabase/client'
 
 interface Space {
   id: string
@@ -153,6 +154,7 @@ export default function SGASpacesPage() {
   const [limitHours, setLimitHours] = useState<number>(18)
   const [minHoursAdvance, setMinHoursAdvance] = useState<number>(24)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [canBook, setCanBook] = useState(false)
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null)
   const [editBooking, setEditBooking] = useState<EditBooking | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
@@ -163,6 +165,21 @@ export default function SGASpacesPage() {
     sun.setUTCDate(sun.getUTCDate() - now.getDay())
     return weekStart.getTime() === sun.getTime()
   })()
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      if (user.app_metadata?.is_admin) { setCanBook(true); return }
+      const { data: memberships } = await supabase
+        .from('board_memberships')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('role', 'Leadership')
+        .limit(1)
+      if (memberships && memberships.length > 0) setCanBook(true)
+    })
+  }, [])
 
   useEffect(() => {
     fetch('/api/spaces')
@@ -262,7 +279,7 @@ export default function SGASpacesPage() {
       <div className="space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h1 className="text-2xl font-bold text-[#f0f6ff]">SGA Spaces</h1>
-          {remainingHours !== null ? (
+          {canBook && (remainingHours !== null ? (
             <div className="flex items-center gap-3 flex-wrap justify-end">
               <div className="flex items-center gap-2 bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-4 py-2">
                 <span className="text-sm text-[#93b8d8]">This week:</span>
@@ -278,7 +295,7 @@ export default function SGASpacesPage() {
             </div>
           ) : (
             <Skeleton className="h-9 w-48 border border-[#1e5080] animate-pulse" />
-          )}
+          ))}
         </div>
 
         {/* Space switcher */}
@@ -334,14 +351,14 @@ export default function SGASpacesPage() {
               blackouts={blackouts}
               currentUserId={currentUserId ?? undefined}
               minHoursAdvance={minHoursAdvance}
-              onSlotClick={(start, end) => setModalSlot({ start, end })}
+              onSlotClick={canBook ? (start, end) => setModalSlot({ start, end }) : () => {}}
               onBookingClick={handleBookingClick}
             />
           )
         )}
 
         {/* Create booking modal */}
-        {modalSlot && selectedSpaceId && selectedSpace && (
+        {canBook && modalSlot && selectedSpaceId && selectedSpace && (
           <SpaceBookingModal
             spaceId={selectedSpaceId}
             spaceName={selectedSpace.name}

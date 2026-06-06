@@ -1,7 +1,7 @@
 'use client'
 
 import { Space_Grotesk } from 'next/font/google'
-import { useState, useEffect, Suspense, use } from 'react'
+import { useState, useEffect, Suspense, use, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] })
@@ -169,6 +169,30 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
     }
   }
 
+  // Merge overlapping/adjacent blackout intervals so they render as one unified bar segment.
+  const mergedBlackoutIntervals = useMemo(() => {
+    const intervals = blackouts.map(b => {
+      const startDate = b.start_time.slice(0, 10)
+      const endDate = b.end_time.slice(0, 10)
+      return {
+        start: startDate < todayUtcStr ? 0 : minsFromMidnight(b.start_time),
+        end: endDate > todayUtcStr ? 24 * 60 : minsFromMidnight(b.end_time),
+      }
+    }).filter(({ start, end }) => end > start)
+    if (intervals.length === 0) return []
+    intervals.sort((a, b) => a.start - b.start)
+    const merged: { start: number; end: number }[] = [{ ...intervals[0] }]
+    for (let i = 1; i < intervals.length; i++) {
+      const last = merged[merged.length - 1]
+      if (intervals[i].start <= last.end) {
+        last.end = Math.max(last.end, intervals[i].end)
+      } else {
+        merged.push({ ...intervals[i] })
+      }
+    }
+    return merged
+  }, [blackouts, todayUtcStr])
+
   const activeBlackout = blackouts.find((b) => {
     const { start, end } = blackoutMins(b)
     return start <= nowLocalMins && nowLocalMins < end
@@ -243,90 +267,84 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
             <p className="text-sm text-[#93b8d8] mt-1">{formatDate(now)}</p>
           </div>
 
-          {/* Vertical timeline bar — fills remaining height */}
-          <div className="flex flex-row gap-3 flex-1 mt-8 min-h-0">
-            <div className="relative w-10 flex-shrink-0">
+          {/* Horizontal timeline block — fills remaining height */}
+          <div className="flex-1 mt-8 min-h-0 flex flex-col">
+          <div className="flex-1 min-h-0 rounded-lg relative overflow-hidden bg-white/10">
+            {/* Hour tick lines */}
+            {HOUR_LABELS.map(({ hour }) => (
+              <div
+                key={hour}
+                className="absolute top-0 h-full w-px bg-white/20"
+                style={{ left: `${toBarPercent(hour * 60)}%` }}
+              />
+            ))}
+            {/* Booking segments */}
+            {bookings.map((b) => {
+              const startPct = toBarPercent(minsFromMidnight(b.start_time))
+              const endPct = toBarPercent(endMins(b.end_time))
+              const widthPct = endPct - startPct
+              if (widthPct <= 0) return null
+              return (
+                <div
+                  key={b.id}
+                  className="absolute top-0 h-full bg-[#c8102e]/70 rounded-sm"
+                  style={{ left: `${startPct}%`, width: `${widthPct}%` }}
+                />
+              )
+            })}
+            {/* Blackout segments (merged so overlapping blackouts render as one block) */}
+            {mergedBlackoutIntervals.map(({ start, end }, i) => {
+              const startPct = toBarPercent(start)
+              const endPct = toBarPercent(end)
+              const widthPct = endPct - startPct
+              if (widthPct <= 0) return null
+              return (
+                <div
+                  key={i}
+                  className="absolute top-0 h-full bg-black/70 rounded-sm"
+                  style={{ left: `${startPct}%`, width: `${widthPct}%` }}
+                />
+              )
+            })}
+            {/* Current time marker */}
+            <div
+              className="absolute top-0 h-full w-0.5 bg-white/80"
+              style={{ left: `${nowPercent}%` }}
+            />
+            <div
+              className="absolute top-0 w-3 h-3 rounded-full bg-white -translate-x-1/2"
+              style={{ left: `${nowPercent}%` }}
+            />
+          </div>
+            {/* Hour labels outside the block */}
+            <div className="relative mt-1.5 h-4 flex-shrink-0">
               {HOUR_LABELS.map(({ label, hour }) => (
                 <span
                   key={hour}
-                  className="absolute text-xs text-[#6a96bb] right-0 -translate-y-1/2"
-                  style={{ top: `${toBarPercent(hour * 60)}%` }}
+                  className="absolute text-xs text-[#6a96bb] -translate-x-1/2"
+                  style={{ left: `${toBarPercent(hour * 60)}%` }}
                 >
                   {label}
                 </span>
               ))}
-            </div>
-            <div className="flex-1 rounded-lg relative overflow-hidden bg-white/10">
-              {/* Hour tick lines */}
-              {HOUR_LABELS.map(({ hour }) => (
-                <div
-                  key={hour}
-                  className="absolute left-0 w-full h-px bg-white/20"
-                  style={{ top: `${toBarPercent(hour * 60)}%` }}
-                />
-              ))}
-              {/* Booking segments */}
-              {bookings.map((b) => {
-                const startPct = toBarPercent(minsFromMidnight(b.start_time))
-                const endPct = toBarPercent(endMins(b.end_time))
-                const heightPct = endPct - startPct
-                if (heightPct <= 0) return null
-                return (
-                  <div
-                    key={b.id}
-                    className="absolute left-0 w-full bg-[#c8102e]/70 rounded-sm"
-                    style={{ top: `${startPct}%`, height: `${heightPct}%` }}
-                  />
-                )
-              })}
-              {/* Blackout segments */}
-              {blackouts.map((b) => {
-                const { start, end } = blackoutMins(b)
-                const startPct = toBarPercent(start)
-                const endPct = toBarPercent(end)
-                const heightPct = endPct - startPct
-                if (heightPct <= 0) return null
-                return (
-                  <div
-                    key={b.id}
-                    className="absolute left-0 w-full bg-black/70 rounded-sm"
-                    style={{ top: `${startPct}%`, height: `${heightPct}%` }}
-                  />
-                )
-              })}
-              {/* Current time marker */}
-              <div
-                className="absolute left-0 w-full h-0.5 bg-white/80"
-                style={{ top: `${nowPercent}%` }}
-              />
-              <div
-                className="absolute left-0 w-3 h-3 rounded-full bg-white -translate-y-1/2"
-                style={{ top: `${nowPercent}%` }}
-              />
             </div>
           </div>
         </div>
 
         {/* Right half */}
         <div className="w-1/2 flex flex-col px-12 py-10 border-l border-white/10">
-          {/* Top section — status header fixed at clock level */}
+          {/* Status header — aligned with room name at top */}
           <div className="flex-shrink-0">
-            {/* Spacer mirrors the two lines above the clock (space name + capacity) */}
-            <div aria-hidden="true" className="opacity-0 pointer-events-none">
-              <p className="text-2xl font-semibold">&nbsp;</p>
-              <p className="text-sm">&nbsp;</p>
-            </div>
-            {/* Status — sits at same vertical level as the clock */}
             {isBlackedOut ? (
               <>
-                <p className="text-5xl font-bold text-[#f87171] mt-6">Unavailable</p>
+                <p className="text-5xl font-bold text-[#f87171]">Unavailable</p>
                 <p className="text-sm text-[#93b8d8] mt-1">
                   {(() => { const { start, end } = blackoutMins(activeBlackout!); return `${formatMins(start)} – ${formatMins(end)}` })()}
                 </p>
               </>
             ) : isOccupied ? (
               <>
-                <p className="text-5xl font-bold text-[#f87171] mt-6">Reserved</p>
+                <p className="text-5xl font-bold text-[#f87171]">Reserved</p>
                 <p className="text-xl text-[#f0f6ff] mt-1">{currentBooking!.title}</p>
                 <p className="text-sm text-[#93b8d8]">
                   {formatTimeRange(currentBooking!.start_time, currentBooking!.end_time)}
@@ -334,7 +352,7 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
               </>
             ) : (
               <>
-                <p className="text-5xl font-bold text-[#4ade80] mt-6">Available</p>
+                <p className="text-5xl font-bold text-[#4ade80]">Available</p>
                 {nextUnavailableMins !== null ? (
                   <p className="text-xl text-[#93b8d8] mt-1">until {formatMins(nextUnavailableMins)}</p>
                 ) : (

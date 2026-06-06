@@ -103,6 +103,20 @@ export async function POST(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
+  // Only admins and Leadership members may create space bookings
+  const isAdmin = !!user.app_metadata?.is_admin
+  if (!isAdmin) {
+    const { data: leadership } = await adminSupabase
+      .from('board_memberships')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('role', 'Leadership')
+      .limit(1)
+    if (!leadership || leadership.length === 0) {
+      return NextResponse.json({ error: 'Only Leadership members and administrators may create space bookings.' }, { status: 403 })
+    }
+  }
+
   const { space_id, title, start_time, end_time, attendee_ids } = await request.json()
 
   if (!space_id || !title || !start_time || !end_time) {

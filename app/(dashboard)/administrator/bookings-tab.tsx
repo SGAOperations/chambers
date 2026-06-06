@@ -30,6 +30,7 @@ interface OneTimeBooking {
   body_id: string
   purpose: string
   is_event: boolean
+  hidden: boolean
   bodies: { name: string } | null
   creator_role: string | null
   one_time_room_bookings: {
@@ -48,6 +49,7 @@ interface WeeklyBooking {
   body_id: string
   purpose: string
   is_event: boolean
+  hidden: boolean
   bodies: { name: string } | null
   creator_role: string | null
   weekly_room_bookings: {
@@ -77,6 +79,7 @@ interface TablingBooking {
   body_id: string
   purpose: string
   is_event: boolean
+  hidden: boolean
   bodies: { name: string } | null
   creator_role: string | null
   tabling_bookings: {
@@ -193,6 +196,17 @@ export default function BookingsTab() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, is_event: !current }),
+    })
+  }
+
+  const toggleHidden = async (id: string, current: boolean) => {
+    setOneTime(prev => prev.map(b => b.id === id ? { ...b, hidden: !current } : b))
+    setWeekly(prev => prev.map(b => b.id === id ? { ...b, hidden: !current } : b))
+    setTabling(prev => prev.map(b => b.id === id ? { ...b, hidden: !current } : b))
+    await fetch('/api/administrator/bookings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, hidden: !current }),
     })
   }
 
@@ -371,6 +385,9 @@ export default function BookingsTab() {
                       {b.is_event && (
                         <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#062f3b] text-[#22d3ee]">Event</span>
                       )}
+                      {b.hidden && (
+                        <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#2a1a00] text-[#f59e0b]">Hidden</span>
+                      )}
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {firstSession.status}
                       </span>
@@ -379,6 +396,12 @@ export default function BookingsTab() {
                         className="text-xs text-[#22d3ee] hover:text-[#67e8f9] font-medium transition-colors"
                       >
                         {b.is_event ? 'Unmark Event' : 'Mark Event'}
+                      </button>
+                      <button
+                        onClick={() => toggleHidden(b.id, b.hidden)}
+                        className="text-xs text-[#f59e0b] hover:text-[#fbbf24] font-medium transition-colors"
+                      >
+                        {b.hidden ? 'Unhide' : 'Hide'}
                       </button>
                       <button
                         onClick={() => setEditingBooking(b)}
@@ -443,9 +466,18 @@ export default function BookingsTab() {
                       {b.is_event && (
                         <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#062f3b] text-[#22d3ee]">Event</span>
                       )}
+                      {b.hidden && (
+                        <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#2a1a00] text-[#f59e0b]">Hidden</span>
+                      )}
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {w.status}
                       </span>
+                      <button
+                        onClick={() => toggleHidden(b.id, b.hidden)}
+                        className="text-xs text-[#f59e0b] hover:text-[#fbbf24] font-medium transition-colors"
+                      >
+                        {b.hidden ? 'Unhide' : 'Hide'}
+                      </button>
                       <button
                         onClick={() => setEditingWeekly(b)}
                         className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
@@ -491,11 +523,20 @@ export default function BookingsTab() {
                       {b.is_event && (
                         <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#062f3b] text-[#22d3ee]">Event</span>
                       )}
+                      {b.hidden && (
+                        <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#2a1a00] text-[#f59e0b]">Hidden</span>
+                      )}
                       <button
                         onClick={() => toggleEvent(b.id, b.is_event)}
                         className="text-xs text-[#22d3ee] hover:text-[#67e8f9] font-medium transition-colors"
                       >
                         {b.is_event ? 'Unmark Event' : 'Mark Event'}
+                      </button>
+                      <button
+                        onClick={() => toggleHidden(b.id, b.hidden)}
+                        className="text-xs text-[#f59e0b] hover:text-[#fbbf24] font-medium transition-colors"
+                      >
+                        {b.hidden ? 'Unhide' : 'Hide'}
                       </button>
                       <button
                         onClick={() => setEditingTabling(b)}

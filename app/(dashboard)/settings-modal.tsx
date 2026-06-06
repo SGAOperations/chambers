@@ -22,7 +22,7 @@ interface AvailableBody {
   body_open: boolean
 }
 
-interface Settings {
+export interface Settings {
   full_name: string
   email_preferences: Record<string, boolean>
   admin_role: string | null
@@ -34,15 +34,17 @@ interface Settings {
 
 interface SettingsModalProps {
   onClose: () => void
+  cachedSettings?: Settings | null
+  onSettingsLoaded?: (settings: Settings) => void
 }
 
 const inputCls =
   'w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition'
 
-export default function SettingsModal({ onClose }: SettingsModalProps) {
-  const [settings, setSettings] = useState<Settings | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [nameValue, setNameValue] = useState('')
+export default function SettingsModal({ onClose, cachedSettings, onSettingsLoaded }: SettingsModalProps) {
+  const [settings, setSettings] = useState<Settings | null>(cachedSettings ?? null)
+  const [loading, setLoading] = useState(cachedSettings == null)
+  const [nameValue, setNameValue] = useState(cachedSettings?.full_name ?? '')
   const [nameSaving, setNameSaving] = useState(false)
   const [nameStatus, setNameStatus] = useState<'idle' | 'saved' | 'error'>('idle')
   const [selectedBodyId, setSelectedBodyId] = useState('')
@@ -59,10 +61,12 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         setNameValue(data.full_name ?? '')
         setSelectedBodyId('')
         setLoading(false)
+        onSettingsLoaded?.(data)
       })
+      .catch(() => setLoading(false))
   }
 
-  useEffect(() => { loadSettings() }, [])
+  useEffect(() => { if (cachedSettings == null) loadSettings() }, [])
 
   const saveName = async () => {
     if (!nameValue.trim()) return

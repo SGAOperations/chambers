@@ -11,11 +11,13 @@ export async function GET() {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
+  const isAdmin = !!user.app_metadata?.is_admin
+
   // Get user's body memberships and active semester in parallel
   const [{ data: memberships }, { data: activeSemester }] = await Promise.all([
     supabase
       .from('board_memberships')
-      .select('body_id')
+      .select('body_id, role')
       .eq('user_id', user.id),
     supabase
       .from('semesters')
@@ -29,6 +31,9 @@ export async function GET() {
   }
 
   const bodyIds = memberships.map(m => m.body_id)
+  const leadershipBodyIds = new Set(
+    memberships.filter(m => m.role === 'Leadership').map(m => m.body_id)
+  )
 
   if (!activeSemester) {
     return NextResponse.json({ oneTimeBookings: [], weeklyBookings: [], tablingBookings: [] })
@@ -40,7 +45,7 @@ export async function GET() {
     supabase
       .from('bookings')
       .select(`
-        id, purpose, body_id,
+        id, purpose, body_id, hidden,
         bodies(name),
         one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
       `)
@@ -51,7 +56,7 @@ export async function GET() {
     supabase
       .from('bookings')
       .select(`
-        id, purpose, body_id,
+        id, purpose, body_id, hidden,
         bodies(name),
         weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
           weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type)
@@ -64,7 +69,7 @@ export async function GET() {
     supabase
       .from('bookings')
       .select(`
-        id, purpose, body_id,
+        id, purpose, body_id, hidden,
         bodies(name),
         tabling_bookings(id, reservation_code,
           tabling_sessions(id, location, session_date, start_time, end_time, status, reservation_code)
@@ -75,9 +80,15 @@ export async function GET() {
       .in('body_id', bodyIds),
   ])
 
+  // Admins see everything; others are filtered out of hidden bookings unless they hold Leadership in that body
+  const visible = isAdmin
+    ? <T extends { hidden: boolean; body_id: string }>(rows: T[]) => rows
+    : <T extends { hidden: boolean; body_id: string }>(rows: T[]) =>
+        rows.filter(b => !b.hidden || leadershipBodyIds.has(b.body_id))
+
   return NextResponse.json({
-    oneTimeBookings: oneTimeBookings || [],
-    weeklyBookings: weeklyBookings || [],
-    tablingBookings: tablingBookings || [],
+    oneTimeBookings: visible(oneTimeBookings || []),
+    weeklyBookings: visible(weeklyBookings || []),
+    tablingBookings: visible(tablingBookings || []),
   })
 }
