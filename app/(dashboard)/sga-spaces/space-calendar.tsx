@@ -26,6 +26,7 @@ interface SpaceCalendarProps {
   blackouts: Blackout[]
   currentUserId?: string
   minHoursAdvance?: number
+  canBook?: boolean
   onSlotClick: (startIso: string, endIso: string) => void
   onBookingClick?: (booking: Booking) => void
 }
@@ -81,6 +82,7 @@ export default function SpaceCalendar({
   blackouts,
   currentUserId,
   minHoursAdvance = 24,
+  canBook = false,
   onSlotClick,
   onBookingClick,
 }: SpaceCalendarProps) {
@@ -217,6 +219,10 @@ export default function SpaceCalendar({
 
   // ── Mouse interaction ────────────────────────────────────────────────────────
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent, dayIdx: number) => {
+    if (!canBook) {
+      setOverlayCursor('default')
+      return
+    }
     const slot = slotFromClientY(e.clientY)
     if (isSlotBlocked(dayIdx, slot) || isSlotInNoticeZone(dayIdx, slot)) {
       setOverlayCursor('default')
@@ -234,7 +240,7 @@ export default function SpaceCalendar({
       setOverlayCursor('crosshair')
       setHoveredBookingId(null)
     }
-  }, [slotFromClientY, isSlotBlocked, isSlotInNoticeZone, isSlotBooked, bookingsByDay, currentUserId])
+  }, [canBook, slotFromClientY, isSlotBlocked, isSlotInNoticeZone, isSlotBooked, bookingsByDay, currentUserId])
 
   const handleColumnMouseDown = useCallback((e: React.MouseEvent, dayIdx: number) => {
     e.preventDefault()
@@ -247,9 +253,10 @@ export default function SpaceCalendar({
       }
       return
     }
+    if (!canBook) return
     dragRef.current = { dayIdx, startSlot: slot, currentSlot: slot }
     setDragPreview({ dayIdx, startSlot: slot, endSlot: slot + 1 })
-  }, [slotFromClientY, isSlotBlocked, isSlotInNoticeZone, isSlotBooked, currentUserId, onBookingClick, bookingsByDay])
+  }, [canBook, slotFromClientY, isSlotBlocked, isSlotInNoticeZone, isSlotBooked, currentUserId, onBookingClick, bookingsByDay])
 
   const clampEndSlot = useCallback((dayIdx: number, startSlot: number, rawEnd: number): number => {
     let end = Math.max(startSlot + 1, rawEnd)
@@ -434,7 +441,7 @@ export default function SpaceCalendar({
                 )}
 
                 {/* Drag selection preview */}
-                {dragPreview && dragPreview.dayIdx === dayIdx && (
+                {canBook && dragPreview && dragPreview.dayIdx === dayIdx && (
                   <div
                     className="absolute inset-x-0 z-40 pointer-events-none"
                     style={{
@@ -455,7 +462,7 @@ export default function SpaceCalendar({
                   className="absolute inset-0 z-50"
                   style={{ cursor: overlayCursor }}
                   onMouseMove={e => handleOverlayMouseMove(e, dayIdx)}
-                  onMouseLeave={() => { setOverlayCursor('crosshair'); setHoveredBookingId(null) }}
+                  onMouseLeave={() => { setOverlayCursor(canBook ? 'crosshair' : 'default'); setHoveredBookingId(null) }}
                   onMouseDown={e => handleColumnMouseDown(e, dayIdx)}
                 />
               </div>

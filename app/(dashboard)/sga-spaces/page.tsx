@@ -154,10 +154,13 @@ export default function SGASpacesPage() {
   const [limitHours, setLimitHours] = useState<number>(18)
   const [minHoursAdvance, setMinHoursAdvance] = useState<number>(24)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [canBook, setCanBook] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isLeadership, setIsLeadership] = useState(false)
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null)
   const [editBooking, setEditBooking] = useState<EditBooking | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
+
+  const canBook = isAdmin || isLeadership
 
   const isTodayWeek = (() => {
     const now = new Date()
@@ -170,14 +173,14 @@ export default function SGASpacesPage() {
     const supabase = createClient()
     supabase.auth.getUser().then(async ({ data: { user } }) => {
       if (!user) return
-      if (user.app_metadata?.is_admin) { setCanBook(true); return }
+      if (user.app_metadata?.is_admin) setIsAdmin(true)
       const { data: memberships } = await supabase
         .from('board_memberships')
         .select('id')
         .eq('user_id', user.id)
         .eq('role', 'Leadership')
         .limit(1)
-      if (memberships && memberships.length > 0) setCanBook(true)
+      if (memberships && memberships.length > 0) setIsLeadership(true)
     })
   }, [])
 
@@ -351,6 +354,7 @@ export default function SGASpacesPage() {
               blackouts={blackouts}
               currentUserId={currentUserId ?? undefined}
               minHoursAdvance={minHoursAdvance}
+              canBook={canBook}
               onSlotClick={canBook ? (start, end) => setModalSlot({ start, end }) : () => {}}
               onBookingClick={handleBookingClick}
             />

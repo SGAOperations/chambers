@@ -154,7 +154,7 @@ export default function OnboardingPage() {
       return
     }
 
-    router.push('/my-rooms')
+    window.location.href = '/my-rooms'
   }
 
   const toggleBody = (id: string) => {
