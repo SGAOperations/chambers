@@ -14,13 +14,24 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { data, error } = await adminSupabase
+  const { data: overrides, error } = await adminSupabase
     .from('space_weekly_limit_overrides')
-    .select('*, users!space_weekly_limit_overrides_user_id_fkey(id, full_name, email)')
+    .select('*')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  if (!overrides || overrides.length === 0) return NextResponse.json([])
+
+  const userIds = overrides.map((o: { user_id: string }) => o.user_id)
+  const { data: users, error: usersError } = await adminSupabase
+    .from('users')
+    .select('id, full_name, email')
+    .in('id', userIds)
+
+  if (usersError) return NextResponse.json({ error: usersError.message }, { status: 500 })
+
+  const usersById = Object.fromEntries((users ?? []).map((u: { id: string; full_name: string; email: string }) => [u.id, u]))
+  return NextResponse.json(overrides.map((o: { user_id: string }) => ({ ...o, users: usersById[o.user_id] ?? null })))
 }
 
 export async function POST(request: Request) {
