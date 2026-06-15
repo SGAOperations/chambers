@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import TimePicker from './time-picker'
 
 const STATUSES = [
@@ -33,6 +33,27 @@ interface Session {
   status: string
 }
 
+interface PendingRequest {
+  id: string
+  type: string
+  purpose: string
+  status: string
+  created_at: string
+  body_id: string
+  bodies: { name: string } | null
+  room_request_details: Array<{
+    start_date: string | null
+    end_date: string | null
+    start_time: string | null
+    end_time: string | null
+  }> | null
+  tabling_request_sessions: Array<{
+    session_date: string | null
+    start_time: string | null
+    end_time: string | null
+  }> | null
+}
+
 interface TablingFormProps {
   bodies: Body[]
   semesters: Semester[]
@@ -62,6 +83,22 @@ export default function TablingForm({ bodies, semesters, onClose, onSuccess }: T
   const [sessions, setSessions] = useState<Session[]>([emptySession()])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([])
+
+  useEffect(() => {
+    fetch('/api/administrator/requests')
+      .then(r => r.json())
+      .then(({ requests }) => {
+        setPendingRequests(
+          (requests ?? []).filter((r: PendingRequest) => r.status === 'Pending' && r.type === 'Tabling')
+        )
+      })
+      .catch(() => {})
+  }, [])
+
+  const visibleRequests = form.body_id
+    ? pendingRequests.filter(r => r.body_id === form.body_id)
+    : pendingRequests
 
   const updateSession = (index: number, field: keyof Session, value: string) => {
     setSessions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
@@ -109,7 +146,8 @@ export default function TablingForm({ bodies, semesters, onClose, onSuccess }: T
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex gap-8 items-start">
+      <div className="flex-1 space-y-4">
       <div>
         <label className={labelCls}>Semester *</label>
         {semesters.length === 0 ? (
@@ -254,6 +292,34 @@ export default function TablingForm({ bodies, semesters, onClose, onSuccess }: T
         >
           Cancel
         </button>
+      </div>
+      </div>
+
+      <div className="w-96 shrink-0">
+        <div className="rounded-xl border border-[#1e5080] bg-[#0f2a4a] p-4 h-full">
+          <p className="text-xs font-semibold text-[#93b8d8] uppercase tracking-wide mb-3">Open Requests</p>
+          {visibleRequests.length === 0 ? (
+            <p className="text-xs text-[#6a96bb]">No open requests</p>
+          ) : (
+            <div className="space-y-2">
+              {visibleRequests.map(r => (
+                <div key={r.id} className="rounded-lg bg-[#0a1f38] border border-[#1e5080]/60 px-3 py-2.5">
+                  <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                    <span className="text-sm font-semibold text-[#f0f6ff]">{r.bodies?.name ?? '—'}</span>
+                    <span className="text-xs text-[#6a96bb] shrink-0">{new Date(r.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <p className="text-xs text-[#93b8d8] mb-1.5">{r.purpose}</p>
+                  {(r.tabling_request_sessions ?? []).map((s, i) => (
+                    <div key={i} className="flex gap-3 text-xs text-[#6a96bb]">
+                      <span>{s.session_date ?? '—'}</span>
+                      <span>{s.start_time?.slice(0, 5) ?? '—'} – {s.end_time?.slice(0, 5) ?? '—'}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
