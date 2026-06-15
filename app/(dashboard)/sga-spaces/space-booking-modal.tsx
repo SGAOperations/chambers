@@ -9,6 +9,12 @@ interface User {
   email: string
 }
 
+interface Space {
+  id: string
+  name: string
+  capacity: number
+}
+
 interface SpaceBookingModalProps {
   spaceId: string
   spaceName: string
@@ -21,6 +27,7 @@ interface SpaceBookingModalProps {
   initialTitle?: string
   initialAttendees?: User[]
   onCancelBooking?: () => Promise<void>
+  spaces?: Space[]
 }
 
 function isoToDateAndTime(iso: string): { date: string; time: string } {
@@ -52,12 +59,14 @@ export default function SpaceBookingModal({
   initialTitle = '',
   initialAttendees = [],
   onCancelBooking,
+  spaces,
 }: SpaceBookingModalProps) {
   const isEditing = !!editBookingId
 
   const { date: initDate, time: initStartTime } = isoToDateAndTime(initialStart)
   const { time: initEndTime } = isoToDateAndTime(initialEnd)
 
+  const [selectedSpaceId, setSelectedSpaceId] = useState(spaceId)
   const [title, setTitle] = useState(initialTitle)
   const [date, setDate] = useState(initDate)
   const [startTime, setStartTime] = useState(initStartTime)
@@ -86,6 +95,12 @@ export default function SpaceBookingModal({
       setSearchLoading(false)
     }
   }, [attendees])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
 
   useEffect(() => {
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
@@ -138,7 +153,7 @@ export default function SpaceBookingModal({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              space_id: spaceId,
+              space_id: selectedSpaceId,
               title: title.trim(),
               start_time,
               end_time,
@@ -162,7 +177,7 @@ export default function SpaceBookingModal({
   const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
         className="bg-[#0a1628] border border-[#1e5080] rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
@@ -170,7 +185,7 @@ export default function SpaceBookingModal({
         <div className="flex items-center justify-between p-5 border-b border-[#1e5080]">
           <div>
             <h2 className="text-lg font-semibold text-[#f0f6ff]">
-              {isEditing ? 'Edit Booking' : `Book ${spaceName}`}
+              {isEditing ? 'Edit Booking' : `Book ${spaces?.find(s => s.id === selectedSpaceId)?.name ?? spaceName}`}
             </h2>
             {isEditing && (
               <p className="text-xs text-[#93b8d8] mt-0.5">{spaceName}</p>
@@ -184,6 +199,22 @@ export default function SpaceBookingModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {/* Location selector (creation mode only) */}
+          {!isEditing && spaces && spaces.length > 1 && (
+            <div>
+              <label className={labelCls}>Location</label>
+              <select
+                value={selectedSpaceId}
+                onChange={e => setSelectedSpaceId(e.target.value)}
+                className={inputCls}
+              >
+                {spaces.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} (cap. {s.capacity})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Title */}
           <div>
             <label className={labelCls}>Booking Title <span className="text-[#c8102e]">*</span></label>

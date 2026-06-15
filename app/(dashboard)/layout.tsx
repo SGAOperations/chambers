@@ -279,7 +279,7 @@ export default function DashboardLayout({
           </div>
         </nav>
 
-        <main className="flex-1 bg-gradient-to-br from-[#112244] via-[#0a1628] to-[#060e1a] p-8 overflow-y-auto">
+        <main className="flex-1 bg-gradient-to-br from-[#112244] via-[#0a1628] to-[#060e1a] p-8 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
       </div>
