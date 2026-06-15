@@ -305,7 +305,7 @@ export default function SpaceCalendar({
     <div className="rounded-xl border border-[#1e5080] overflow-hidden bg-[#0a1628] select-none">
       <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: '648px' }}>
         {/* Sticky day header */}
-        <div ref={headerRef} className="flex border-b border-[#1e5080] sticky top-0 z-50 bg-[#0a1628]">
+        <div ref={headerRef} className="flex border-b border-[#1e5080] sticky top-0 z-10 bg-[#0a1628]">
           <div className="w-14 flex-shrink-0 border-r border-[#1e5080]" />
           {dayLabels.map((dl, i) => (
             <div
@@ -459,7 +459,7 @@ export default function SpaceCalendar({
 
                 {/* Drag capture overlay */}
                 <div
-                  className="absolute inset-0 z-50"
+                  className="absolute inset-0 z-20"
                   style={{ cursor: overlayCursor }}
                   onMouseMove={e => handleOverlayMouseMove(e, dayIdx)}
                   onMouseLeave={() => { setOverlayCursor(canBook ? 'crosshair' : 'default'); setHoveredBookingId(null) }}

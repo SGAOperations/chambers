@@ -373,6 +373,7 @@ export default function SGASpacesPage() {
               setModalSlot(null)
               fetchCalendarData()
             }}
+            spaces={spaces}
           />
         )}
 

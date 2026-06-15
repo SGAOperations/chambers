@@ -233,7 +233,7 @@ export default function DashboardLayout({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.11.11</p>
+            <p className="text-slate-600 text-xs mt-1">v1.12.0</p>
             {userName && (
               <div className="flex items-start justify-between mt-2">
                 <p className="text-slate-500 text-xs italic">{getGreeting()},<br />{userName}</p>
@@ -279,7 +279,7 @@ export default function DashboardLayout({
           </div>
         </nav>
 
-        <main className="flex-1 bg-gradient-to-br from-[#112244] via-[#0a1628] to-[#060e1a] p-8 overflow-y-auto">
+        <main className="flex-1 bg-gradient-to-br from-[#112244] via-[#0a1628] to-[#060e1a] p-8 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
       </div>
