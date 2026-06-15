@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { verifySlackRequest } from '@/lib/slack-verify'
 
@@ -219,9 +220,28 @@ export async function POST(request: Request) {
     .maybeSingle()
 
   if (!connection) {
+    const token = randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+
+    await adminSupabase
+      .from('slack_connect_tokens')
+      .insert({ token, slack_user_id: slackUserId, expires_at: expiresAt })
+
+    await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({
+        channel: slackUserId,
+        text: `To use Chambers from Slack, link your account here (expires in 15 minutes): https://chambers.northeasternsga.com/slack/connect?token=${token}`,
+      }),
+    })
+
     return Response.json({
       response_type: 'ephemeral',
-      text: "You haven't linked your Chambers account yet. Visit https://chambers.northeasternsga.com/slack/connect to get started.",
+      text: "Check your DMs — we've sent you a link to connect your Chambers account.",
     })
   }
 
