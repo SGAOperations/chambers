@@ -174,7 +174,7 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         channel: slackUserId,
         user: slackUserId,
-        text: 'Your booking request has been submitted! You can view it at https://chambers.northeasternsga.com/dashboard',
+        text: 'Your booking request has been submitted! You can view it at https://chambers.northeasternsga.com/request',
       }),
     }).catch(() => {})
   )
