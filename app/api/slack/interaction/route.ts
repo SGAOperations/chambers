@@ -1,3 +1,4 @@
+import { waitUntil } from '@vercel/functions'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { verifySlackRequest } from '@/lib/slack-verify'
 
@@ -148,18 +149,20 @@ export async function POST(request: Request) {
     }
   }
 
-  fetch('https://slack.com/api/chat.postEphemeral', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
-    },
-    body: JSON.stringify({
-      channel: slackUserId,
-      user: slackUserId,
-      text: 'Your booking request has been submitted! You can view it at https://chambers.northeasternsga.com/dashboard',
-    }),
-  }).catch(() => {})
+  waitUntil(
+    fetch('https://slack.com/api/chat.postEphemeral', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({
+        channel: slackUserId,
+        user: slackUserId,
+        text: 'Your booking request has been submitted! You can view it at https://chambers.northeasternsga.com/dashboard',
+      }),
+    }).catch(() => {})
+  )
 
   return Response.json({ response_action: 'clear' })
 }

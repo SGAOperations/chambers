@@ -57,7 +57,7 @@ function buildRoomModal(bodies: { id: string; name: string }[]) {
       {
         type: 'input',
         block_id: 'room_block',
-        label: { type: 'plain_text', text: 'Preferred Room (optional)' },
+        label: { type: 'plain_text', text: 'Preferred Room' },
         optional: true,
         element: {
           type: 'plain_text_input',
@@ -100,7 +100,7 @@ function buildRoomModal(bodies: { id: string; name: string }[]) {
       {
         type: 'input',
         block_id: 'notes_block',
-        label: { type: 'plain_text', text: 'Additional Notes (optional)' },
+        label: { type: 'plain_text', text: 'Additional Notes' },
         optional: true,
         element: {
           type: 'plain_text_input',
@@ -181,7 +181,7 @@ function buildTablingModal(bodies: { id: string; name: string }[]) {
       {
         type: 'input',
         block_id: 'notes_block',
-        label: { type: 'plain_text', text: 'Additional Notes (optional)' },
+        label: { type: 'plain_text', text: 'Additional Notes' },
         optional: true,
         element: {
           type: 'plain_text_input',
