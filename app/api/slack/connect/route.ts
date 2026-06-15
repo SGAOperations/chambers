@@ -1,5 +1,6 @@
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,9 +30,15 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { token, chambers_user_id } = await request.json()
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
-  if (!token || !chambers_user_id) {
+  const { token } = await request.json()
+
+  if (!token) {
     return NextResponse.json({ error: 'Missing required fields.' }, { status: 400 })
   }
 
@@ -49,7 +56,7 @@ export async function POST(request: Request) {
   const { error: upsertError } = await adminSupabase
     .from('slack_connections')
     .upsert(
-      { slack_user_id: tokenRow.slack_user_id, chambers_user_id },
+      { slack_user_id: tokenRow.slack_user_id, chambers_user_id: user.id },
       { onConflict: 'slack_user_id' }
     )
 

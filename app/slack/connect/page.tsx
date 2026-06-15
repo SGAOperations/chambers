@@ -7,16 +7,19 @@ export default async function SlackConnectPage({
 }: {
   searchParams: Promise<{ token?: string }>
 }) {
+  const { token } = await searchParams
+
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   if (!user) {
-    redirect('/')
+    const redirectTo = token
+      ? `/?redirectTo=${encodeURIComponent(`/slack/connect?token=${token}`)}`
+      : '/'
+    redirect(redirectTo)
   }
-
-  const { token } = await searchParams
 
   if (!token) {
     return (
@@ -28,7 +31,7 @@ export default async function SlackConnectPage({
     )
   }
 
-  return <SlackConnectForm token={token} userId={user.id} />
+  return <SlackConnectForm token={token} />
 }
 
 function PageShell({ children }: { children: React.ReactNode }) {

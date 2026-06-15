@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { verifySlackRequest } from '@/lib/slack-verify'
+import { checkRateLimit } from '@/lib/check-rate-limit'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -213,6 +214,9 @@ export async function POST(request: Request) {
     return new Response('Bad Request', { status: 400 })
   }
 
+  const rateLimitRes = await checkRateLimit(`slack:${slackUserId}`)
+  if (rateLimitRes) return rateLimitRes
+
   const { data: connection } = await adminSupabase
     .from('slack_connections')
     .select('chambers_user_id')
@@ -222,6 +226,12 @@ export async function POST(request: Request) {
   if (!connection) {
     const token = randomBytes(32).toString('hex')
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+
+    await adminSupabase
+      .from('slack_connect_tokens')
+      .delete()
+      .eq('slack_user_id', slackUserId)
+      .lt('expires_at', new Date().toISOString())
 
     await adminSupabase
       .from('slack_connect_tokens')

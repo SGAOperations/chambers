@@ -1,6 +1,7 @@
 import { waitUntil } from '@vercel/functions'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { verifySlackRequest } from '@/lib/slack-verify'
+import { checkRateLimit } from '@/lib/check-rate-limit'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,9 +59,23 @@ export async function POST(request: Request) {
     return blockError({ purpose_block: 'Your Slack account is not linked to Chambers. Please connect at https://chambers.northeasternsga.com/slack/connect' })
   }
 
+  const rateLimitRes = await checkRateLimit(connection.chambers_user_id)
+  if (rateLimitRes) return rateLimitRes
+
   const vals = payload.view.state.values
   const body_id: string = vals.body_block.body_action.selected_option?.value
   const purpose: string = vals.purpose_block.purpose_action.value
+
+  const { data: bodyExists } = await adminSupabase
+    .from('bodies')
+    .select('id')
+    .eq('id', body_id)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (!bodyExists) {
+    return blockError({ body_block: 'Invalid body selected.' })
+  }
   const room_name: string | null = vals.room_block?.room_action?.value || null
   const date: string = vals.date_block.date_action.selected_date
   const start_time: string = vals.start_time_block.start_time_action.selected_option?.value

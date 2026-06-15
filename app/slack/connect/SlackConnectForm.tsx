@@ -4,13 +4,7 @@ import { useEffect, useState } from 'react'
 
 type Status = 'validating' | 'idle' | 'loading' | 'success' | 'error'
 
-export default function SlackConnectForm({
-  token,
-  userId,
-}: {
-  token: string
-  userId: string
-}) {
+export default function SlackConnectForm({ token }: { token: string }) {
   const [status, setStatus] = useState<Status>('validating')
   const [errorMessage, setErrorMessage] = useState('')
 
@@ -32,7 +26,7 @@ export default function SlackConnectForm({
       const res = await fetch('/api/slack/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, chambers_user_id: userId }),
+        body: JSON.stringify({ token }),
       })
       if (!res.ok) {
         const data = await res.json()
