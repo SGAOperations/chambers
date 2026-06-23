@@ -55,6 +55,20 @@ export async function POST(request: Request) {
 
   const { email, full_name, admin_role, iems_role } = await request.json()
 
+  // Block re-inviting a deactivated account — admin must reactivate instead
+  const { count: deactivatedCount } = await adminSupabase
+    .from('users')
+    .select('id', { count: 'exact', head: true })
+    .eq('email', email.trim().toLowerCase())
+    .eq('is_active', false)
+
+  if (deactivatedCount && deactivatedCount > 0) {
+    return NextResponse.json(
+      { error: 'A deactivated account already exists for this email. Reactivate the account instead of sending a new invite.' },
+      { status: 400 }
+    )
+  }
+
   const otp = randomBytes(8).toString('base64url').slice(0, 12)
   const otpHash = createHash('sha256').update(otp).digest('hex')
   const otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
