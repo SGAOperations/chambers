@@ -302,10 +302,10 @@ export default function SpaceCalendar({
   const totalHeight = TOTAL_SLOTS * SLOT_HEIGHT
 
   return (
-    <div className="rounded-xl border border-[#1e5080] overflow-hidden bg-[#0a1628] select-none">
+    <div className="rounded-xl border border-[#1e5080] overflow-hidden bg-[#0a1628] select-none isolate">
       <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: '648px' }}>
         {/* Sticky day header */}
-        <div ref={headerRef} className="flex border-b border-[#1e5080] sticky top-0 z-10 bg-[#0a1628]">
+        <div ref={headerRef} className="flex border-b border-[#1e5080] sticky top-0 z-[60] bg-[#0a1628]">
           <div className="w-14 flex-shrink-0 border-r border-[#1e5080]" />
           {dayLabels.map((dl, i) => (
             <div
