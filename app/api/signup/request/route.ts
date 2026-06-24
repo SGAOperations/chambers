@@ -23,6 +23,20 @@ export async function POST(request: Request) {
 
   const normalizedEmail = email.trim().toLowerCase()
 
+  // Block deactivated accounts — generic message to avoid leaking account status
+  const { count: deactivatedCount } = await adminSupabase
+    .from('users')
+    .select('id', { count: 'exact', head: true })
+    .eq('email', normalizedEmail)
+    .eq('is_active', false)
+
+  if (deactivatedCount && deactivatedCount > 0) {
+    return NextResponse.json(
+      { error: 'This email is not eligible for registration. Please contact an administrator.' },
+      { status: 400 }
+    )
+  }
+
   // Check if a fully set-up account already exists (head-only, no data returned)
   const { count: existingCount } = await adminSupabase
     .from('users')

@@ -34,5 +34,11 @@ export async function PATCH(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  const { error: metaError } = await adminSupabase.auth.admin.updateUserById(user.id, {
+    user_metadata: { full_name },
+  })
+
+  if (metaError) return NextResponse.json({ error: metaError.message }, { status: 500 })
+
   return NextResponse.json({ success: true })
 }
