@@ -8,7 +8,7 @@ const adminSupabase = createAdminClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -19,62 +19,70 @@ export async function GET() {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  // Only show bookings for the active semester
+  const { searchParams } = new URL(request.url)
+  const all = searchParams.get('all') === 'true'
+
   const { data: activeSemester } = await supabase
     .from('semesters')
     .select('id, name')
     .eq('is_active', true)
     .single()
 
-  if (!activeSemester) {
+  if (!all && !activeSemester) {
     return NextResponse.json({ oneTime: [], weekly: [], tabling: [], activeSemester: null })
   }
 
+  const semesterId = (!all && activeSemester) ? activeSemester.id : null
+
+  let oneTimeQ = supabase
+    .from('bookings')
+    .select(`
+      id, purpose, body_id, is_event, hidden,
+      bodies(name),
+      creator_role,
+      one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
+    `)
+    .eq('type', 'One-Time Room')
+    .order('created_at', { ascending: false })
+  if (semesterId) oneTimeQ = oneTimeQ.eq('semester_id', semesterId)
+
+  let weeklyQ = supabase
+    .from('bookings')
+    .select(`
+      id, purpose, body_id, is_event, hidden,
+      bodies(name),
+      creator_role,
+      weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
+        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type)
+      )
+    `)
+    .eq('type', 'Weekly Room')
+    .order('created_at', { ascending: false })
+  if (semesterId) weeklyQ = weeklyQ.eq('semester_id', semesterId)
+
+  let tablingQ = supabase
+    .from('bookings')
+    .select(`
+      id, purpose, body_id, is_event, hidden,
+      bodies(name),
+      creator_role,
+      tabling_bookings(id, reservation_code,
+        tabling_sessions(id, location, session_date, start_time, end_time, status, reservation_code)
+      )
+    `)
+    .eq('type', 'Tabling')
+    .order('created_at', { ascending: false })
+  if (semesterId) tablingQ = tablingQ.eq('semester_id', semesterId)
+
   const [{ data: oneTime }, { data: weekly }, { data: tabling }] = await Promise.all([
-    supabase
-      .from('bookings')
-      .select(`
-        id, purpose, body_id, is_event, hidden,
-        bodies(name),
-        creator_role,
-        one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
-      `)
-      .eq('type', 'One-Time Room')
-      .eq('semester_id', activeSemester.id)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('bookings')
-      .select(`
-        id, purpose, body_id, is_event, hidden,
-        bodies(name),
-        creator_role,
-        weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
-          weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type)
-        )
-      `)
-      .eq('type', 'Weekly Room')
-      .eq('semester_id', activeSemester.id)
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('bookings')
-      .select(`
-        id, purpose, body_id, is_event, hidden,
-        bodies(name),
-        creator_role,
-        tabling_bookings(id, reservation_code,
-          tabling_sessions(id, location, session_date, start_time, end_time, status, reservation_code)
-        )
-      `)
-      .eq('type', 'Tabling')
-      .eq('semester_id', activeSemester.id)
-      .order('created_at', { ascending: false }),
+    oneTimeQ, weeklyQ, tablingQ,
   ])
 
   return NextResponse.json({
     oneTime: oneTime || [],
     weekly: weekly || [],
     tabling: tabling || [],
-    activeSemester,
+    activeSemester: activeSemester ?? null,
   })
 }
 

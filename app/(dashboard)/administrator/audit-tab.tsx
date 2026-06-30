@@ -64,6 +64,13 @@ function AdminRoleBadge({ role }: { role: string | null | undefined }) {
       </span>
     )
   }
+  if (role === 'Information Manager') {
+    return (
+      <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#fbbf24] text-[#451a03]">
+        Info Manager
+      </span>
+    )
+  }
   return null
 }
 

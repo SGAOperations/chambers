@@ -32,6 +32,7 @@ const ADMIN_ROLES = [
   'Comptroller',
   'Digital Innovation Manager',
   'Digital Innovation Project Member',
+  'Information Manager',
 ]
 
 const IEMS_ROLES = [
@@ -43,6 +44,7 @@ const ROLE_EDITORS = [
   'Executive Vice President',
   'Vice President of Operational Affairs',
   'Digital Innovation Manager',
+  'Information Manager',
 ]
 
 interface Membership {
