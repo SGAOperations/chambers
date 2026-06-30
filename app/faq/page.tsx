@@ -88,7 +88,7 @@ export default async function FaqPage() {
 
         <div className="border-t border-[#1e5080] pt-6">
           <Link href="/" className="text-sm text-[#93b8d8] hover:text-[#f0f6ff] font-medium transition">
-            ← Back to login
+            ← Back to Chambers
           </Link>
         </div>
       </div>
