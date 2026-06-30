@@ -58,7 +58,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'space_id and week_start required' }, { status: 400 })
   }
 
-  const weekEnd = new Date(new Date(weekStart).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  const weekEndParam = searchParams.get('week_end')
+  const weekEnd = weekEndParam ?? new Date(new Date(weekStart).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
   // Fetch bookings and blackouts in parallel (no join — creator FK points to auth.users which PostgREST can't reach)
   const [

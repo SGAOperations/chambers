@@ -65,6 +65,69 @@ interface UserResult {
 }
 
 type SubTab = 'Bookings' | 'Blackouts' | 'Limit Overrides'
+type BookingRange = 'week' | 'month' | 'semester' | 'all'
+
+const RANGE_LABELS: Record<BookingRange, string> = {
+  week: 'This Week',
+  month: 'This Month',
+  semester: 'This Semester',
+  all: 'All',
+}
+
+const RANGE_DESCRIPTIONS: Record<BookingRange, string> = {
+  week: 'Showing this week.',
+  month: 'Showing this month.',
+  semester: 'Showing this semester.',
+  all: 'Showing all bookings.',
+}
+
+function getRangeBounds(range: BookingRange): { start: string; end: string } {
+  const now = new Date()
+  const y = now.getUTCFullYear()
+  const m = now.getUTCMonth()
+
+  function sundayOf(d: Date): Date {
+    const s = new Date(d)
+    s.setUTCDate(d.getUTCDate() - d.getUTCDay())
+    s.setUTCHours(0, 0, 0, 0)
+    return s
+  }
+
+  const thisWeekStart = sundayOf(now)
+
+  if (range === 'week') {
+    const end = new Date(thisWeekStart)
+    end.setUTCDate(thisWeekStart.getUTCDate() + 7)
+    return { start: thisWeekStart.toISOString(), end: end.toISOString() }
+  }
+
+  if (range === 'month') {
+    return {
+      start: new Date(Date.UTC(y, m, 1)).toISOString(),
+      end: new Date(Date.UTC(y, m + 1, 1)).toISOString(),
+    }
+  }
+
+  if (range === 'semester') {
+    if (m <= 4) {
+      // Spring: Jan–May
+      return { start: new Date(Date.UTC(y, 0, 1)).toISOString(), end: new Date(Date.UTC(y, 5, 1)).toISOString() }
+    } else if (m >= 7) {
+      // Fall: Aug–Dec
+      return { start: new Date(Date.UTC(y, 7, 1)).toISOString(), end: new Date(Date.UTC(y + 1, 0, 1)).toISOString() }
+    } else {
+      // Summer: Jun–Jul
+      return { start: new Date(Date.UTC(y, 5, 1)).toISOString(), end: new Date(Date.UTC(y, 8, 1)).toISOString() }
+    }
+  }
+
+  // all: 4 weeks back → 52 weeks ahead
+  const start = new Date(thisWeekStart)
+  start.setUTCDate(thisWeekStart.getUTCDate() - 4 * 7)
+  const end = new Date(thisWeekStart)
+  end.setUTCDate(thisWeekStart.getUTCDate() + 52 * 7)
+  return { start: start.toISOString(), end: end.toISOString() }
+}
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso)
@@ -125,36 +188,32 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
   const [bookings, setBookings] = useState<SpaceBooking[]>([])
   const [loading, setLoading] = useState(true)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [range, setRange] = useState<BookingRange>('semester')
 
   const fetchBookings = useCallback(async () => {
     setLoading(true)
     try {
-      // Fetch for all spaces, current + future week (use a wide window)
-      const now = new Date()
-      const weekStart = new Date(now)
-      weekStart.setUTCDate(now.getUTCDate() - now.getUTCDay())
-      weekStart.setUTCHours(0, 0, 0, 0)
+      const { start, end } = getRangeBounds(range)
 
-      // Fetch per space and merge
-      const results: SpaceBooking[] = []
-      for (const space of spaces) {
-        const res = await fetch(`/api/spaces/bookings?space_id=${space.id}&week_start=${weekStart.toISOString()}`)
-        if (res.ok) {
-          const data = await res.json()
-          results.push(
-            ...(data.bookings ?? []).map((b: SpaceBooking) => ({
+      const fetches = spaces.map(space =>
+        fetch(`/api/spaces/bookings?space_id=${space.id}&week_start=${start}&week_end=${end}`)
+          .then(res => res.ok ? res.json() : { bookings: [] })
+          .then((data: { bookings?: SpaceBooking[] }) =>
+            (data.bookings ?? []).map((b: SpaceBooking) => ({
               ...b,
               spaces: { name: space.name },
             }))
           )
-        }
-      }
-      results.sort((a, b) => a.start_time.localeCompare(b.start_time))
-      setBookings(results)
+      )
+
+      const allResults = await Promise.all(fetches)
+      const flat = allResults.flat()
+      flat.sort((a, b) => a.start_time.localeCompare(b.start_time))
+      setBookings(flat)
     } finally {
       setLoading(false)
     }
-  }, [spaces])
+  }, [spaces, range])
 
   useEffect(() => {
     if (spaces.length > 0) fetchBookings()
@@ -178,49 +237,66 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
 
   if (loading) return <TableSkeleton cols={6} />
 
-  if (bookings.length === 0) {
-    return <div className="text-[#93b8d8] text-sm">No upcoming space bookings.</div>
-  }
-
   return (
     <div className="space-y-2">
-      <p className="text-xs text-[#93b8d8]">Showing current week. Force-cancelling sends email to creator and all attendees.</p>
-      <div className="overflow-x-auto rounded-xl border border-[#1e5080]">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[#1e5080] text-[#93b8d8] text-xs">
-              <th className="px-4 py-3 text-left font-medium">Space</th>
-              <th className="px-4 py-3 text-left font-medium">Title</th>
-              <th className="px-4 py-3 text-left font-medium">Creator</th>
-              <th className="px-4 py-3 text-left font-medium">Start</th>
-              <th className="px-4 py-3 text-left font-medium">End</th>
-              <th className="px-4 py-3 text-left font-medium">Attendees</th>
-              <th className="px-4 py-3 text-left font-medium"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {bookings.map(b => (
-              <tr key={b.id} className="border-b border-[#1e5080]/50 last:border-0 hover:bg-white/5">
-                <td className="px-4 py-3 text-[#f0f6ff]">{b.spaces?.name ?? '—'}</td>
-                <td className="px-4 py-3 text-[#f0f6ff] font-medium">{b.title}</td>
-                <td className="px-4 py-3 text-[#93b8d8]">{b.creator_name ?? '—'}</td>
-                <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.start_time)}</td>
-                <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.end_time)}</td>
-                <td className="px-4 py-3 text-[#93b8d8]">{(b.attendee_ids ?? []).length + 1}</td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => cancelBooking(b.id)}
-                    disabled={cancellingId === b.id}
-                    className="text-xs text-[#c8102e] hover:text-[#f87171] disabled:opacity-50 font-medium transition-colors"
-                  >
-                    {cancellingId === b.id ? 'Cancelling…' : 'Force Cancel'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-xs text-[#93b8d8]">{RANGE_DESCRIPTIONS[range]} Force-cancelling sends email to creator and all attendees.</p>
+        <div className="flex gap-1 shrink-0">
+          {(['week', 'month', 'semester', 'all'] as BookingRange[]).map(r => (
+            <button
+              key={r}
+              onClick={() => setRange(r)}
+              className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
+                range === r
+                  ? 'bg-[#c8102e] text-white'
+                  : 'bg-[#0f2a4a] border border-[#1e5080] text-[#93b8d8] hover:text-[#f0f6ff] hover:border-[#93b8d8]'
+              }`}
+            >
+              {RANGE_LABELS[r]}
+            </button>
+          ))}
+        </div>
       </div>
+      {bookings.length === 0 ? (
+        <div className="text-[#93b8d8] text-sm">No space bookings for this period.</div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-[#1e5080]">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[#1e5080] text-[#93b8d8] text-xs">
+                <th className="px-4 py-3 text-left font-medium">Space</th>
+                <th className="px-4 py-3 text-left font-medium">Title</th>
+                <th className="px-4 py-3 text-left font-medium">Creator</th>
+                <th className="px-4 py-3 text-left font-medium">Start</th>
+                <th className="px-4 py-3 text-left font-medium">End</th>
+                <th className="px-4 py-3 text-left font-medium">Attendees</th>
+                <th className="px-4 py-3 text-left font-medium"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {bookings.map(b => (
+                <tr key={b.id} className="border-b border-[#1e5080]/50 last:border-0 hover:bg-white/5">
+                  <td className="px-4 py-3 text-[#f0f6ff]">{b.spaces?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-[#f0f6ff] font-medium">{b.title}</td>
+                  <td className="px-4 py-3 text-[#93b8d8]">{b.creator_name ?? '—'}</td>
+                  <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.start_time)}</td>
+                  <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.end_time)}</td>
+                  <td className="px-4 py-3 text-[#93b8d8]">{(b.attendee_ids ?? []).length + 1}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => cancelBooking(b.id)}
+                      disabled={cancellingId === b.id}
+                      className="text-xs text-[#c8102e] hover:text-[#f87171] disabled:opacity-50 font-medium transition-colors"
+                    >
+                      {cancellingId === b.id ? 'Cancelling…' : 'Force Cancel'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

@@ -157,6 +157,7 @@ export default function BookingsTab() {
   const [tabling, setTabling] = useState<TablingBooking[]>([])
   const [bodies, setBodies] = useState<Body[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
+  const [showAll, setShowAll] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingBooking, setEditingBooking] = useState<OneTimeBooking | null>(null)
@@ -167,8 +168,8 @@ export default function BookingsTab() {
     sessions: { id: string; label: string }[]
   } | null>(null)
 
-  const fetchBookings = async () => {
-    const res = await fetch('/api/administrator/bookings')
+  const fetchBookings = async (all = false) => {
+    const res = await fetch(`/api/administrator/bookings${all ? '?all=true' : ''}`)
     const data = await res.json()
     setOneTime(data.oneTime || [])
     setWeekly(data.weekly || [])
@@ -211,10 +212,10 @@ export default function BookingsTab() {
   }
 
   useEffect(() => {
-    fetchBookings()
+    fetchBookings(showAll)
     fetchBodies()
     fetchSemesters()
-  }, [])
+  }, [showAll])
 
   const sortedWeekly = loading ? [] : [...weekly].sort((a, b) => {
     const wa = a.weekly_room_bookings?.[0]
@@ -245,8 +246,17 @@ export default function BookingsTab() {
         ))}
       </div>
 
-      {/* Create button */}
-      <div className="flex justify-end">
+      {/* Create button + all-semesters toggle */}
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <div
+            onClick={() => setShowAll(v => !v)}
+            className={`relative w-8 h-4.5 rounded-full transition-colors ${showAll ? 'bg-[#c8102e]' : 'bg-[#1e5080]'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${showAll ? 'translate-x-3.5' : 'translate-x-0'}`} />
+          </div>
+          <span className="text-xs text-[#93b8d8]">Show Inactive Bookings</span>
+        </label>
         <button
           onClick={() => setShowModal(true)}
           disabled={loading}
@@ -267,7 +277,7 @@ export default function BookingsTab() {
               bodies={bodies}
               semesters={semesters}
               onClose={() => setShowModal(false)}
-              onSuccess={fetchBookings}
+              onSuccess={() => fetchBookings(showAll)}
             />
           )}
           {subTab === 'Weekly Rooms' && (
@@ -275,7 +285,7 @@ export default function BookingsTab() {
                 bodies={bodies}
                 semesters={semesters}
                 onClose={() => setShowModal(false)}
-                onSuccess={fetchBookings}
+                onSuccess={() => fetchBookings(showAll)}
             />
           )}
           {subTab === 'Tables' && (
@@ -283,7 +293,7 @@ export default function BookingsTab() {
                 bodies={bodies}
                 semesters={semesters}
                 onClose={() => setShowModal(false)}
-                onSuccess={fetchBookings}
+                onSuccess={() => fetchBookings(showAll)}
             />
           )}
         </BookingModal>
@@ -297,7 +307,7 @@ export default function BookingsTab() {
                 booking={editingBooking}
                 bodies={bodies}
                 onClose={() => setEditingBooking(null)}
-                onSuccess={fetchBookings}
+                onSuccess={() => fetchBookings(showAll)}
             />
         </BookingModal>
       )}
@@ -311,7 +321,7 @@ export default function BookingsTab() {
                 booking={editingWeekly}
                 bodies={bodies}
                 onClose={() => setEditingWeekly(null)}
-                onSuccess={fetchBookings}
+                onSuccess={() => fetchBookings(showAll)}
             />
         </BookingModal>
       )}
@@ -325,7 +335,7 @@ export default function BookingsTab() {
                 booking={editingTabling}
                 bodies={bodies}
                 onClose={() => setEditingTabling(null)}
-                onSuccess={fetchBookings}
+                onSuccess={() => fetchBookings(showAll)}
             />
         </BookingModal>
       )}
@@ -335,7 +345,7 @@ export default function BookingsTab() {
           booking={cancellingAdminBooking.booking}
           sessions={cancellingAdminBooking.sessions}
           onClose={() => setCancellingAdminBooking(null)}
-          onCancelled={() => { setCancellingAdminBooking(null); fetchBookings() }}
+          onCancelled={() => { setCancellingAdminBooking(null); fetchBookings(showAll) }}
         />
       )}
 
