@@ -147,6 +147,15 @@ export default function LoginCard() {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </div>
+
+        <div className="border-t border-[#1e5080] mt-6 pt-5 flex items-center justify-between">
+          <div className="flex gap-3">
+            <Link href="/legal#privacy" className="text-xs text-[#6a96bb] hover:text-[#93b8d8] transition">Privacy Policy</Link>
+            <Link href="/legal#terms" className="text-xs text-[#6a96bb] hover:text-[#93b8d8] transition">Terms of Service</Link>
+            <Link href="/faq" className="text-xs text-[#6a96bb] hover:text-[#93b8d8] transition">FAQ</Link>
+          </div>
+          <span className="text-xs text-[#6a96bb]">© 2026 NUSGA</span>
+        </div>
       </div>
 
       {showForgot && createPortal(

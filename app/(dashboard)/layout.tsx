@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import AuthGuard from './authguard'
 import SettingsModal, { type Settings as SettingsData } from './settings-modal'
@@ -276,6 +277,12 @@ export default function DashboardLayout({
             >
               Sign Out
             </button>
+            <div className="px-1 pt-2 flex flex-wrap gap-x-2 gap-y-0.5">
+              <Link href="/legal#privacy" className="text-[10px] text-slate-600 hover:text-slate-400 transition">Privacy Policy</Link>
+              <Link href="/legal#terms" className="text-[10px] text-slate-600 hover:text-slate-400 transition">Terms of Service</Link>
+              <Link href="/faq" className="text-[10px] text-slate-600 hover:text-slate-400 transition">FAQ</Link>
+            </div>
+            <p className="px-1 text-[10px] text-slate-700">© 2026 NUSGA</p>
           </div>
         </nav>
 
