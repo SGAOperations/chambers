@@ -88,7 +88,11 @@ export default function BookingSettingsTab() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user?.app_metadata?.admin_role === 'Vice President of Operational Affairs') {
+      if (
+        user?.app_metadata?.admin_role === 'Vice President of Operational Affairs' ||
+        user?.app_metadata?.admin_role === 'Executive Vice President' ||
+        user?.app_metadata?.admin_role === 'Information Manager'
+      ) {
         setIsVP(true)
       }
     })

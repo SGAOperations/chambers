@@ -21,6 +21,7 @@ export const EMAIL_PREF_ADMIN_ROLES = [
   'Executive Vice President',
   'Vice President of Operational Affairs',
   'Comptroller',
+  'Information Manager',
 ]
 
 export const EMAIL_PREF_IEMS_ROLES = [
