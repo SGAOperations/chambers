@@ -92,7 +92,12 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  if (user.app_metadata?.admin_role !== 'Vice President of Operational Affairs') {
+  const semesterManagers = [
+    'Vice President of Operational Affairs',
+    'Executive Vice President',
+    'Information Manager',
+  ]
+  if (!semesterManagers.includes(user.app_metadata?.admin_role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

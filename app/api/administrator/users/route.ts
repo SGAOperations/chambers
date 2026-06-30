@@ -14,6 +14,7 @@ const ROLE_EDITORS = [
   'Executive Vice President',
   'Vice President of Operational Affairs',
   'Digital Innovation Manager',
+  'Information Manager',
 ]
 
 export async function GET() {
