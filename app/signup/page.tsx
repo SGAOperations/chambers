@@ -31,10 +31,10 @@ export default function SignupPage() {
       setError('Please enter a valid email address.')
       return
     }
-    // if (!trimmed.toLowerCase().endsWith('@northeastern.edu')) {
-    //   setError('Signup is restricted to @northeastern.edu email addresses.')
-    //   return
-    // }
+    if (!trimmed.toLowerCase().endsWith('@northeastern.edu')) {
+      setError('Signup is restricted to @northeastern.edu email addresses.')
+      return
+    }
     setSubmitting(true)
     const res = await fetch('/api/signup/request', {
       method: 'POST',
