@@ -35,7 +35,7 @@ interface EventBooking {
   event_tracking: {
     event_management_form: boolean
     engage_form: boolean
-  }[] | null
+  } | null
 }
 
 function formatTime(time: string) {
@@ -133,7 +133,7 @@ export default function EventsPage() {
         // Initialise checklist state from DB
         const initial: typeof checklist = {}
         for (const b of list) {
-          const t = b.event_tracking?.[0]
+          const t = b.event_tracking
           initial[b.id] = {
             event_management_form: t?.event_management_form ?? false,
             engage_form: t?.engage_form ?? false,
@@ -147,17 +147,24 @@ export default function EventsPage() {
   }, [])
 
   const updateStep = async (bookingId: string, step: 'event_management_form' | 'engage_form', checked: boolean) => {
-    // Optimistic update
+    // Optimistic update, rolled back below if the save fails.
     setChecklist(prev => ({
       ...prev,
       [bookingId]: { ...prev[bookingId], [step]: checked },
     }))
 
-    await fetch('/api/events/checklist', {
+    const res = await fetch('/api/events/checklist', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ booking_id: bookingId, step, checked }),
     })
+
+    if (!res.ok) {
+      setChecklist(prev => ({
+        ...prev,
+        [bookingId]: { ...prev[bookingId], [step]: !checked },
+      }))
+    }
   }
 
   return (
