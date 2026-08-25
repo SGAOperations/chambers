@@ -28,12 +28,12 @@ export default function AdministratorPage() {
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-[#f0f6ff]">Administrator</h1>
 
-        <div className="flex gap-1 border-b border-[#1e5080]">
+        <div className="flex gap-1 border-b border-[#1e5080] overflow-x-auto overflow-y-hidden">
           {(['Bookings', 'SGA Spaces', 'Cancellations', 'Requests', 'Advanced Settings'] as Tab[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                 activeTab === tab
                   ? 'border-[#c8102e] text-[#f0f6ff] font-semibold'
                   : 'border-transparent text-[#93b8d8] hover:text-[#c8102e]'
