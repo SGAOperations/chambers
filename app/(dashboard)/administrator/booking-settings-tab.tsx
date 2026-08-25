@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
+import { getAuthedUser } from '@/lib/auth'
 import { Skeleton } from '@/app/_components/skeleton'
 
 function BookingSettingsTabSkeleton() {
@@ -87,7 +88,7 @@ export default function BookingSettingsTab() {
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     )
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    getAuthedUser(supabase).then((user) => {
       if (
         user?.app_metadata?.admin_role === 'Vice President of Operational Affairs' ||
         user?.app_metadata?.admin_role === 'Executive Vice President' ||

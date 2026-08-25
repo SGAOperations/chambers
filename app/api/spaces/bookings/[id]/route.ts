@@ -3,6 +3,8 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
+import { getAuthedUser } from '@/lib/auth'
+import { waitUntil } from '@vercel/functions'
 
 const DEFAULT_WEEKLY_HOURS = 18
 
@@ -43,7 +45,7 @@ const adminSupabase = createAdminClient(
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const rateLimitRes = await checkRateLimit(user.id)
@@ -147,7 +149,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { id } = await params
@@ -169,33 +171,37 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const { error: deleteError } = await adminSupabase.from('space_bookings').delete().eq('id', id)
   if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
 
-  // Send cancellation email to creator + attendees
-  try {
-    const allUserIds: string[] = [...new Set([booking.creator_id, ...(booking.attendee_ids ?? [])])]
-    const { data: emailUsers } = await adminSupabase
-      .from('users')
-      .select('id, email')
-      .in('id', allUserIds)
-    const userMap = new Map((emailUsers ?? []).map((u: { id: string; email: string }) => [u.id, u.email]))
-    const creatorEmail = userMap.get(booking.creator_id)
-    const ccEmails = (booking.attendee_ids ?? [])
-      .map((id: string) => userMap.get(id))
-      .filter((e: string | undefined): e is string => !!e && e !== creatorEmail)
-    const spaceName = (booking.spaces as { name: string } | null)?.name ?? 'SGA Space'
-    if (creatorEmail) {
-      await sendSpaceBookingCancelledEmail({
-        bookingId: id,
-        title: booking.title,
-        spaceName,
-        startTime: booking.start_time,
-        endTime: booking.end_time,
-        to: creatorEmail,
-        cc: ccEmails,
-      })
-    }
-  } catch (e) {
-    console.error('Space booking cancellation email failed:', e)
-  }
+  // The row is already deleted, so notifying is a post-commit side effect.
+  waitUntil(
+    (async () => {
+      try {
+        const allUserIds: string[] = [...new Set([booking.creator_id, ...(booking.attendee_ids ?? [])])]
+        const { data: emailUsers } = await adminSupabase
+          .from('users')
+          .select('id, email')
+          .in('id', allUserIds)
+        const userMap = new Map((emailUsers ?? []).map((u: { id: string; email: string }) => [u.id, u.email]))
+        const creatorEmail = userMap.get(booking.creator_id)
+        const ccEmails = (booking.attendee_ids ?? [])
+          .map((id: string) => userMap.get(id))
+          .filter((e: string | undefined): e is string => !!e && e !== creatorEmail)
+        const spaceName = (booking.spaces as { name: string } | null)?.name ?? 'SGA Space'
+        if (creatorEmail) {
+          await sendSpaceBookingCancelledEmail({
+            bookingId: id,
+            title: booking.title,
+            spaceName,
+            startTime: booking.start_time,
+            endTime: booking.end_time,
+            to: creatorEmail,
+            cc: ccEmails,
+          })
+        }
+      } catch (e) {
+        console.error('Space booking cancellation email failed:', e)
+      }
+    })()
+  )
 
   return NextResponse.json({ success: true })
 }

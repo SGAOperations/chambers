@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import AdminGuard from '../adminguard'
+import { useCounts } from '../counts-context'
 import RequestsTab from './requests-tab'
 import CancellationsTab from './cancellations-tab'
 import BookingsTab from './bookings-tab'
@@ -12,18 +13,9 @@ type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'SGA Spaces' | 'Advanced 
 
 export default function AdministratorPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Bookings')
-  const [counts, setCounts] = useState({ requests: 0, cancellations: 0, revisions: 0, total: 0 })
-
-  useEffect(() => {
-    const fetchCounts = async () => {
-      const res = await fetch('/api/administrator/counts')
-      if (res.ok) {
-        const data = await res.json()
-        setCounts(data)
-      }
-    }
-    fetchCounts()
-  }, [])
+  // Shared with the layout's sidebar badge instead of refetching the same
+  // endpoint on every Administrator page load.
+  const { counts, refreshCounts } = useCounts()
 
   const tabBadge = (tab: Tab) => {
     if (tab === 'Requests') return counts.requests + counts.revisions
@@ -58,8 +50,8 @@ export default function AdministratorPage() {
         </div>
 
         <div>
-          {activeTab === 'Requests' && <RequestsTab onCountChange={() => fetch('/api/administrator/counts').then(r => r.json()).then(d => setCounts(d))} />}
-          {activeTab === 'Cancellations' && <CancellationsTab onCountChange={() => fetch('/api/administrator/counts').then(r => r.json()).then(d => setCounts(d))} />}
+          {activeTab === 'Requests' && <RequestsTab onCountChange={refreshCounts} />}
+          {activeTab === 'Cancellations' && <CancellationsTab onCountChange={refreshCounts} />}
           {activeTab === 'Bookings' && <BookingsTab />}
           {activeTab === 'SGA Spaces' && <SGASpacesTab />}
           {activeTab === 'Advanced Settings' && <AdvancedSettingsTab />}

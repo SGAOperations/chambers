@@ -1,7 +1,7 @@
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { randomBytes, createHash } from 'crypto'
-import { signupRateLimiter } from '@/lib/rate-limit'
+import { signupRateLimiter } from '@/lib/signup-rate-limit'
 import { sendSignupOtpEmail } from '@/lib/emails/signup-otp'
 
 const adminSupabase = createAdminClient(

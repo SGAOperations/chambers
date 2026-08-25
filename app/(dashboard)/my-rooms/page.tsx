@@ -5,7 +5,6 @@ import CancelModal from './cancel-modal'
 import RevisionModal from './revision-modal'
 import BookingDetailModal from './booking-detail-modal'
 import NotificationBell from './notification-bell'
-import {createClient} from "@/lib/supabase/client"
 import { Skeleton } from '@/app/_components/skeleton'
 
 function MyRoomsSkeleton() {
@@ -165,19 +164,12 @@ export default function MyRoomsPage() {
 
   const fetchBookings = async () => {
       setLoading(true)
-      const supabase = createClient()
-      const [res, { data: { user } }] = await Promise.all([
-        fetch('/api/my-rooms'),
-        supabase.auth.getUser(),
-      ])
+      // /api/my-rooms already resolves the caller's Leadership bodies, so this
+      // no longer needs a second round trip to auth + board_memberships.
+      const res = await fetch('/api/my-rooms')
       const data = await res.json()
 
-      const { data: memberships } = await supabase
-        .from('board_memberships')
-        .select('body_id')
-        .eq('user_id', user?.id)
-        .eq('role', 'Leadership')
-      setLeadershipBodyIds(memberships?.map(m => m.body_id) || [])
+      setLeadershipBodyIds(data.leadershipBodyIds || [])
 
       const flat: FlatBooking[] = []
 

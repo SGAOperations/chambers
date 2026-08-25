@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import AuthGuard from '../authguard'
 import SpaceCalendar from './space-calendar'
 import SpaceBookingModal from './space-booking-modal'
 import { Skeleton } from '@/app/_components/skeleton'
 import { createClient } from '@/lib/supabase/client'
+import { getAuthedUser } from '@/lib/auth'
 
 interface Space {
   id: string
@@ -171,7 +171,7 @@ export default function SGASpacesPage() {
 
   useEffect(() => {
     const supabase = createClient()
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
+    getAuthedUser(supabase).then(async (user) => {
       if (!user) return
       if (user.app_metadata?.is_admin) setIsAdmin(true)
       const { data: memberships } = await supabase
@@ -194,16 +194,22 @@ export default function SGASpacesPage() {
       .finally(() => setSpacesLoading(false))
   }, [])
 
+  // Remaining hours only change when the user books or cancels -- not when the
+  // calendar week changes. Keying this off `bookings` refetched it on every week
+  // navigation and fired it twice on mount (once with the initial empty array).
+  const fetchRemainingHours = useCallback(async () => {
+    const res = await fetch('/api/spaces/remaining-hours')
+    if (!res.ok) return
+    const data = await res.json()
+    setRemainingHours(data.remaining)
+    setLimitHours(data.limit)
+    if (data.user_id) setCurrentUserId(data.user_id)
+    if (data.min_hours_advance != null) setMinHoursAdvance(data.min_hours_advance)
+  }, [])
+
   useEffect(() => {
-    fetch('/api/spaces/remaining-hours')
-      .then(r => r.json())
-      .then(data => {
-        setRemainingHours(data.remaining)
-        setLimitHours(data.limit)
-        if (data.user_id) setCurrentUserId(data.user_id)
-        if (data.min_hours_advance != null) setMinHoursAdvance(data.min_hours_advance)
-      })
-  }, [bookings])
+    fetchRemainingHours()
+  }, [fetchRemainingHours])
 
   const fetchCalendarData = useCallback(async () => {
     if (!selectedSpaceId) return
@@ -270,15 +276,11 @@ export default function SGASpacesPage() {
   const selectedSpace = spaces.find(s => s.id === selectedSpaceId)
 
   if (spacesLoading) {
-    return (
-      <AuthGuard>
-        <SGASpacesSkeleton />
-      </AuthGuard>
-    )
+    return <SGASpacesSkeleton />
   }
 
   return (
-    <AuthGuard>
+    <>
       <div className="space-y-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <h1 className="text-2xl font-bold text-[#f0f6ff]">SGA Spaces</h1>
@@ -372,6 +374,7 @@ export default function SGASpacesPage() {
             onSuccess={() => {
               setModalSlot(null)
               fetchCalendarData()
+              fetchRemainingHours()
             }}
             spaces={spaces}
           />
@@ -391,6 +394,7 @@ export default function SGASpacesPage() {
             onSuccess={() => {
               setEditBooking(null)
               fetchCalendarData()
+              fetchRemainingHours()
             }}
             onCancelBooking={editBooking.creatorId === currentUserId ? async () => {
               const res = await fetch(`/api/spaces/bookings/${editBooking.id}`, { method: 'DELETE' })
@@ -400,10 +404,11 @@ export default function SGASpacesPage() {
               }
               setEditBooking(null)
               fetchCalendarData()
+              fetchRemainingHours()
             } : undefined}
           />
         )}
       </div>
-    </AuthGuard>
+    </>
   )
 }

@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server'
 import { sendMissedReservationEmail, formatDateLong } from '@/lib/emails/missed-reservation'
 import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+import { getAuthedUser } from '@/lib/auth'
+import { waitUntil } from '@vercel/functions'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,7 +15,7 @@ const adminSupabase = createAdminClient(
 export async function POST(request: Request) {
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -33,16 +35,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid semester.' }, { status: 400 })
   }
 
-  const { data: userData } = await adminSupabase
-    .from('users')
-    .select('admin_role')
-    .eq('id', user.id)
-    .single()
+  // admin_role is already a claim on the verified JWT, so this no longer needs
+  // a round trip to the users table.
+  const creatorRole = user.app_metadata?.admin_role ?? null
 
   // Create parent booking
   const { data: booking, error: bookingError } = await adminSupabase
     .from('bookings')
-    .insert({ body_id, purpose, type: 'Tabling', created_by: user.id, creator_role: userData?.admin_role ?? null, semester_id })
+    .insert({ body_id, purpose, type: 'Tabling', created_by: user.id, creator_role: creatorRole, semester_id })
     .select()
     .single()
 
@@ -96,7 +96,7 @@ interface Session {
 export async function PATCH(request: Request) {
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -176,24 +176,30 @@ export async function PATCH(request: Request) {
     )
   }
 
-  try {
-    const emails = (members ?? [])
-      .flatMap((m: { users: { email: string; is_active: boolean } | { email: string; is_active: boolean }[] | null }) =>
-        Array.isArray(m.users) ? m.users.filter(u => u.is_active).map(u => u.email) : m.users?.is_active ? [m.users.email] : []
-      )
-      .filter(Boolean) as string[]
-    await sendBookingUpdatedEmail({
-      bodyName,
-      roomOrTable: sessions[0]?.location || 'N/A',
-      date: sessions[0]?.session_date ?? '',
-      startTime: sessions[0]?.start_time ?? '',
-      endTime: sessions[0]?.end_time ?? '',
-      status: statusSummary,
-      recipients: emails,
-    })
-  } catch (e) {
-    console.error('Booking updated email failed:', e)
-  }
+  // Notification only -- the booking is already written, so don't hold the
+  // admin's response open for a Resend round trip.
+  waitUntil(
+    (async () => {
+      try {
+        const emails = (members ?? [])
+          .flatMap((m: { users: { email: string; is_active: boolean } | { email: string; is_active: boolean }[] | null }) =>
+            Array.isArray(m.users) ? m.users.filter(u => u.is_active).map(u => u.email) : m.users?.is_active ? [m.users.email] : []
+          )
+          .filter(Boolean) as string[]
+        await sendBookingUpdatedEmail({
+          bodyName,
+          roomOrTable: sessions[0]?.location || 'N/A',
+          date: sessions[0]?.session_date ?? '',
+          startTime: sessions[0]?.start_time ?? '',
+          endTime: sessions[0]?.end_time ?? '',
+          status: statusSummary,
+          recipients: emails,
+        })
+      } catch (e) {
+        console.error('Booking updated email failed:', e)
+      }
+    })()
+  )
 
   // Resolve any pending revision request for this booking
   await adminSupabase
@@ -203,27 +209,31 @@ export async function PATCH(request: Request) {
     .eq('status', 'Pending')
 
   if (sessions.some((s: Session) => s.status === 'Missed')) {
-    try {
-      const { data: leaders } = await adminSupabase
-        .from('board_memberships')
-        .select('users(full_name, is_active)')
-        .eq('body_id', body_id)
-        .eq('role', 'Leadership')
+    waitUntil(
+      (async () => {
+        try {
+          const { data: leaders } = await adminSupabase
+            .from('board_memberships')
+            .select('users(full_name, is_active)')
+            .eq('body_id', body_id)
+            .eq('role', 'Leadership')
 
-      const contacts = (leaders ?? [])
-        .flatMap((l: { users: { full_name: string; is_active: boolean }[] }) => l.users.filter(u => u.is_active).map(u => u.full_name))
-        .filter(Boolean) as string[]
+          const contacts = (leaders ?? [])
+            .flatMap((l: { users: { full_name: string; is_active: boolean }[] }) => l.users.filter(u => u.is_active).map(u => u.full_name))
+            .filter(Boolean) as string[]
 
-      await sendMissedReservationEmail({
-        bodyName,
-        date: formatDateLong(sessions[0].session_date),
-        startTime: sessions[0].start_time,
-        endTime: sessions[0].end_time,
-        contacts,
-      })
-    } catch (e) {
-      console.error('Resend email failed:', e)
-    }
+          await sendMissedReservationEmail({
+            bodyName,
+            date: formatDateLong(sessions[0].session_date),
+            startTime: sessions[0].start_time,
+            endTime: sessions[0].end_time,
+            contacts,
+          })
+        } catch (e) {
+          console.error('Resend email failed:', e)
+        }
+      })()
+    )
   }
 
   return NextResponse.json({ success: true })

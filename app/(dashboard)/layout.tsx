@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import AuthGuard from './authguard'
 import SettingsModal, { type Settings as SettingsData } from './settings-modal'
+import { CountsContext, EMPTY_COUNTS, type Counts } from './counts-context'
+import { getAuthedUser } from '@/lib/auth'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -22,7 +24,7 @@ export default function DashboardLayout({
   const [isAdmin, setIsAdmin] = useState(false)
   const [isIEMS, setIsIEMS] = useState(false)
   const [isLeadership, setIsLeadership] = useState(false)
-  const [counts, setCounts] = useState({ requests: 0, cancellations: 0, total: 0 })
+  const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS)
   const [userName, setUserName] = useState('')
   const [showIdleWarning, setShowIdleWarning] = useState(false)
   const [idleCountdown, setIdleCountdown] = useState(60)
@@ -31,47 +33,50 @@ export default function DashboardLayout({
   const [settingsCache, setSettingsCache] = useState<SettingsData | null>(null)
   const router = useRouter()
   const pathname = usePathname()
-  const supabase = createClient()
+  // Memoised so the effect below has a stable dependency and we don't build a
+  // fresh GoTrue client on every render.
+  const supabase = useMemo(() => createClient(), [])
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user?.app_metadata?.is_admin) {
-        setIsAdmin(true)
-        fetchCounts()
-      }
-      if (user?.app_metadata?.iems_role) {
-        setIsIEMS(true)
-      }
-
-      const { data: profile } = await supabase
-        .from('users')
-        .select('full_name')
-        .eq('id', user?.id)
-        .single()
-      if (profile?.full_name) setUserName(profile.full_name)
-
-      const { data: memberships } = await supabase
-        .from('board_memberships')
-        .select('role')
-        .eq('user_id', user?.id)
-        .eq('role', 'Leadership')
-        .limit(1)
-
-      if (memberships && memberships.length > 0) setIsLeadership(true)
-    }
-    checkUser()
-  }, [])
-
-  const fetchCounts = async () => {
+  const fetchCounts = useCallback(async () => {
     const res = await fetch('/api/administrator/counts')
     if (res.ok) {
       const data = await res.json()
       setCounts(data)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const user = await getAuthedUser(supabase)
+      if (!user) return
+
+      if (user.app_metadata?.is_admin) {
+        setIsAdmin(true)
+        fetchCounts()
+      }
+      if (user.app_metadata?.iems_role) {
+        setIsIEMS(true)
+      }
+
+      // These two reads only need the user id, so run them together instead of
+      // back to back.
+      const [{ data: profile }, { data: memberships }] = await Promise.all([
+        supabase.from('users').select('full_name').eq('id', user.id).single(),
+        supabase
+          .from('board_memberships')
+          .select('role')
+          .eq('user_id', user.id)
+          .eq('role', 'Leadership')
+          .limit(1),
+      ])
+
+      if (profile?.full_name) setUserName(profile.full_name)
+      if (memberships && memberships.length > 0) setIsLeadership(true)
+    }
+    checkUser()
+  }, [fetchCounts, supabase])
 
   const handleLogout = async () => {
     localStorage.removeItem('chambers_last_active')
@@ -158,10 +163,15 @@ export default function DashboardLayout({
     }
   }, [])
 
+  const countsValue = useMemo(
+    () => ({ counts, refreshCounts: fetchCounts }),
+    [counts, fetchCounts]
+  )
+
   const navLink = (href: string, label: string, badge?: number) => {
   const isActive = pathname === href || pathname.startsWith(href + '/')
     return (
-      <a
+      <Link
         href={href}
         onClick={() => setSidebarOpen(false)}
         className={`group relative flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium overflow-hidden transition-colors ${
@@ -179,12 +189,12 @@ export default function DashboardLayout({
             {badge}
           </span>
         ) : null}
-      </a>
+      </Link>
     )
   }
 
   return (
-    <AuthGuard>
+    <>
       {showIdleWarning && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
           <div className="bg-[#0a1628] border border-white/10 rounded-xl p-8 max-w-sm w-full mx-4 text-center">
@@ -287,10 +297,16 @@ export default function DashboardLayout({
         </nav>
 
         <main className="flex-1 bg-gradient-to-br from-[#112244] via-[#0a1628] to-[#060e1a] p-8 overflow-y-auto overflow-x-hidden">
-          {children}
+          {/* Scoped to the content area so the sidebar paints immediately
+              instead of the whole app staying blank during the auth check. */}
+          <AuthGuard>
+            <CountsContext.Provider value={countsValue}>
+              {children}
+            </CountsContext.Provider>
+          </AuthGuard>
         </main>
       </div>
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} cachedSettings={settingsCache} onSettingsLoaded={setSettingsCache} />}
-    </AuthGuard>
+    </>
   )
 }

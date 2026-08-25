@@ -3,6 +3,8 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingConfirmedEmail } from '@/lib/emails/space-booking-confirmed'
+import { getAuthedUser } from '@/lib/auth'
+import { waitUntil } from '@vercel/functions'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,7 +49,7 @@ function touchesDeadZone(startIso: string, endIso: string): boolean {
 
 export async function GET(request: Request) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
@@ -98,7 +100,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const rateLimitRes = await checkRateLimit(user.id)
@@ -205,25 +207,31 @@ export async function POST(request: Request) {
 
   if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
 
-  // Send confirmation email
-  try {
-    const allUserIds: string[] = [user.id, ...(attendee_ids ?? [])]
-    const [{ data: space }, { data: emailUsers }] = await Promise.all([
-      adminSupabase.from('spaces').select('name').eq('id', space_id).single(),
-      adminSupabase.from('users').select('email').in('id', allUserIds),
-    ])
-    const emails = (emailUsers ?? []).map((u: { email: string }) => u.email).filter(Boolean)
-    await sendSpaceBookingConfirmedEmail({
-      bookingId: booking.id,
-      title,
-      spaceName: space?.name ?? 'SGA Space',
-      startTime: start_time,
-      endTime: end_time,
-      recipients: emails,
-    })
-  } catch (e) {
-    console.error('Space booking confirmation email failed:', e)
-  }
+  // The booking is already committed, so the confirmation email is a post-commit
+  // side effect. Run it after the response instead of making the user wait on
+  // two more queries plus a Resend call.
+  waitUntil(
+    (async () => {
+      try {
+        const allUserIds: string[] = [user.id, ...(attendee_ids ?? [])]
+        const [{ data: space }, { data: emailUsers }] = await Promise.all([
+          adminSupabase.from('spaces').select('name').eq('id', space_id).single(),
+          adminSupabase.from('users').select('email').in('id', allUserIds),
+        ])
+        const emails = (emailUsers ?? []).map((u: { email: string }) => u.email).filter(Boolean)
+        await sendSpaceBookingConfirmedEmail({
+          bookingId: booking.id,
+          title,
+          spaceName: space?.name ?? 'SGA Space',
+          startTime: start_time,
+          endTime: end_time,
+          recipients: emails,
+        })
+      } catch (e) {
+        console.error('Space booking confirmation email failed:', e)
+      }
+    })()
+  )
 
   return NextResponse.json({ success: true, booking })
 }

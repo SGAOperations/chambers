@@ -3,6 +3,8 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
+import { getAuthedUser } from '@/lib/auth'
+import { waitUntil } from '@vercel/functions'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,7 +18,7 @@ function minutesOf(iso: string): number {
 
 export async function GET(request: Request) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -34,7 +36,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -94,23 +96,27 @@ export async function POST(request: Request) {
         .delete()
         .in('id', affected.map((b: { id: string }) => b.id))
 
-      // Send cancellation emails
-      await Promise.all(affected.map(async (b: { id: string; title: string; start_time: string; end_time: string; creator_id: string; attendee_ids: string[]; spaces: { name: string }[] | null }) => {
-        const creatorEmail = emailMap.get(b.creator_id)
-        if (!creatorEmail) return
-        const ccEmails = (b.attendee_ids ?? [])
-          .map((id: string) => emailMap.get(id))
-          .filter((e): e is string => !!e && e !== creatorEmail)
-        await sendSpaceBookingCancelledEmail({
-          bookingId: b.id,
-          title: b.title,
-          spaceName: (Array.isArray(b.spaces) ? b.spaces[0]?.name : null) ?? 'SGA Space',
-          startTime: b.start_time,
-          endTime: b.end_time,
-          to: creatorEmail,
-          cc: ccEmails,
-        })
-      }))
+      // The bookings are already deleted above, so the notifications are a
+      // post-commit side effect. Previously the admin's request blocked on one
+      // Resend call per affected booking, which could run into seconds.
+      waitUntil(
+        Promise.all(affected.map(async (b: { id: string; title: string; start_time: string; end_time: string; creator_id: string; attendee_ids: string[]; spaces: { name: string }[] | null }) => {
+          const creatorEmail = emailMap.get(b.creator_id)
+          if (!creatorEmail) return
+          const ccEmails = (b.attendee_ids ?? [])
+            .map((id: string) => emailMap.get(id))
+            .filter((e): e is string => !!e && e !== creatorEmail)
+          await sendSpaceBookingCancelledEmail({
+            bookingId: b.id,
+            title: b.title,
+            spaceName: (Array.isArray(b.spaces) ? b.spaces[0]?.name : null) ?? 'SGA Space',
+            startTime: b.start_time,
+            endTime: b.end_time,
+            to: creatorEmail,
+            cc: ccEmails,
+          })
+        })).catch(e => console.error('Blackout cascade emails failed:', e))
+      )
     }
   } catch (e) {
     console.error('Blackout cascade cancellation failed:', e)

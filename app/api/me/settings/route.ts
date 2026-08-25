@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+import { getAuthedUser } from '@/lib/auth'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,32 +12,38 @@ const adminSupabase = createAdminClient(
 export async function GET() {
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { data: profile, error } = await adminSupabase
-    .from('users')
-    .select('full_name, email_preferences, admin_role, iems_role, board_memberships(id, role, bodies(id, name, division))')
-    .eq('id', user.id)
-    .single()
+  // These three reads are independent of each other; running them serially cost
+  // two extra round trips per settings-modal open.
+  const [
+    { data: profile, error },
+    { data: pendingRequests },
+    { data: allBodies },
+  ] = await Promise.all([
+    adminSupabase
+      .from('users')
+      .select('full_name, email_preferences, admin_role, iems_role, board_memberships(id, role, bodies(id, name, division))')
+      .eq('id', user.id)
+      .single(),
+    adminSupabase
+      .from('membership_requests')
+      .select('id, bodies(id, name, division)')
+      .eq('user_id', user.id)
+      .eq('status', 'pending'),
+    adminSupabase
+      .from('bodies')
+      .select('id, name, division, body_open')
+      .eq('is_active', true)
+      .neq('division', 'Non-Divisional')
+      .order('name', { ascending: true }),
+  ])
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  const { data: pendingRequests } = await adminSupabase
-    .from('membership_requests')
-    .select('id, bodies(id, name, division)')
-    .eq('user_id', user.id)
-    .eq('status', 'pending')
-
-  const { data: allBodies } = await adminSupabase
-    .from('bodies')
-    .select('id, name, division, body_open')
-    .eq('is_active', true)
-    .neq('division', 'Non-Divisional')
-    .order('name', { ascending: true })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const activeMemberBodyIds = new Set((profile.board_memberships ?? []).map((m: any) => (m.bodies as { id: string } | null)?.id).filter(Boolean))
@@ -61,7 +68,7 @@ export async function GET() {
 export async function PATCH(request: Request) {
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const rateLimitRes = await checkRateLimit(user.id)
