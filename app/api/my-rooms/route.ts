@@ -14,8 +14,8 @@ export async function GET() {
 
   const isAdmin = !!user.app_metadata?.is_admin
 
-  // Get user's body memberships and active semester in parallel
-  const [{ data: memberships }, { data: activeSemester }] = await Promise.all([
+  // Get user's body memberships, active semester, and Senate type preferences in parallel
+  const [{ data: memberships }, { data: activeSemester }, { data: profile }] = await Promise.all([
     supabase
       .from('board_memberships')
       .select('body_id, role')
@@ -25,10 +25,17 @@ export async function GET() {
       .select('id')
       .eq('is_active', true)
       .single(),
+    supabase
+      .from('users')
+      .select('senate_type_preferences')
+      .eq('id', user.id)
+      .single(),
   ])
 
+  const senateTypePreferences = profile?.senate_type_preferences ?? {}
+
   if (!memberships || memberships.length === 0) {
-    return NextResponse.json({ bookings: [], leadershipBodyIds: [] })
+    return NextResponse.json({ bookings: [], leadershipBodyIds: [], senateTypePreferences })
   }
 
   const bodyIds = memberships.map(m => m.body_id)
@@ -42,6 +49,7 @@ export async function GET() {
       weeklyBookings: [],
       tablingBookings: [],
       leadershipBodyIds: [...leadershipBodyIds],
+      senateTypePreferences,
     })
   }
 
@@ -98,5 +106,6 @@ export async function GET() {
     tablingBookings: visible(tablingBookings || []),
     // Returned so the client doesn't have to re-query board_memberships itself.
     leadershipBodyIds: [...leadershipBodyIds],
+    senateTypePreferences,
   })
 }

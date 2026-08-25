@@ -89,7 +89,8 @@ export async function sendSpaceBookingConfirmedEmail(params: SpaceBookingConfirm
 
   await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL!,
-    to: recipients,
+    to: process.env.RESEND_FROM_EMAIL!,
+    bcc: recipients,
     subject: `Chambers \u2014 SGA Space Booking Confirmed: ${sTitle}`,
     text: `Your SGA Space booking has been confirmed.
 

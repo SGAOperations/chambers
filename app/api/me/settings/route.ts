@@ -27,7 +27,7 @@ export async function GET() {
   ] = await Promise.all([
     adminSupabase
       .from('users')
-      .select('full_name, email_preferences, admin_role, iems_role, board_memberships(id, role, bodies(id, name, division))')
+      .select('full_name, email_preferences, senate_type_preferences, admin_role, iems_role, board_memberships(id, role, bodies(id, name, division))')
       .eq('id', user.id)
       .single(),
     adminSupabase
@@ -57,6 +57,7 @@ export async function GET() {
   return NextResponse.json({
     full_name: profile.full_name,
     email_preferences: profile.email_preferences,
+    senate_type_preferences: profile.senate_type_preferences,
     admin_role: profile.admin_role,
     iems_role: profile.iems_role,
     memberships: profile.board_memberships ?? [],
@@ -75,7 +76,7 @@ export async function PATCH(request: Request) {
   if (rateLimitRes) return rateLimitRes
 
   const body = await request.json()
-  const { full_name, email_preferences } = body
+  const { full_name, email_preferences, senate_type_preferences } = body
 
   if (full_name !== undefined && (typeof full_name !== 'string' || full_name.trim() === '')) {
     return NextResponse.json({ error: 'full_name must be a non-empty string' }, { status: 400 })
@@ -88,9 +89,17 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'email_preferences must be a plain object' }, { status: 400 })
   }
 
+  if (
+    senate_type_preferences !== undefined &&
+    (typeof senate_type_preferences !== 'object' || Array.isArray(senate_type_preferences) || senate_type_preferences === null)
+  ) {
+    return NextResponse.json({ error: 'senate_type_preferences must be a plain object' }, { status: 400 })
+  }
+
   const updates: Record<string, unknown> = {}
   if (full_name !== undefined) updates.full_name = full_name.trim()
   if (email_preferences !== undefined) updates.email_preferences = email_preferences
+  if (senate_type_preferences !== undefined) updates.senate_type_preferences = senate_type_preferences
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })

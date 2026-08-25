@@ -113,7 +113,7 @@ export async function POST(request: Request) {
             startTime: b.start_time,
             endTime: b.end_time,
             to: creatorEmail,
-            cc: ccEmails,
+            bcc: ccEmails,
           })
         })).catch(e => console.error('Blackout cascade emails failed:', e))
       )

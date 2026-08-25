@@ -1,11 +1,22 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import CancelModal from './cancel-modal'
 import RevisionModal from './revision-modal'
 import BookingDetailModal from './booking-detail-modal'
 import NotificationBell from './notification-bell'
+import CalendarView from './calendar-view'
 import { Skeleton } from '@/app/_components/skeleton'
+import {
+  type FlatBooking,
+  statusColors,
+  statusBarColors,
+  statusTextColors,
+  senateTypeBadgeColors,
+  DEFAULT_SENATE_BADGE,
+  formatTime,
+  formatDate,
+} from './shared'
 
 function MyRoomsSkeleton() {
   return (
@@ -57,78 +68,7 @@ function MyRoomsSkeleton() {
 }
 
 type Filter = 1 | 3 | 7
-
-const statusColors: Record<string, string> = {
-  'Reserved': 'bg-[#0f3d20] border-[#22c55e]',
-  'Alternate Room': 'bg-[#0e2f4f] border-[#4285f4]',
-  'Alternate Time': 'bg-[#0e2f4f] border-[#4285f4]',
-  'Waitlisted': 'bg-[#3d0f0f] border-[#ef4444]',
-  'Unavailable': 'bg-[#3d0f0f] border-[#ef4444]',
-  'Pending Cancellation': 'bg-[#3d2200] border-[#f97316]',
-  'Cancelled': 'bg-[#2a1042] border-[#a855f7]',
-  'Virtual': 'bg-[#062f3b] border-[#06b6d4]',
-  'Missed': 'bg-[#1a1a2e] border-[#a78bfa]',
-  'Repurposed': 'bg-[#1a1a1a] border-white',
-  'Tentative': 'bg-[#2d2800] border-[#fef08a]',
-}
-
-const statusBarColors: Record<string, string> = {
-  'Reserved': 'bg-[#22c55e]',
-  'Alternate Room': 'bg-[#4285f4]',
-  'Alternate Time': 'bg-[#4285f4]',
-  'Waitlisted': 'bg-[#ef4444]',
-  'Unavailable': 'bg-[#ef4444]',
-  'Pending Cancellation': 'bg-[#f97316]',
-  'Cancelled': 'bg-[#a855f7]',
-  'Virtual': 'bg-[#06b6d4]',
-  'Missed': 'bg-[#a78bfa]',
-  'Repurposed': 'bg-white',
-  'Tentative': 'bg-[#fef08a]',
-}
-
-const statusTextColors: Record<string, string> = {
-  'Reserved': 'text-[#4ade80]',
-  'Alternate Room': 'text-[#4285f4]',
-  'Alternate Time': 'text-[#4285f4]',
-  'Waitlisted': 'text-[#f87171]',
-  'Unavailable': 'text-[#f87171]',
-  'Pending Cancellation': 'text-[#fb923c]',
-  'Cancelled': 'text-[#c084fc]',
-  'Virtual': 'text-[#22d3ee]',
-  'Missed': 'text-[#a78bfa]',
-  'Repurposed': 'text-white',
-  'Tentative': 'text-[#fef08a]',
-}
-
-interface FlatBooking {
-  id: string
-  bookingId: string //parent booking id
-  bodyId: string
-  type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
-  bodyName: string
-  purpose: string
-  location: string
-  date: string
-  startTime: string
-  endTime: string
-  status: string
-  reservationCode: string | null
-  senateType: string | null
-}
-
-function formatTime(time: string) {
-  const [h, m] = time.split(':')
-  const hour = parseInt(h)
-  const ampm = hour >= 12 ? 'PM' : 'AM'
-  const displayHour = hour % 12 || 12
-  return `${displayHour}:${m} ${ampm}`
-}
-
-function formatDate(date: string) {
-  return new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric'
-  })
-}
+type ViewMode = 'list' | 'calendar'
 
 function isWithinDays(dateStr: string, days: number) {
   const now = new Date()
@@ -144,6 +84,10 @@ export default function MyRoomsPage() {
   const [loading, setLoading] = useState(true)
   const [leadershipBodyIds, setLeadershipBodyIds] = useState<string[]>([])
   const [detailBooking, setDetailBooking] = useState<FlatBooking | null>(null)
+  const [viewMode, setViewMode] = useState<ViewMode>('calendar')
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [senateTypePreferences, setSenateTypePreferences] = useState<Record<string, boolean>>({})
   const [cancellingBooking, setCancellingBooking] = useState<{
     id: string
     type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -170,6 +114,7 @@ export default function MyRoomsPage() {
       const data = await res.json()
 
       setLeadershipBodyIds(data.leadershipBodyIds || [])
+      setSenateTypePreferences(data.senateTypePreferences || {})
 
       const flat: FlatBooking[] = []
 
@@ -248,10 +193,34 @@ export default function MyRoomsPage() {
 
   useEffect(() => {
     fetchBookings()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // The Senate session-type preference lives in the Settings modal, which can
+    // be opened over this page; refetch so a change there is reflected here.
+    window.addEventListener('chambers:senate-prefs-updated', fetchBookings)
+    return () => window.removeEventListener('chambers:senate-prefs-updated', fetchBookings)
   }, [])
 
-  const filteredUpcoming = all.filter(b => isWithinDays(b.date, filter))
+  const passesSenateFilter = (b: FlatBooking) =>
+    b.bodyName !== 'Senate' || !b.senateType || (senateTypePreferences[b.senateType] ?? true)
+
+  const filteredUpcoming = all.filter(b => isWithinDays(b.date, filter) && passesSenateFilter(b))
+
+  const statusOptions = useMemo(
+    () => ['All', ...Array.from(new Set(all.map(b => b.status))).sort()],
+    [all]
+  )
+
+  const visibleAll = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return all.filter(b => {
+      if (!passesSenateFilter(b)) return false
+      if (statusFilter !== 'All' && b.status !== statusFilter) return false
+      if (q && !(b.location.toLowerCase().includes(q) || b.purpose.toLowerCase().includes(q) || b.bodyName.toLowerCase().includes(q))) return false
+      return true
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [all, search, statusFilter, senateTypePreferences])
+
+  const filtersActive = search.trim() !== '' || statusFilter !== 'All'
 
   if (loading) return <MyRoomsSkeleton />
 
@@ -298,7 +267,7 @@ export default function MyRoomsPage() {
                   <div className="flex items-center justify-between">
                     <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                     {b.senateType && (
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#c8102e] text-white">{b.senateType}</span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
                     )}
                   </div>
                 </>
@@ -319,56 +288,109 @@ export default function MyRoomsPage() {
 
       {/* All Bookings */}
       <section>
-        <h2 className="text-xl font-bold text-[#f0f6ff] mb-5">All Bookings</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <h2 className="text-xl font-bold text-[#f0f6ff]">All Bookings</h2>
+          <div className="flex gap-2">
+            {(['calendar', 'list'] as ViewMode[]).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all capitalize ${
+                  viewMode === mode
+                    ? 'bg-white/20 text-white border-white/30'
+                    : 'border-[#1e5080] text-[#93b8d8] hover:border-[#6a96bb] bg-[#184073]'
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {all.length === 0 ? (
           <p className="text-[#6a96bb] text-sm">No bookings found.</p>
-        ) : (() => {
-          const bodyMap = new Map<string, { bodyName: string, bookings: FlatBooking[] }>()
-          for (const b of all) {
-            if (!bodyMap.has(b.bodyId)) bodyMap.set(b.bodyId, { bodyName: b.bodyName, bookings: [] })
-            bodyMap.get(b.bodyId)!.bookings.push(b)
-          }
-          const groups = Array.from(bodyMap.entries()).map(([bodyId, { bodyName, bookings }]) => ({
-            bodyId, bodyName, bookings,
-            isLeadership: leadershipBodyIds.includes(bodyId),
-          }))
-          groups.sort((a, b) => {
-            if (a.isLeadership !== b.isLeadership) return a.isLeadership ? -1 : 1
-            return a.bodyName.localeCompare(b.bodyName)
-          })
-          return (
-            <div className="space-y-6">
-              {groups.map(group => (
-                <div key={group.bodyId} className="space-y-2">
-                  <h3 className="text-sm font-semibold text-[#93b8d8] uppercase tracking-wider">
-                    {group.bodyName}
-                    {group.isLeadership && (
-                      <span className="ml-1 text-[#c8102e] normal-case tracking-normal"> (Leadership)</span>
-                    )}
-                  </h3>
-                  <div className="divide-y divide-[#1e5080] border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073]">
-                    {group.bookings.map(b => (
-                      <div key={b.id} onClick={() => setDetailBooking(b)} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a4d8a] transition-colors cursor-pointer">
-                        <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <p className="font-semibold text-[#f0f6ff] truncate">{b.location}</p>
-                            {b.senateType && (
-                              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#c8102e] text-white flex-shrink-0">{b.senateType}</span>
-                            )}
-                          </div>
-                          <p className="text-sm text-[#6a96bb]">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
-                        </div>
-                        <span className="hidden md:inline text-xs text-[#6a96bb] flex-shrink-0">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
-                        <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search by room, purpose, or body…"
+                className="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-[#0e2f4f] border border-[#1e5080] text-sm text-[#f0f6ff] placeholder:text-[#4a6b8a] focus:outline-none focus:border-[#4285f4]"
+              />
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg bg-[#0e2f4f] border border-[#1e5080] text-sm text-[#f0f6ff] focus:outline-none focus:border-[#4285f4]"
+              >
+                {statusOptions.map(s => (
+                  <option key={s} value={s}>{s === 'All' ? 'All Statuses' : s}</option>
+                ))}
+              </select>
+              {filtersActive && (
+                <button
+                  onClick={() => { setSearch(''); setStatusFilter('All') }}
+                  className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium"
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
-          )
-        })()}
+
+            {visibleAll.length === 0 ? (
+              <p className="text-[#6a96bb] text-sm">No bookings match your filters.</p>
+            ) : viewMode === 'calendar' ? (
+              <CalendarView bookings={visibleAll} onSelect={setDetailBooking} />
+            ) : (() => {
+              const bodyMap = new Map<string, { bodyName: string, bookings: FlatBooking[] }>()
+              for (const b of visibleAll) {
+                if (!bodyMap.has(b.bodyId)) bodyMap.set(b.bodyId, { bodyName: b.bodyName, bookings: [] })
+                bodyMap.get(b.bodyId)!.bookings.push(b)
+              }
+              const groups = Array.from(bodyMap.entries()).map(([bodyId, { bodyName, bookings }]) => ({
+                bodyId, bodyName, bookings,
+                isLeadership: leadershipBodyIds.includes(bodyId),
+              }))
+              groups.sort((a, b) => {
+                if (a.isLeadership !== b.isLeadership) return a.isLeadership ? -1 : 1
+                return a.bodyName.localeCompare(b.bodyName)
+              })
+              return (
+                <div className="space-y-6">
+                  {groups.map(group => (
+                    <div key={group.bodyId} className="space-y-2">
+                      <h3 className="text-sm font-semibold text-[#93b8d8] uppercase tracking-wider">
+                        {group.bodyName}
+                        {group.isLeadership && (
+                          <span className="ml-1 text-[#c8102e] normal-case tracking-normal"> (Leadership)</span>
+                        )}
+                      </h3>
+                      <div className="divide-y divide-[#1e5080] border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073]">
+                        {group.bookings.map(b => (
+                          <div key={b.id} onClick={() => setDetailBooking(b)} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a4d8a] transition-colors cursor-pointer">
+                            <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <p className="font-semibold text-[#f0f6ff] truncate">{b.location}</p>
+                                {b.senateType && (
+                                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
+                                )}
+                              </div>
+                              <p className="text-sm text-[#6a96bb]">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                            </div>
+                            <span className="hidden md:inline text-xs text-[#6a96bb] flex-shrink-0">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
+                            <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })()}
+          </>
+        )}
       </section>
       {detailBooking && (
         <BookingDetailModal

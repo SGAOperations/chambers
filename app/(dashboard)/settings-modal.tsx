@@ -25,12 +25,15 @@ interface AvailableBody {
 export interface Settings {
   full_name: string
   email_preferences: Record<string, boolean>
+  senate_type_preferences: Record<string, boolean>
   admin_role: string | null
   iems_role: string | null
   memberships: Membership[]
   pending_requests: PendingRequest[]
   available_bodies: AvailableBody[]
 }
+
+export const SENATE_TYPES = ['Full Body', 'Weekly', 'Office Hours'] as const
 
 interface SettingsModalProps {
   onClose: () => void
@@ -126,8 +129,23 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
     })
   }
 
+  const toggleSenateType = async (type: string, value: boolean) => {
+    if (!settings) return
+    const updated = { ...settings.senate_type_preferences, [type]: value }
+    setSettings(prev => prev ? { ...prev, senate_type_preferences: updated } : prev)
+    await fetch('/api/me/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ senate_type_preferences: updated }),
+    })
+    // My Rooms only re-reads this preference when it (re)fetches its bookings, so
+    // nudge it to refresh if it's open underneath this modal.
+    window.dispatchEvent(new Event('chambers:senate-prefs-updated'))
+  }
+
   const eligibleKeys = settings ? getPrefsForRole(settings.admin_role, settings.iems_role) : []
   const selectedBody = settings?.available_bodies.find(b => b.id === selectedBodyId)
+  const isSenateMember = settings?.memberships.some(m => m.bodies?.name === 'Senate') ?? false
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
@@ -247,6 +265,26 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
             </>
           )}
         </div>
+
+        {/* Senate Session Types */}
+        {!loading && isSenateMember && (
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-[#93b8d8]">Senate Session Types Shown in My Rooms</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {SENATE_TYPES.map(type => (
+                <label key={type} className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="accent-[#c8102e] w-4 h-4 flex-shrink-0"
+                    checked={settings?.senate_type_preferences?.[type] ?? true}
+                    onChange={e => toggleSenateType(type, e.target.checked)}
+                  />
+                  <span className="text-sm text-[#f0f6ff]">{type}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Email Notifications */}
         {!loading && eligibleKeys.length > 0 && (
