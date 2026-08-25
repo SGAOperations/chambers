@@ -9,7 +9,6 @@ import CalendarView from './calendar-view'
 import { Skeleton } from '@/app/_components/skeleton'
 import {
   type FlatBooking,
-  SENATE_TYPES,
   statusColors,
   statusBarColors,
   statusTextColors,
@@ -71,8 +70,6 @@ function MyRoomsSkeleton() {
 type Filter = 1 | 3 | 7
 type ViewMode = 'list' | 'calendar'
 
-const SENATE_TYPE_FILTER_KEY = 'chambers-senate-type-filter'
-
 function isWithinDays(dateStr: string, days: number) {
   const now = new Date()
   now.setHours(0, 0, 0, 0)
@@ -87,10 +84,10 @@ export default function MyRoomsPage() {
   const [loading, setLoading] = useState(true)
   const [leadershipBodyIds, setLeadershipBodyIds] = useState<string[]>([])
   const [detailBooking, setDetailBooking] = useState<FlatBooking | null>(null)
-  const [viewMode, setViewMode] = useState<ViewMode>('list')
+  const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
-  const [senateTypeFilter, setSenateTypeFilter] = useState<Set<string>>(new Set(SENATE_TYPES))
+  const [senateTypePreferences, setSenateTypePreferences] = useState<Record<string, boolean>>({})
   const [cancellingBooking, setCancellingBooking] = useState<{
     id: string
     type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -109,29 +106,6 @@ export default function MyRoomsPage() {
     location: string
   } | null>(null)
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(SENATE_TYPE_FILTER_KEY)
-      if (stored) setSenateTypeFilter(new Set(JSON.parse(stored)))
-    } catch {
-      // Ignore malformed/unavailable storage — falls back to showing all types.
-    }
-  }, [])
-
-  const toggleSenateType = (type: string) => {
-    setSenateTypeFilter(prev => {
-      const next = new Set(prev)
-      if (next.has(type)) next.delete(type)
-      else next.add(type)
-      try {
-        localStorage.setItem(SENATE_TYPE_FILTER_KEY, JSON.stringify([...next]))
-      } catch {
-        // Best-effort persistence only.
-      }
-      return next
-    })
-  }
-
   const fetchBookings = async () => {
       setLoading(true)
       // /api/my-rooms already resolves the caller's Leadership bodies, so this
@@ -140,6 +114,7 @@ export default function MyRoomsPage() {
       const data = await res.json()
 
       setLeadershipBodyIds(data.leadershipBodyIds || [])
+      setSenateTypePreferences(data.senateTypePreferences || {})
 
       const flat: FlatBooking[] = []
 
@@ -218,13 +193,14 @@ export default function MyRoomsPage() {
 
   useEffect(() => {
     fetchBookings()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // The Senate session-type preference lives in the Settings modal, which can
+    // be opened over this page; refetch so a change there is reflected here.
+    window.addEventListener('chambers:senate-prefs-updated', fetchBookings)
+    return () => window.removeEventListener('chambers:senate-prefs-updated', fetchBookings)
   }, [])
 
-  const hasSenateBookings = useMemo(() => all.some(b => b.bodyName === 'Senate'), [all])
-
   const passesSenateFilter = (b: FlatBooking) =>
-    b.bodyName !== 'Senate' || !b.senateType || senateTypeFilter.has(b.senateType)
+    b.bodyName !== 'Senate' || !b.senateType || (senateTypePreferences[b.senateType] ?? true)
 
   const filteredUpcoming = all.filter(b => isWithinDays(b.date, filter) && passesSenateFilter(b))
 
@@ -242,7 +218,7 @@ export default function MyRoomsPage() {
       return true
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [all, search, statusFilter, senateTypeFilter])
+  }, [all, search, statusFilter, senateTypePreferences])
 
   const filtersActive = search.trim() !== '' || statusFilter !== 'All'
 
@@ -250,25 +226,6 @@ export default function MyRoomsPage() {
 
   return (
     <div className="space-y-10">
-      {hasSenateBookings && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-[#6a96bb]">Senate Sessions</span>
-          {SENATE_TYPES.map(t => (
-            <button
-              key={t}
-              onClick={() => toggleSenateType(t)}
-              className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                senateTypeFilter.has(t)
-                  ? senateTypeBadgeColors[t]
-                  : 'border-[#1e5080] text-[#4a6b8a] bg-transparent hover:text-[#6a96bb]'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* My Upcoming Spaces */}
       <section>
         <div className="flex items-center justify-between mb-5">
@@ -334,7 +291,7 @@ export default function MyRoomsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <h2 className="text-xl font-bold text-[#f0f6ff]">All Bookings</h2>
           <div className="flex gap-2">
-            {(['list', 'calendar'] as ViewMode[]).map(mode => (
+            {(['calendar', 'list'] as ViewMode[]).map(mode => (
               <button
                 key={mode}
                 onClick={() => setViewMode(mode)}
