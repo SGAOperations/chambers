@@ -37,7 +37,8 @@ export async function sendBookingUpdatedEmail(params: BookingUpdatedEmailParams)
 
   await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL!,
-    to: recipients,
+    to: process.env.RESEND_FROM_EMAIL!,
+    bcc: recipients,
     subject: 'Chambers \u2014 Your Booking Has Been Updated',
     text: `Your ${sBodyName} booking has been updated by a Chambers administrator.
 
