@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getAuthedUser } from '@/lib/auth'
 import SlackConnectForm from './SlackConnectForm'
 
 export default async function SlackConnectPage({
@@ -10,9 +11,7 @@ export default async function SlackConnectPage({
   const { token } = await searchParams
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
 
   if (!user) {
     const redirectTo = token

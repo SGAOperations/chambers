@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { getAuthedUser } from '@/lib/auth'
 import TimePicker from '../administrator/time-picker'
 import { Skeleton } from '@/app/_components/skeleton'
 
@@ -187,8 +188,8 @@ export default function RequestPage() {
   useEffect(() => {
     const fetchBodies = async () => {
       const supabase = createClient()
-      const [{ data: { user } }, res] = await Promise.all([
-        supabase.auth.getUser(),
+      const [user, res] = await Promise.all([
+        getAuthedUser(supabase),
         fetch('/api/request'),
       ])
       const isAdmin = user?.app_metadata?.is_admin ?? false

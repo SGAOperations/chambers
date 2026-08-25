@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { getAuthedUser } from '@/lib/auth'
 
 export default function LoginCard() {
   const [email, setEmail] = useState('')
@@ -20,7 +21,7 @@ export default function LoginCard() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = await getAuthedUser(supabase)
       if (user) {
         const { data: profile } = await supabase
           .from('users')

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+import { getAuthedUser } from '@/lib/auth'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,39 +12,45 @@ const adminSupabase = createAdminClient(
 export async function GET() {
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { data: settings } = await supabase
-    .from('app_settings')
-    .select('min_days_advance_room, min_days_advance_tabling')
-    .eq('id', 1)
-    .maybeSingle()
+  const isAdmin = !!user.app_metadata?.is_admin
+
+  // The settings row is independent of the bodies lookup, so fetch both at once
+  // rather than gating the bodies query behind it.
+  const [{ data: settings }, bodiesResult] = await Promise.all([
+    supabase
+      .from('app_settings')
+      .select('min_days_advance_room, min_days_advance_tabling')
+      .eq('id', 1)
+      .maybeSingle(),
+    isAdmin
+      ? // Admins get every active body
+        supabase
+          .from('bodies')
+          .select('id, name')
+          .eq('is_active', true)
+          .order('name', { ascending: true })
+      : // Everyone else gets the bodies where they hold Leadership
+        supabase
+          .from('board_memberships')
+          .select('body_id, bodies(id, name)')
+          .eq('user_id', user.id)
+          .eq('role', 'Leadership'),
+  ])
 
   const minDaysRoom = settings?.min_days_advance_room ?? 0
   const minDaysTabling = settings?.min_days_advance_tabling ?? 0
 
-  // If user is admin, return all active bodies instead
-  if (user.app_metadata?.is_admin) {
-    const { data: allBodies } = await supabase
-      .from('bodies')
-      .select('id, name')
-      .eq('is_active', true)
-      .order('name', { ascending: true })
-    return NextResponse.json({ bodies: allBodies || [], minDaysRoom, minDaysTabling })
-  }
-
-  // Get bodies where user has Leadership role
-  const { data: memberships } = await supabase
-    .from('board_memberships')
-    .select('body_id, bodies(id, name)')
-    .eq('user_id', user.id)
-    .eq('role', 'Leadership')
-
-  const bodies = memberships?.map(m => m.bodies).filter(Boolean) || []
+  const bodies = isAdmin
+    ? bodiesResult.data ?? []
+    : ((bodiesResult.data ?? []) as { bodies: unknown }[])
+        .map(m => m.bodies)
+        .filter(Boolean)
 
   return NextResponse.json({ bodies, minDaysRoom, minDaysTabling })
 }
@@ -51,7 +58,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const rateLimitRes = await checkRateLimit(user.id)

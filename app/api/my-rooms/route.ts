@@ -1,11 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+import { getAuthedUser } from '@/lib/auth'
 
 export async function GET() {
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const rateLimitRes = await checkRateLimit(user.id)
@@ -27,7 +28,7 @@ export async function GET() {
   ])
 
   if (!memberships || memberships.length === 0) {
-    return NextResponse.json({ bookings: [] })
+    return NextResponse.json({ bookings: [], leadershipBodyIds: [] })
   }
 
   const bodyIds = memberships.map(m => m.body_id)
@@ -36,7 +37,12 @@ export async function GET() {
   )
 
   if (!activeSemester) {
-    return NextResponse.json({ oneTimeBookings: [], weeklyBookings: [], tablingBookings: [] })
+    return NextResponse.json({
+      oneTimeBookings: [],
+      weeklyBookings: [],
+      tablingBookings: [],
+      leadershipBodyIds: [...leadershipBodyIds],
+    })
   }
 
   // Fetch all booking types in parallel
@@ -90,5 +96,7 @@ export async function GET() {
     oneTimeBookings: visible(oneTimeBookings || []),
     weeklyBookings: visible(weeklyBookings || []),
     tablingBookings: visible(tablingBookings || []),
+    // Returned so the client doesn't have to re-query board_memberships itself.
+    leadershipBodyIds: [...leadershipBodyIds],
   })
 }

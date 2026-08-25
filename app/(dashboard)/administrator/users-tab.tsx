@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
 import { createClient } from '@/lib/supabase/client'
+import { getAuthedUser } from '@/lib/auth'
 
 function UsersTabSkeleton() {
   return (
@@ -124,7 +125,7 @@ export default function UsersTab() {
     fetchBodies()
     fetchMembershipRequests()
     const supabase = createClient()
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    getAuthedUser(supabase).then((user) => {
       setCurrentUserRole(user?.app_metadata?.admin_role ?? null)
     })
   }, [])

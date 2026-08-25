@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import BookingModal from './booking-modal'
 import AdminCancelModal from './admin-cancel-modal'
 import OneTimeForm from './one-time-form'
@@ -218,10 +218,17 @@ export default function BookingsTab() {
     })
   }
 
+  const staticDataLoaded = useRef(false)
+
   useEffect(() => {
     fetchBookings(showAll)
-    fetchBodies()
-    fetchSemesters()
+    // Bodies and semesters don't depend on the "show all" toggle, so they only
+    // need fetching once per mount rather than on every toggle.
+    if (!staticDataLoaded.current) {
+      staticDataLoaded.current = true
+      fetchBodies()
+      fetchSemesters()
+    }
   }, [showAll])
 
   const sortedWeekly = loading ? [] : [...weekly].sort((a, b) => {
