@@ -194,7 +194,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
             startTime: booking.start_time,
             endTime: booking.end_time,
             to: creatorEmail,
-            cc: ccEmails,
+            bcc: ccEmails,
           })
         }
       } catch (e) {
