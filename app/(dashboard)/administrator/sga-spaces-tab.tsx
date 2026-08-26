@@ -239,7 +239,7 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <p className="text-xs text-[#93b8d8]">{RANGE_DESCRIPTIONS[range]} Force-cancelling sends email to creator and all attendees.</p>
         <div className="flex gap-1 shrink-0">
           {(['week', 'month', 'semester', 'all'] as BookingRange[]).map(r => (
@@ -424,7 +424,7 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
           </select>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelCls}>Start Date</label>
             <input type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} className={inputCls} required />
@@ -464,7 +464,7 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
         ) : blackouts.length === 0 ? (
           <div className="text-sm text-[#93b8d8]">No blackouts configured.</div>
         ) : (
-          <div className="rounded-xl border border-[#1e5080] overflow-hidden">
+          <div className="rounded-xl border border-[#1e5080] overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#1e5080] text-[#93b8d8] text-xs">
@@ -523,7 +523,7 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
                   {spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={labelCls}>Start Date</label>
                   <input type="date" value={editForm.start_date} onChange={e => setEditForm(f => f && ({ ...f, start_date: e.target.value }))} className={inputCls} required />
