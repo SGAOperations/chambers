@@ -41,3 +41,13 @@ option {
 input[type="date"]::-webkit-calendar-picker-indicator {
   filter: invert(1) brightness(0.7);
 }
+
+/* iOS Safari sizes a native date input's day/month/year segments using the
+   applied font's own glyph metrics. Space Grotesk's widths differ enough from
+   the system font that WebKit miscalculates and renders the control wider
+   than its CSS box, pushing it past the container's right edge regardless of
+   width/min-width (issue #24). Falling back to the system font for this one
+   input type lets iOS size it against the metrics its own picker expects. */
+input[type="date"] {
+  font-family: -apple-system, system-ui, sans-serif;
+}
