@@ -1,3 +1,5 @@
+import { formatScopeLabel, type BookingScope, type Division } from '@/lib/booking-scope'
+
 export interface FlatBooking {
   id: string
   bookingId: string //parent booking id
@@ -12,6 +14,40 @@ export interface FlatBooking {
   status: string
   reservationCode: string | null
   senateType: string | null
+  /** Resolved server-side across the booking's full scope (issue #19). */
+  canManage: boolean
+  /** Groups the All Bookings list. Bookings that share manage rights share a key. */
+  scopeKey: string
+  /** Display name for a group heading -- body name, division, or "X + N others". */
+  scopeLabel: string
+}
+
+/** The scope-bearing shape /api/my-rooms returns for each booking. */
+export interface ScopedBookingRow {
+  id: string
+  body_id: string
+  scope: BookingScope
+  division: Division | null
+  bodies: { name: string } | null
+  booking_bodies: { body_id: string; bodies: { name: string } | null }[] | null
+  canManage: boolean
+}
+
+/**
+ * A divisional booking groups by its division and a multi booking on its own, because in neither
+ * case does the owning body determine who sees it.
+ */
+export function scopeKeyOf(b: ScopedBookingRow): string {
+  if (b.scope === 'divisional' && b.division) return `div:${b.division}`
+  if (b.scope === 'multi') return `multi:${b.id}`
+  return b.body_id
+}
+
+export function scopeLabelOf(b: ScopedBookingRow): string {
+  return formatScopeLabel(
+    b,
+    (b.booking_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))
+  ).short
 }
 
 export const SENATE_TYPES = ['Full Body', 'Weekly', 'Office Hours'] as const

@@ -38,8 +38,9 @@ export async function GET(request: Request) {
   let oneTimeQ = supabase
     .from('bookings')
     .select(`
-      id, purpose, body_id, is_event, hidden,
+      id, purpose, body_id, is_event, hidden, scope, division,
       bodies(name),
+      booking_bodies(body_id, bodies(name)),
       creator_role,
       one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
     `)
@@ -50,8 +51,9 @@ export async function GET(request: Request) {
   let weeklyQ = supabase
     .from('bookings')
     .select(`
-      id, purpose, body_id, is_event, hidden,
+      id, purpose, body_id, is_event, hidden, scope, division,
       bodies(name),
+      booking_bodies(body_id, bodies(name)),
       creator_role,
       weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
         weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type)
@@ -64,8 +66,9 @@ export async function GET(request: Request) {
   let tablingQ = supabase
     .from('bookings')
     .select(`
-      id, purpose, body_id, is_event, hidden,
+      id, purpose, body_id, is_event, hidden, scope, division,
       bodies(name),
+      booking_bodies(body_id, bodies(name)),
       creator_role,
       tabling_bookings(id, reservation_code,
         tabling_sessions(id, location, session_date, start_time, end_time, status, reservation_code)
@@ -75,9 +78,22 @@ export async function GET(request: Request) {
     .order('created_at', { ascending: false })
   if (semesterId) tablingQ = tablingQ.eq('semester_id', semesterId)
 
-  const [{ data: oneTime }, { data: weekly }, { data: tabling }] = await Promise.all([
+  const [oneTimeRes, weeklyRes, tablingRes] = await Promise.all([
     oneTimeQ, weeklyQ, tablingQ,
   ])
+
+  // Surface query failures instead of coercing them to an empty list. A malformed embed
+  // (e.g. PGRST201, an ambiguous relationship) otherwise renders as a calm "no bookings
+  // found", which is indistinguishable from genuinely having none.
+  const failed = [oneTimeRes, weeklyRes, tablingRes].find(r => r.error)
+  if (failed?.error) {
+    console.error('administrator/bookings query failed:', failed.error)
+    return NextResponse.json({ error: failed.error.message }, { status: 500 })
+  }
+
+  const { data: oneTime } = oneTimeRes
+  const { data: weekly } = weeklyRes
+  const { data: tabling } = tablingRes
 
   return NextResponse.json({
     oneTime: oneTime || [],

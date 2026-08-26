@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import TimePicker from './time-picker'
+import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
+import { DIVISIONS, type Division } from '@/lib/booking-scope'
 
 const STATUSES = [
   'Reserved',
@@ -20,6 +22,7 @@ const STATUSES = [
 interface Body {
   id: string
   name: string
+  division: Division
 }
 
 interface Semester {
@@ -76,7 +79,14 @@ interface OneTimeFormProps {
 
 export default function OneTimeForm({ bodies, semesters, onClose, onSuccess }: OneTimeFormProps) {
   const defaultSemesterId = semesters.find(s => s.is_active)?.id ?? ''
-  const [form, setForm] = useState({ body_id: '', purpose: '' })
+  const [form, setForm] = useState({ purpose: '' })
+  // Admins may scope a booking to any division, so the full list is always allowed here.
+  const [scopeValue, setScopeValue] = useState<BookingScopeValue>({
+    scope: 'single',
+    body_id: '',
+    division: null,
+    body_ids: [],
+  })
   const [semesterId, setSemesterId] = useState(defaultSemesterId)
   const [sessions, setSessions] = useState<OneTimeSession[]>([emptySession()])
   const [saving, setSaving] = useState(false)
@@ -94,8 +104,8 @@ export default function OneTimeForm({ bodies, semesters, onClose, onSuccess }: O
       .catch(() => {})
   }, [])
 
-  const visibleRequests = form.body_id
-    ? pendingRequests.filter(r => r.body_id === form.body_id)
+  const visibleRequests = scopeValue.body_id
+    ? pendingRequests.filter(r => r.body_id === scopeValue.body_id)
     : pendingRequests
 
   const updateSession = (index: number, field: keyof OneTimeSession, value: string) => {
@@ -107,8 +117,16 @@ export default function OneTimeForm({ bodies, semesters, onClose, onSuccess }: O
       setError('Please select a semester.')
       return
     }
-    if (!form.body_id || !form.purpose) {
+    if (!scopeValue.body_id || !form.purpose) {
       setError('Please fill out all required fields.')
+      return
+    }
+    if (scopeValue.scope === 'divisional' && !scopeValue.division) {
+      setError('Please select a division.')
+      return
+    }
+    if (scopeValue.scope === 'multi' && scopeValue.body_ids.filter(id => id !== scopeValue.body_id).length === 0) {
+      setError('Select at least one other body for a multi-body booking.')
       return
     }
     for (const s of sessions) {
@@ -122,7 +140,12 @@ export default function OneTimeForm({ bodies, semesters, onClose, onSuccess }: O
     const res = await fetch('/api/administrator/bookings/one-time', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body_id: form.body_id, purpose: form.purpose, sessions, semester_id: semesterId }),
+      body: JSON.stringify({
+        ...scopeValue,
+        purpose: form.purpose,
+        sessions,
+        semester_id: semesterId,
+      }),
     })
 
     if (res.ok) {
@@ -159,19 +182,13 @@ export default function OneTimeForm({ bodies, semesters, onClose, onSuccess }: O
         )}
       </div>
 
-      <div>
-        <label className={labelCls}>Body *</label>
-        <select
-          value={form.body_id}
-          onChange={e => setForm({ ...form, body_id: e.target.value })}
-          className={inputCls}
-        >
-          <option value="">Select Body</option>
-          {bodies.map(b => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
-      </div>
+      <BookingScopeSelector
+        value={scopeValue}
+        onChange={setScopeValue}
+        ownerBodies={bodies}
+        allBodies={bodies}
+        allowedDivisions={[...DIVISIONS]}
+      />
 
       <div>
         <label className={labelCls}>Purpose *</label>

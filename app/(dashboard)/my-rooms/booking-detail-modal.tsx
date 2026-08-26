@@ -42,7 +42,7 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
         </div>
 
         <div className="flex items-center gap-2">
-          <p className="text-lg font-bold text-[#f0f6ff]">{booking.bodyName}</p>
+          <p className="text-lg font-bold text-[#f0f6ff]">{booking.scopeLabel}</p>
           {booking.senateType && (
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${senateTypeBadgeColors[booking.senateType] || DEFAULT_SENATE_BADGE}`}>{booking.senateType}</span>
           )}
