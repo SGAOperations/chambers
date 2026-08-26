@@ -3,6 +3,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUser } from '@/lib/auth'
+import { DIVISIONS, loadScopeContext, validateScopeSelection } from '@/lib/booking-scope'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -22,7 +23,11 @@ export async function GET() {
 
   // The settings row is independent of the bodies lookup, so fetch both at once
   // rather than gating the bodies query behind it.
-  const [{ data: settings }, bodiesResult] = await Promise.all([
+  //
+  // `allBodies` is the pool for a multi-body request -- any leadership may request a multi-body
+  // booking with any combination, so everyone gets the full active list. That leaks nothing:
+  // bodies_select_authenticated is already USING (true) for any authenticated user.
+  const [{ data: settings }, bodiesResult, { data: allBodies }] = await Promise.all([
     supabase
       .from('app_settings')
       .select('min_days_advance_room, min_days_advance_tabling')
@@ -32,15 +37,20 @@ export async function GET() {
       ? // Admins get every active body
         supabase
           .from('bodies')
-          .select('id, name')
+          .select('id, name, division')
           .eq('is_active', true)
           .order('name', { ascending: true })
       : // Everyone else gets the bodies where they hold Leadership
         supabase
           .from('board_memberships')
-          .select('body_id, bodies(id, name)')
+          .select('body_id, bodies(id, name, division)')
           .eq('user_id', user.id)
           .eq('role', 'Leadership'),
+    supabase
+      .from('bodies')
+      .select('id, name, division')
+      .eq('is_active', true)
+      .order('name', { ascending: true }),
   ])
 
   const minDaysRoom = settings?.min_days_advance_room ?? 0
@@ -52,7 +62,17 @@ export async function GET() {
         .map(m => m.bodies)
         .filter(Boolean)
 
-  return NextResponse.json({ bodies, minDaysRoom, minDaysTabling })
+  // Leadership may only request a divisional booking for a division they actually lead.
+  const ctx = await loadScopeContext(supabase, user)
+  const leadershipDivisions = isAdmin ? [...DIVISIONS] : ctx.leadershipDivisions
+
+  return NextResponse.json({
+    bodies,
+    allBodies: allBodies ?? [],
+    leadershipDivisions,
+    minDaysRoom,
+    minDaysTabling,
+  })
 }
 
 export async function POST(request: Request) {
@@ -65,22 +85,22 @@ export async function POST(request: Request) {
   if (rateLimitRes) return rateLimitRes
 
   const body = await request.json()
-  const { type, body_id, purpose, notes, details, sessions } = body
+  const { type, body_id, purpose, notes, details, sessions, scope, division, body_ids } = body
 
-  // Verify user has Leadership role in the submitted body_id (skip for admins)
-  if (!user.app_metadata?.is_admin) {
-    const { data: membership } = await supabase
-      .from('board_memberships')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('body_id', body_id)
-      .eq('role', 'Leadership')
-      .maybeSingle()
+  // Verifies Leadership on the originating body, and -- for a divisional request -- that the user
+  // actually leads that division. Any leadership may request a multi-body booking with any
+  // combination of bodies, so there is no restriction on the non-owning bodies.
+  const ctx = await loadScopeContext(supabase, user)
+  const { data: activeBodies } = await adminSupabase
+    .from('bodies')
+    .select('id')
+    .eq('is_active', true)
+  const validBodyIds = (activeBodies ?? []).map((b: { id: string }) => b.id)
 
-    if (!membership) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-    }
-  }
+  const selection = validateScopeSelection(
+    ctx, { scope, body_id, division, body_ids }, validBodyIds
+  )
+  if (!selection.ok) return NextResponse.json({ error: selection.error }, { status: 403 })
 
   // Fetch advance notice settings and validate dates
   const { data: settings } = await adminSupabase
@@ -137,7 +157,9 @@ export async function POST(request: Request) {
     .from('room_requests')
     .insert({
       type,
-      body_id,
+      body_id: selection.value.body_id,
+      scope: selection.value.scope,
+      division: selection.value.division,
       purpose,
       notes: notes || null,
       requested_by: user.id,
@@ -147,6 +169,14 @@ export async function POST(request: Request) {
     .single()
 
   if (requestError) return NextResponse.json({ error: requestError.message }, { status: 500 })
+
+  if (selection.value.scope === 'multi') {
+    const { error: bodiesError } = await adminSupabase
+      .from('room_request_bodies')
+      .insert(selection.value.body_ids.map(bid => ({ request_id: roomRequest.id, body_id: bid })))
+
+    if (bodiesError) return NextResponse.json({ error: bodiesError.message }, { status: 500 })
+  }
 
   // Insert type-specific details
   if (type === 'One-Time Room') {

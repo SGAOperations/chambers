@@ -126,7 +126,7 @@ export default function CalendarView({ bookings, onSelect }: CalendarViewProps) 
                 {dayBookings.slice(0, MAX_VISIBLE_PER_DAY).map(b => (
                   <div key={b.id} className="flex items-center gap-1 text-[10px] text-[#f0f6ff] truncate">
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
-                    <span className="truncate">{b.bodyName}</span>
+                    <span className="truncate">{b.scopeLabel}</span>
                   </div>
                 ))}
                 {dayBookings.length > MAX_VISIBLE_PER_DAY && (
@@ -151,7 +151,7 @@ export default function CalendarView({ bookings, onSelect }: CalendarViewProps) 
                 <div key={b.id} onClick={() => onSelect(b)} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a4d8a] transition-colors cursor-pointer">
                   <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-[#f0f6ff] truncate">{b.bodyName}</p>
+                    <p className="font-semibold text-[#f0f6ff] truncate">{b.scopeLabel}</p>
                     <p className="text-sm text-[#6a96bb]">{b.location} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                   </div>
                   <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>

@@ -3,6 +3,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUser } from '@/lib/auth'
+import { requireBookingManager } from '@/lib/booking-scope'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,27 +21,12 @@ export async function POST(request: Request) {
 
   const { booking_id, occurrence_id, scope, cancellation_type = 'Cancellation' } = await request.json()
 
-  const { data: bookingRow } = await adminSupabase
-    .from('bookings')
-    .select('body_id, type')
-    .eq('id', booking_id)
-    .single()
+  // Leadership of any body the booking is scoped to may request a cancellation -- for a divisional
+  // or multi booking that is wider than the owning body.
+  const guard = await requireBookingManager(supabase, adminSupabase, user, booking_id)
+  if (guard.error) return guard.error
 
-  if (!bookingRow) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
-
-  if (!user.app_metadata?.is_admin) {
-    const { data: membership } = await supabase
-      .from('board_memberships')
-      .select('id')
-      .eq('user_id', user.id)
-      .eq('body_id', bookingRow.body_id)
-      .eq('role', 'Leadership')
-      .maybeSingle()
-
-    if (!membership) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
-  const bookingType = bookingRow.type
+  const bookingType = guard.row.type
 
   // Create cancellation request
   const { error: requestError } = await adminSupabase

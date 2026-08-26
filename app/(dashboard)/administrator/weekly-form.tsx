@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import TimePicker from './time-picker'
+import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
+import { DIVISIONS, type Division } from '@/lib/booking-scope'
 
 const STATUSES = [
   'Reserved',
@@ -20,6 +22,7 @@ const STATUSES = [
 interface Body {
   id: string
   name: string
+  division: Division
 }
 
 interface Semester {
@@ -62,8 +65,14 @@ const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: WeeklyFormProps) {
   const defaultSemesterId = semesters.find(s => s.is_active)?.id ?? ''
   const [semesterId, setSemesterId] = useState(defaultSemesterId)
-  const [form, setForm] = useState({
+  // Admins may scope a booking to any division, so the full list is always allowed here.
+  const [scopeValue, setScopeValue] = useState<BookingScopeValue>({
+    scope: 'single',
     body_id: '',
+    division: null,
+    body_ids: [],
+  })
+  const [form, setForm] = useState({
     purpose: '',
     room_name: '',
     start_date: '',
@@ -88,8 +97,8 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
       .catch(() => {})
   }, [])
 
-  const visibleRequests = form.body_id
-    ? pendingRequests.filter(r => r.body_id === form.body_id)
+  const visibleRequests = scopeValue.body_id
+    ? pendingRequests.filter(r => r.body_id === scopeValue.body_id)
     : pendingRequests
 
   const handleSubmit = async () => {
@@ -97,8 +106,18 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
       setError('Please select a semester.')
       return
     }
-    if (!form.body_id || !form.purpose || !form.room_name || !form.start_date || !form.end_date || !form.start_time || !form.end_time) {
+    if (!scopeValue.body_id || !form.purpose || !form.room_name || !form.start_date || !form.end_date || !form.start_time || !form.end_time) {
       setError('Please fill out all required fields.')
+      return
+    }
+
+    if (scopeValue.scope === 'divisional' && !scopeValue.division) {
+      setError('Please select a division.')
+      return
+    }
+
+    if (scopeValue.scope === 'multi' && scopeValue.body_ids.filter(id => id !== scopeValue.body_id).length === 0) {
+      setError('Select at least one other body for a multi-body booking.')
       return
     }
 
@@ -111,7 +130,7 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
     const res = await fetch('/api/administrator/bookings/weekly', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, semester_id: semesterId }),
+      body: JSON.stringify({ ...form, ...scopeValue, semester_id: semesterId }),
     })
 
     if (res.ok) {
@@ -145,19 +164,13 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
         )}
       </div>
 
-      <div>
-        <label className={labelCls}>Body *</label>
-        <select
-          value={form.body_id}
-          onChange={e => setForm({ ...form, body_id: e.target.value })}
-          className={inputCls}
-        >
-          <option value="">Select Body</option>
-          {bodies.map(b => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
-      </div>
+      <BookingScopeSelector
+        value={scopeValue}
+        onChange={setScopeValue}
+        ownerBodies={bodies}
+        allBodies={bodies}
+        allowedDivisions={[...DIVISIONS]}
+      />
 
       <div>
         <label className={labelCls}>Purpose *</label>

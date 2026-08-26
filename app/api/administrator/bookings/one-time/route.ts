@@ -6,6 +6,13 @@ import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUser } from '@/lib/auth'
 import { waitUntil } from '@vercel/functions'
+import {
+  loadScopeContext,
+  validateScopeSelection,
+  resolveBookingRecipients,
+  syncBookingBodies,
+  type ScopedRow,
+} from '@/lib/booking-scope'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,7 +39,7 @@ export async function POST(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { body_id, purpose, sessions, semester_id } = await request.json()
+  const { body_id, purpose, sessions, semester_id, scope, division, body_ids } = await request.json()
 
   const { data: semester } = await adminSupabase
     .from('semesters')
@@ -44,6 +51,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid semester.' }, { status: 400 })
   }
 
+  const ctx = await loadScopeContext(supabase, user)
+  const selection = validateScopeSelection(ctx, { scope, body_id, division, body_ids })
+  if (!selection.ok) return NextResponse.json({ error: selection.error }, { status: 400 })
+
   // admin_role is already a claim on the verified JWT, so this no longer needs
   // a round trip to the users table.
   const creatorRole = user.app_metadata?.admin_role ?? null
@@ -51,11 +62,25 @@ export async function POST(request: Request) {
   // Create parent booking
   const { data: booking, error: bookingError } = await adminSupabase
     .from('bookings')
-    .insert({ body_id, purpose, type: 'One-Time Room', created_by: user.id, creator_role: creatorRole, semester_id })
+    .insert({
+      body_id: selection.value.body_id,
+      scope: selection.value.scope,
+      division: selection.value.division,
+      purpose,
+      type: 'One-Time Room',
+      created_by: user.id,
+      creator_role: creatorRole,
+      semester_id,
+    })
     .select()
     .single()
 
   if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 })
+
+  const { error: bodiesError } = await syncBookingBodies(
+    adminSupabase, booking.id, selection.value.scope, selection.value.body_ids
+  )
+  if (bodiesError) return NextResponse.json({ error: bodiesError }, { status: 500 })
 
   // Create one-time room booking rows
   const sessionRows = sessions.map((s: OneTimeSession) => ({
@@ -88,14 +113,29 @@ export async function PATCH(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { booking_id, body_id, purpose, sessions } = await request.json()
+  const { booking_id, body_id, purpose, sessions, scope, division, body_ids } = await request.json()
+
+  const ctx = await loadScopeContext(supabase, user)
+  const selection = validateScopeSelection(ctx, { scope, body_id, division, body_ids })
+  if (!selection.ok) return NextResponse.json({ error: selection.error }, { status: 400 })
 
   const { error: bookingError } = await adminSupabase
     .from('bookings')
-    .update({ body_id, purpose })
+    .update({
+      body_id: selection.value.body_id,
+      scope: selection.value.scope,
+      division: selection.value.division,
+      purpose,
+    })
     .eq('id', booking_id)
 
   if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 })
+
+  // Clears the join rows when the scope moved away from 'multi'.
+  const { error: bodiesError } = await syncBookingBodies(
+    adminSupabase, booking_id, selection.value.scope, selection.value.body_ids
+  )
+  if (bodiesError) return NextResponse.json({ error: bodiesError }, { status: 500 })
 
   // Delete existing session rows and reinsert
   const { error: deleteError } = await adminSupabase
@@ -132,19 +172,24 @@ export async function PATCH(request: Request) {
   const { data: bodyData } = await adminSupabase
     .from('bodies')
     .select('name')
-    .eq('id', body_id)
+    .eq('id', selection.value.body_id)
     .single()
   const bodyName = bodyData?.name ?? 'Unknown'
 
-  const { data: members } = await adminSupabase
-    .from('board_memberships')
-    .select('user_id, users(email, is_active)')
-    .eq('body_id', body_id)
+  // The audience is the whole scope, not just the owning body -- see resolveBookingRecipients for
+  // the divisional/multi fan-out policy.
+  const scopedRow: ScopedRow = {
+    id: booking_id,
+    body_id: selection.value.body_id,
+    scope: selection.value.scope,
+    division: selection.value.division,
+  }
+  const recipients = await resolveBookingRecipients(adminSupabase, scopedRow)
 
-  if (members?.length && auditLog) {
+  if (recipients.length && auditLog) {
     await adminSupabase.from('user_alerts').insert(
-      members.map((m: { user_id: string }) => ({
-        user_id: m.user_id,
+      recipients.map(r => ({
+        user_id: r.userId,
         audit_log_id: auditLog.id,
         booking_id,
         booking_type: 'One-Time Room',
@@ -159,11 +204,7 @@ export async function PATCH(request: Request) {
   waitUntil(
     (async () => {
       try {
-        const emails = (members ?? [])
-          .flatMap((m: { users: { email: string; is_active: boolean } | { email: string; is_active: boolean }[] | null }) =>
-            Array.isArray(m.users) ? m.users.filter(u => u.is_active).map(u => u.email) : m.users?.is_active ? [m.users.email] : []
-          )
-          .filter(Boolean) as string[]
+        const emails = recipients.map(r => r.email)
         await sendBookingUpdatedEmail({
           bodyName,
           roomOrTable: firstSession.room_name || 'N/A',
@@ -190,15 +231,10 @@ export async function PATCH(request: Request) {
     waitUntil(
       (async () => {
         try {
-          const { data: leaders } = await adminSupabase
-            .from('board_memberships')
-            .select('users(full_name, is_active)')
-            .eq('body_id', body_id)
-            .eq('role', 'Leadership')
-
-          const contacts = (leaders ?? [])
-            .flatMap((l: { users: { full_name: string; is_active: boolean }[] }) => l.users.filter(u => u.is_active).map(u => u.full_name))
-            .filter(Boolean) as string[]
+          const leaders = await resolveBookingRecipients(adminSupabase, scopedRow, {
+            leadershipOnly: true,
+          })
+          const contacts = leaders.map(l => l.fullName).filter(Boolean)
 
           await sendMissedReservationEmail({
             bodyName,

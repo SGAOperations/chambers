@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import TimePicker from './time-picker'
+import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
+import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
 
 const STATUSES = [
   'Reserved',
@@ -20,6 +22,7 @@ const STATUSES = [
 interface Body {
   id: string
   name: string
+  division: Division
 }
 
 interface Session {
@@ -38,6 +41,9 @@ interface EditTablingFormProps {
     id: string
     body_id: string
     purpose: string
+    scope: BookingScope
+    division: Division | null
+    booking_bodies: { body_id: string; bodies: { name: string } | null }[] | null
     tabling_bookings: {
       id: string
       reservation_code: string | null
@@ -65,8 +71,14 @@ const emptySession = (): Session => ({
 export default function EditTablingForm({ booking, bodies, onClose, onSuccess }: EditTablingFormProps) {
   const t = booking.tabling_bookings?.[0]
 
-  const [form, setForm] = useState({
+  const [scopeValue, setScopeValue] = useState<BookingScopeValue>({
+    scope: booking.scope ?? 'single',
     body_id: booking.body_id,
+    division: booking.division ?? null,
+    body_ids: (booking.booking_bodies ?? []).map(b => b.body_id),
+  })
+
+  const [form, setForm] = useState({
     purpose: booking.purpose,
     reservation_code: t?.reservation_code ?? '',
   })
@@ -92,8 +104,16 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
   }
 
   const handleSubmit = async () => {
-    if (!form.body_id || !form.purpose) {
+    if (!scopeValue.body_id || !form.purpose) {
       setError('Please fill out all required fields.')
+      return
+    }
+    if (scopeValue.scope === 'divisional' && !scopeValue.division) {
+      setError('Please select a division.')
+      return
+    }
+    if (scopeValue.scope === 'multi' && scopeValue.body_ids.filter(id => id !== scopeValue.body_id).length === 0) {
+      setError('Select at least one other body for a multi-body booking.')
       return
     }
 
@@ -112,6 +132,7 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
         booking_id: booking.id,
         tabling_id: t.id,
         ...form,
+        ...scopeValue,
         sessions,
       }),
     })
@@ -128,13 +149,13 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
 
   return (
     <div className="space-y-4">
-      <div>
-        <label className={labelCls}>Body *</label>
-        <select value={form.body_id} onChange={e => setForm({ ...form, body_id: e.target.value })} className={inputCls}>
-          <option value="">Select Body</option>
-          {bodies.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-      </div>
+      <BookingScopeSelector
+        value={scopeValue}
+        onChange={setScopeValue}
+        ownerBodies={bodies}
+        allBodies={bodies}
+        allowedDivisions={[...DIVISIONS]}
+      />
 
       <div>
         <label className={labelCls}>Purpose *</label>
