@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import BookingModal from './booking-modal'
+import ScopeLabel from '@/app/_components/scope-label'
+import type { BookingScope, Division } from '@/lib/booking-scope'
 
 interface Booking {
   id: string
@@ -15,6 +17,10 @@ interface FulfillModalProps {
     type: string
     purpose: string
     body_id: string
+    bodyName: string
+    scope: BookingScope
+    division: Division | null
+    linkedBodies: { id: string; name: string }[]
   }
   onClose: () => void
   onSuccess: () => void
@@ -79,6 +85,11 @@ export default function FulfillModal({ request, onClose, onSuccess }: FulfillMod
           <p className="text-xs font-medium text-[#93b8d8] uppercase tracking-wide">Request</p>
           <p className="text-sm font-semibold text-[#f0f6ff]">{request.purpose}</p>
           <p className="text-xs text-[#93b8d8]">{request.type}</p>
+          <ScopeLabel
+            row={{ body_id: request.body_id, scope: request.scope, division: request.division, bodies: { name: request.bodyName } }}
+            linkedBodies={request.linkedBodies}
+            className="text-xs text-[#93b8d8]"
+          />
         </div>
 
         {/* Booking dropdown */}
