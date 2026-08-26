@@ -32,7 +32,7 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-[#f0f6ff] font-medium text-base">v1.13.0</h2>
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.14.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               We don't exactly know yet! If there's anything you'd like to see, send a Slack DM to the Vice President of Operational Affairs ({vpName}) and the Digital Innovation Manager ({dimName}).
             </p>

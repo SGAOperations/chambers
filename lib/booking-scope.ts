@@ -349,6 +349,14 @@ interface RecipientRow {
  *   divisional  members of the owning body, plus only Leadership of the peer bodies. A division
  *               can be large, and mass-emailing all of it on every edit would be noise.
  *
+ * Hidden bookings (issue #21) override all of the above: a hidden booking is only visible to
+ * those who can manage it, so it must only ever notify them -- Leadership across the whole
+ * audience, for every scope. Otherwise an alert or email tells a member about a booking they
+ * cannot see, which is both confusing and a disclosure.
+ *
+ * `hidden` is looked up here rather than taken from the caller precisely so no route can forget
+ * to pass it; that omission is what caused #21.
+ *
  * This is the single place that policy lives; change it here and every booking route follows.
  *
  * `leadershipOnly` narrows to Leadership across the whole audience regardless of scope -- used for
@@ -362,10 +370,17 @@ export async function resolveBookingRecipients(
   const bodyIds = await resolveBookingBodyIds(adminSupabase, row)
   if (bodyIds.length === 0) return []
 
-  const { data } = await adminSupabase
-    .from('board_memberships')
-    .select('user_id, body_id, role, users(email, full_name, is_active)')
-    .in('body_id', bodyIds)
+  const [{ data }, { data: bookingRow }] = await Promise.all([
+    adminSupabase
+      .from('board_memberships')
+      .select('user_id, body_id, role, users(email, full_name, is_active)')
+      .in('body_id', bodyIds),
+    adminSupabase.from('bookings').select('hidden').eq('id', row.id).maybeSingle(),
+  ])
+
+  // A hidden booking notifies only the people who can manage it, which is exactly the set
+  // canManageScoped() admits: Leadership anywhere in the booking's audience.
+  const leadershipOnly = !!opts.leadershipOnly || !!bookingRow?.hidden
 
   const rows = (data ?? []) as RecipientRow[]
   const byUser = new Map<string, Recipient>()
@@ -374,11 +389,11 @@ export async function resolveBookingRecipients(
     const user = Array.isArray(m.users) ? m.users[0] : m.users
     if (!user?.is_active || !user.email) continue
 
-    if (opts.leadershipOnly && m.role !== 'Leadership') continue
+    if (leadershipOnly && m.role !== 'Leadership') continue
 
     // Divisional: peer bodies contribute only their leadership.
     if (
-      !opts.leadershipOnly &&
+      !leadershipOnly &&
       row.scope === 'divisional' &&
       m.body_id !== row.body_id &&
       m.role !== 'Leadership'
