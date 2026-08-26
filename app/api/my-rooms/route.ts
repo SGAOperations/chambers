@@ -112,8 +112,20 @@ export async function GET() {
     .eq('semester_id', activeSemester.id)
   tablingQ = orFilter ? tablingQ.or(orFilter) : tablingQ.in('body_id', ctx.bodyIds)
 
-  const [{ data: oneTimeBookings }, { data: weeklyBookings }, { data: tablingBookings }] =
-    await Promise.all([oneTimeQ, weeklyQ, tablingQ])
+  const [oneTimeRes, weeklyRes, tablingRes] = await Promise.all([oneTimeQ, weeklyQ, tablingQ])
+
+  // Surface query failures instead of coercing them to an empty list. A malformed embed
+  // (e.g. PGRST201, an ambiguous relationship) otherwise renders as a calm "no bookings
+  // found", which is indistinguishable from genuinely having none.
+  const failed = [oneTimeRes, weeklyRes, tablingRes].find(r => r.error)
+  if (failed?.error) {
+    console.error('my-rooms query failed:', failed.error)
+    return NextResponse.json({ error: failed.error.message }, { status: 500 })
+  }
+
+  const { data: oneTimeBookings } = oneTimeRes
+  const { data: weeklyBookings } = weeklyRes
+  const { data: tablingBookings } = tablingRes
 
   /**
    * Decorates each row with canManage, computed server-side across the full scope. The client used
