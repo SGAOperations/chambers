@@ -26,25 +26,22 @@ export async function GET() {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  // The scope context and the active semester are independent, so fetch both at once.
-  const [ctx, { data: activeSemester }] = await Promise.all([
+  // The scope context, the active semester and the Senate type preferences are all independent,
+  // so fetch them at once.
+  const [ctx, { data: activeSemester }, { data: profile }] = await Promise.all([
     loadScopeContext(supabase, user),
     supabase.from('semesters').select('id').eq('is_active', true).single(),
+    supabase.from('users').select('senate_type_preferences').eq('id', user.id).single(),
   ])
 
-  if (ctx.bodyIds.length === 0) {
-    return NextResponse.json({
-      oneTimeBookings: [],
-      weeklyBookings: [],
-      tablingBookings: [],
-    })
-  }
+  const senateTypePreferences = profile?.senate_type_preferences ?? {}
 
-  if (!activeSemester) {
+  if (ctx.bodyIds.length === 0 || !activeSemester) {
     return NextResponse.json({
       oneTimeBookings: [],
       weeklyBookings: [],
       tablingBookings: [],
+      senateTypePreferences,
     })
   }
 
@@ -141,5 +138,6 @@ export async function GET() {
     oneTimeBookings: decorate(oneTimeBookings as BookingRow[] | null),
     weeklyBookings: decorate(weeklyBookings as BookingRow[] | null),
     tablingBookings: decorate(tablingBookings as BookingRow[] | null),
+    senateTypePreferences,
   })
 }

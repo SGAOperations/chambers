@@ -1,36 +1,7 @@
 'use client'
 
 import BookingModal from '../administrator/booking-modal'
-
-const statusTextColors: Record<string, string> = {
-  'Reserved': 'text-[#4ade80]',
-  'Alternate Room': 'text-[#4285f4]',
-  'Alternate Time': 'text-[#4285f4]',
-  'Waitlisted': 'text-[#f87171]',
-  'Unavailable': 'text-[#f87171]',
-  'Pending Cancellation': 'text-[#fb923c]',
-  'Cancelled': 'text-[#c084fc]',
-  'Virtual': 'text-[#22d3ee]',
-  'Missed': 'text-[#a78bfa]',
-  'Repurposed': 'text-white',
-  'Tentative': 'text-[#fef08a]',
-}
-
-interface FlatBooking {
-  id: string
-  bookingId: string
-  bodyId: string
-  type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
-  bodyName: string
-  purpose: string
-  location: string
-  date: string
-  startTime: string
-  endTime: string
-  status: string
-  reservationCode: string | null
-  senateType: string | null
-}
+import { type FlatBooking, statusTextColors, senateTypeBadgeColors, DEFAULT_SENATE_BADGE } from './shared'
 
 interface BookingDetailModalProps {
   booking: FlatBooking
@@ -71,9 +42,9 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
         </div>
 
         <div className="flex items-center gap-2">
-          <p className="text-lg font-bold text-[#f0f6ff]">{booking.bodyName}</p>
+          <p className="text-lg font-bold text-[#f0f6ff]">{booking.scopeLabel}</p>
           {booking.senateType && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#c8102e] text-white">{booking.senateType}</span>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${senateTypeBadgeColors[booking.senateType] || DEFAULT_SENATE_BADGE}`}>{booking.senateType}</span>
           )}
         </div>
 
