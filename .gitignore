@@ -44,3 +44,10 @@ next-env.d.ts
 
 # Supabase CLI scratch
 supabase/.temp/
+
+# `supabase db dump` output, written to the repo root. Never commit these: a real
+# roles.sql can contain role passwords, and data.sql is a full copy of production.
+# Schema history belongs in supabase/migrations/ instead.
+/data.sql
+/roles.sql
+/schema.sql
