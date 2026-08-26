@@ -6,6 +6,7 @@ import RevisionModal from './revision-modal'
 import BookingDetailModal from './booking-detail-modal'
 import NotificationBell from './notification-bell'
 import { Skeleton } from '@/app/_components/skeleton'
+import { formatScopeLabel, type BookingScope, type Division } from '@/lib/booking-scope'
 
 function MyRoomsSkeleton() {
   return (
@@ -114,6 +115,39 @@ interface FlatBooking {
   status: string
   reservationCode: string | null
   senateType: string | null
+  /** Resolved server-side across the booking's full scope. */
+  canManage: boolean
+  /** Groups the "All Bookings" list. Bookings that share rights share a key. */
+  scopeKey: string
+  /** Display name for the group heading -- body name, division, or "X + N others". */
+  scopeLabel: string
+}
+
+interface ScopedBookingRow {
+  id: string
+  body_id: string
+  scope: BookingScope
+  division: Division | null
+  bodies: { name: string } | null
+  booking_bodies: { body_id: string; bodies: { name: string } | null }[] | null
+  canManage: boolean
+}
+
+/**
+ * A divisional booking is grouped by its division and a multi booking on its own, because in both
+ * cases the owning body is not what determines who sees it.
+ */
+function scopeKeyOf(b: ScopedBookingRow): string {
+  if (b.scope === 'divisional' && b.division) return `div:${b.division}`
+  if (b.scope === 'multi') return `multi:${b.id}`
+  return b.body_id
+}
+
+function scopeLabelOf(b: ScopedBookingRow): string {
+  return formatScopeLabel(
+    b,
+    (b.booking_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))
+  ).short
 }
 
 function formatTime(time: string) {
@@ -142,7 +176,6 @@ export default function MyRoomsPage() {
   const [filter, setFilter] = useState<Filter>(7)
   const [all, setAll] = useState<FlatBooking[]>([])
   const [loading, setLoading] = useState(true)
-  const [leadershipBodyIds, setLeadershipBodyIds] = useState<string[]>([])
   const [detailBooking, setDetailBooking] = useState<FlatBooking | null>(null)
   const [cancellingBooking, setCancellingBooking] = useState<{
     id: string
@@ -164,12 +197,10 @@ export default function MyRoomsPage() {
 
   const fetchBookings = async () => {
       setLoading(true)
-      // /api/my-rooms already resolves the caller's Leadership bodies, so this
-      // no longer needs a second round trip to auth + board_memberships.
+      // /api/my-rooms resolves visibility and per-booking manage rights across the full scope, so
+      // this needs no second round trip to auth + board_memberships.
       const res = await fetch('/api/my-rooms')
       const data = await res.json()
-
-      setLeadershipBodyIds(data.leadershipBodyIds || [])
 
       const flat: FlatBooking[] = []
 
@@ -189,6 +220,9 @@ export default function MyRoomsPage() {
             status: d.status,
             reservationCode: d.reservation_code,
             senateType: null,
+            canManage: !!b.canManage,
+            scopeKey: scopeKeyOf(b),
+            scopeLabel: scopeLabelOf(b),
           })
         }
       }
@@ -211,6 +245,9 @@ export default function MyRoomsPage() {
           status: occ.status || w.status,
           reservationCode: occ.reservation_code || w.reservation_code,
           senateType: occ.senate_type ?? null,
+          canManage: !!b.canManage,
+          scopeKey: scopeKeyOf(b),
+          scopeLabel: scopeLabelOf(b),
         })
       }
     }
@@ -233,6 +270,9 @@ export default function MyRoomsPage() {
           status: s.status,
           reservationCode: s.reservation_code || t.reservation_code,
           senateType: null,
+          canManage: !!b.canManage,
+          scopeKey: scopeKeyOf(b),
+          scopeLabel: scopeLabelOf(b),
         })
       }
     }
@@ -292,7 +332,7 @@ export default function MyRoomsPage() {
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6a96bb]">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
                     <span className={`text-xs font-semibold ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
                   </div>
-                  <p className="font-semibold text-[#f0f6ff]">{b.bodyName}</p>
+                  <p className="font-semibold text-[#f0f6ff]">{b.scopeLabel}</p>
                   <p className="text-sm text-[#93b8d8] mt-0.5">{b.location}</p>
                   <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
                   <div className="flex items-center justify-between">
@@ -323,14 +363,18 @@ export default function MyRoomsPage() {
         {all.length === 0 ? (
           <p className="text-[#6a96bb] text-sm">No bookings found.</p>
         ) : (() => {
-          const bodyMap = new Map<string, { bodyName: string, bookings: FlatBooking[] }>()
+          // Grouped by scope, not body: a divisional booking belongs to its division and a multi
+          // booking stands alone, since in neither case does the owning body decide who sees it.
+          const bodyMap = new Map<string, { bodyName: string, bookings: FlatBooking[], canManage: boolean }>()
           for (const b of all) {
-            if (!bodyMap.has(b.bodyId)) bodyMap.set(b.bodyId, { bodyName: b.bodyName, bookings: [] })
-            bodyMap.get(b.bodyId)!.bookings.push(b)
+            if (!bodyMap.has(b.scopeKey)) {
+              bodyMap.set(b.scopeKey, { bodyName: b.scopeLabel, bookings: [], canManage: b.canManage })
+            }
+            bodyMap.get(b.scopeKey)!.bookings.push(b)
           }
-          const groups = Array.from(bodyMap.entries()).map(([bodyId, { bodyName, bookings }]) => ({
+          const groups = Array.from(bodyMap.entries()).map(([bodyId, { bodyName, bookings, canManage }]) => ({
             bodyId, bodyName, bookings,
-            isLeadership: leadershipBodyIds.includes(bodyId),
+            isLeadership: canManage,
           }))
           groups.sort((a, b) => {
             if (a.isLeadership !== b.isLeadership) return a.isLeadership ? -1 : 1
@@ -373,7 +417,7 @@ export default function MyRoomsPage() {
       {detailBooking && (
         <BookingDetailModal
           booking={detailBooking}
-          isLeadership={leadershipBodyIds.includes(detailBooking.bodyId)}
+          isLeadership={detailBooking.canManage}
           onClose={() => setDetailBooking(null)}
           onCancelClick={() => {
             const sessionCount = all.filter(b => b.bookingId === detailBooking.bookingId).length

@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import TimePicker from './time-picker'
+import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
+import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
 
 const STATUSES = [
   'Reserved',
@@ -20,6 +22,7 @@ const STATUSES = [
 interface Body {
   id: string
   name: string
+  division: Division
 }
 
 interface Occurrence {
@@ -38,6 +41,9 @@ interface EditWeeklyFormProps {
     id: string
     body_id: string
     purpose: string
+    scope: BookingScope
+    division: Division | null
+    booking_bodies: { body_id: string; bodies: { name: string } | null }[] | null
     weekly_room_bookings: {
       id: string
       room_name: string
@@ -86,8 +92,14 @@ function getWeeklyDates(startDate: string, endDate: string): string[] {
 export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: EditWeeklyFormProps) {
   const w = booking.weekly_room_bookings?.[0]
 
-  const [form, setForm] = useState({
+  const [scopeValue, setScopeValue] = useState<BookingScopeValue>({
+    scope: booking.scope ?? 'single',
     body_id: booking.body_id,
+    division: booking.division ?? null,
+    body_ids: (booking.booking_bodies ?? []).map(b => b.body_id),
+  })
+
+  const [form, setForm] = useState({
     purpose: booking.purpose,
     room_name: w?.room_name ?? '',
     start_date: w?.start_date ?? '',
@@ -106,7 +118,8 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const isSenate = bodies.find(b => b.id === form.body_id)?.name === 'Senate'
+  // Still keyed on the owning body, which stays populated for every scope.
+  const isSenate = bodies.find(b => b.id === scopeValue.body_id)?.name === 'Senate'
 
   if (!w) return null
 
@@ -127,8 +140,16 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
   }
 
   const handleSubmit = async () => {
-    if (!form.body_id || !form.purpose || !form.room_name || !form.start_date || !form.end_date || !form.start_time || !form.end_time) {
+    if (!scopeValue.body_id || !form.purpose || !form.room_name || !form.start_date || !form.end_date || !form.start_time || !form.end_time) {
       setError('Please fill out all required fields.')
+      return
+    }
+    if (scopeValue.scope === 'divisional' && !scopeValue.division) {
+      setError('Please select a division.')
+      return
+    }
+    if (scopeValue.scope === 'multi' && scopeValue.body_ids.filter(id => id !== scopeValue.body_id).length === 0) {
+      setError('Select at least one other body for a multi-body booking.')
       return
     }
 
@@ -140,6 +161,7 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
         booking_id: booking.id,
         weekly_id: w.id,
         ...form,
+        ...scopeValue,
         occurrences,
       }),
     })
@@ -157,14 +179,13 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
   return (
     <div className="space-y-4">
       {/* Base fields */}
-      <div>
-        <label className={labelCls}>Body *</label>
-        <select value={form.body_id} onChange={e => setForm({ ...form, body_id: e.target.value })} className={inputCls}>
-          <option value="">Select Body</option>
-          {bodies.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-        </select>
-      </div>
-
+      <BookingScopeSelector
+        value={scopeValue}
+        onChange={setScopeValue}
+        ownerBodies={bodies}
+        allBodies={bodies}
+        allowedDivisions={[...DIVISIONS]}
+      />
       <div>
         <label className={labelCls}>Purpose *</label>
         <input type="text" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} className={inputCls} />

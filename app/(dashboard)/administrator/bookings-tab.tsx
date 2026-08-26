@@ -11,12 +11,15 @@ import EditWeeklyForm from './edit-weekly-form'
 import EditTablingForm from './edit-tabling-form'
 import WeeklyBookingGrid from './weekly-booking-grid'
 import { Skeleton } from '@/app/_components/skeleton'
+import ScopeLabel from '@/app/_components/scope-label'
+import type { Division, BookingScope } from '@/lib/booking-scope'
 
 type BookingSubTab = 'One-Time Rooms' | 'Weekly Rooms' | 'Tables'
 
 interface Body {
   id: string
   name: string
+  division: Division
 }
 
 interface Semester {
@@ -25,7 +28,12 @@ interface Semester {
   is_active: boolean
 }
 
-interface OneTimeBooking {
+/** Flattens the embedded booking_bodies rows into the shape ScopeLabel expects. */
+const linkedBodiesOf = (b: BookingBase) =>
+  (b.booking_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))
+
+/** The columns every booking row carries, regardless of type. */
+interface BookingBase {
   id: string
   body_id: string
   purpose: string
@@ -33,6 +41,12 @@ interface OneTimeBooking {
   hidden: boolean
   bodies: { name: string } | null
   creator_role: string | null
+  scope: BookingScope
+  division: Division | null
+  booking_bodies: { body_id: string; bodies: { name: string } | null }[] | null
+}
+
+interface OneTimeBooking extends BookingBase {
   one_time_room_bookings: {
     id: string
     room_name: string
@@ -44,14 +58,7 @@ interface OneTimeBooking {
   }[] | null
 }
 
-interface WeeklyBooking {
-  id: string
-  body_id: string
-  purpose: string
-  is_event: boolean
-  hidden: boolean
-  bodies: { name: string } | null
-  creator_role: string | null
+interface WeeklyBooking extends BookingBase {
   weekly_room_bookings: {
     id: string
     room_name: string
@@ -74,14 +81,7 @@ interface WeeklyBooking {
   }[] | null
 }
 
-interface TablingBooking {
-  id: string
-  body_id: string
-  purpose: string
-  is_event: boolean
-  hidden: boolean
-  bodies: { name: string } | null
-  creator_role: string | null
+interface TablingBooking extends BookingBase {
   tabling_bookings: {
     id: string
     reservation_code: string | null
@@ -401,7 +401,7 @@ export default function BookingsTab() {
                 <div key={b.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-semibold text-[#f0f6ff]">{b.bodies?.name}</p>
+                      <ScopeLabel row={b} linkedBodies={linkedBodiesOf(b)} className="block font-semibold text-[#f0f6ff]" />
                       <p className="text-sm text-[#93b8d8]">{b.purpose}</p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -482,7 +482,7 @@ export default function BookingsTab() {
                 <div key={b.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-semibold text-[#f0f6ff]">{b.bodies?.name}</p>
+                      <ScopeLabel row={b} linkedBodies={linkedBodiesOf(b)} className="block font-semibold text-[#f0f6ff]" />
                       <p className="text-sm text-[#93b8d8]">{b.purpose}</p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -541,7 +541,7 @@ export default function BookingsTab() {
               return (
                 <div key={b.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm">
                   <div className="flex items-center justify-between">
-                    <p className="font-semibold text-[#f0f6ff]">{b.bodies?.name}</p>
+                    <ScopeLabel row={b} linkedBodies={linkedBodiesOf(b)} className="block font-semibold text-[#f0f6ff]" />
                     <div className="flex items-center gap-3">
                       <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
                       {b.is_event && (

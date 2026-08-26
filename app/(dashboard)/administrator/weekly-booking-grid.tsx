@@ -1,5 +1,7 @@
 'use client'
 
+import type { BookingScope, Division } from '@/lib/booking-scope'
+
 interface WeeklyOccurrence {
   id: string
   occurrence_date: string
@@ -19,6 +21,9 @@ interface WeeklyBooking {
   hidden: boolean
   bodies: { name: string } | null
   creator_role: string | null
+  scope: BookingScope
+  division: Division | null
+  booking_bodies: { body_id: string; bodies: { name: string } | null }[] | null
   weekly_room_bookings: {
     id: string
     room_name: string

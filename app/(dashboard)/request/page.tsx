@@ -6,12 +6,15 @@ import { createClient } from '@/lib/supabase/client'
 import { getAuthedUser } from '@/lib/auth'
 import TimePicker from '../administrator/time-picker'
 import { Skeleton } from '@/app/_components/skeleton'
+import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
+import type { Division } from '@/lib/booking-scope'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
 
 interface Body {
   id: string
   name: string
+  division: Division
 }
 
 interface MyRequest {
@@ -160,6 +163,10 @@ export default function RequestPage() {
   const router = useRouter()
   const [type, setType] = useState<RequestType>('One-Time Room')
   const [bodies, setBodies] = useState<Body[]>([])
+  // The multi-body pool is every active body; leadership may request any combination.
+  const [allBodies, setAllBodies] = useState<Body[]>([])
+  // Leadership may only request a divisional booking for a division they actually lead.
+  const [leadershipDivisions, setLeadershipDivisions] = useState<Division[]>([])
   const [bodiesLoading, setBodiesLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -171,8 +178,14 @@ export default function RequestPage() {
   const [requestsLoading, setRequestsLoading] = useState(false)
   const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null)
 
-  const [form, setForm] = useState({
+  const [scopeValue, setScopeValue] = useState<BookingScopeValue>({
+    scope: 'single',
     body_id: '',
+    division: null,
+    body_ids: [],
+  })
+
+  const [form, setForm] = useState({
     purpose: '',
     notes: '',
     room_name: '',
@@ -202,6 +215,8 @@ export default function RequestPage() {
         return
       }
       setBodies(resolved)
+      setAllBodies(data.allBodies || resolved)
+      setLeadershipDivisions(data.leadershipDivisions || [])
       setBodiesLoading(false)
     }
     fetchBodies()
@@ -226,8 +241,18 @@ export default function RequestPage() {
   const handleSubmit = async () => {
     setError('')
 
-    if (!form.body_id || !form.purpose) {
+    if (!scopeValue.body_id || !form.purpose) {
       setError('Please fill out all required fields.')
+      return
+    }
+
+    if (scopeValue.scope === 'divisional' && !scopeValue.division) {
+      setError('Please select a division.')
+      return
+    }
+
+    if (scopeValue.scope === 'multi' && scopeValue.body_ids.filter(id => id !== scopeValue.body_id).length === 0) {
+      setError('Select at least one other body for a multi-body request.')
       return
     }
 
@@ -284,7 +309,7 @@ export default function RequestPage() {
 
     const payload: Record<string, unknown> = {
       type,
-      body_id: form.body_id,
+      ...scopeValue,
       purpose: form.purpose,
       notes: form.notes,
     }
@@ -323,7 +348,8 @@ export default function RequestPage() {
   }
 
   const resetForm = () => {
-    setForm({ body_id: '', purpose: '', notes: '', room_name: '', start_date: '', end_date: '', start_time: '09:00', end_time: '10:00' })
+    setForm({ purpose: '', notes: '', room_name: '', start_date: '', end_date: '', start_time: '09:00', end_time: '10:00' })
+    setScopeValue({ scope: 'single', body_id: '', division: null, body_ids: [] })
     setSessions([emptySession()])
     setOneTimeSessions([emptyOneTimeSession()])
     setSubmitted(false)
@@ -512,17 +538,20 @@ export default function RequestPage() {
         <>
           {/* Common fields */}
           <div className="space-y-3">
-            <div>
-              <label className={labelCls}>Body *</label>
-              {bodiesLoading ? (
+            {bodiesLoading ? (
+              <div>
+                <label className={labelCls}>Body *</label>
                 <Skeleton className="h-10 w-full animate-pulse bg-[#0f2a4a] border border-[#1e5080]" />
-              ) : (
-                <select value={form.body_id} onChange={e => setForm({ ...form, body_id: e.target.value })} className={inputCls}>
-                  <option value="">Select Body</option>
-                  {bodies.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              )}
-            </div>
+              </div>
+            ) : (
+              <BookingScopeSelector
+                value={scopeValue}
+                onChange={setScopeValue}
+                ownerBodies={bodies}
+                allBodies={allBodies}
+                allowedDivisions={leadershipDivisions}
+              />
+            )}
 
             <div>
               <label className={labelCls}>Purpose *</label>

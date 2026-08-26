@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import TimePicker from './time-picker'
+import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
+import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
 
 const STATUSES = [
   'Reserved',
@@ -20,6 +22,7 @@ const STATUSES = [
 interface Body {
   id: string
   name: string
+  division: Division
 }
 
 interface OneTimeSession {
@@ -45,6 +48,9 @@ interface EditOneTimeFormProps {
     id: string
     body_id: string
     purpose: string
+    scope: BookingScope
+    division: Division | null
+    booking_bodies: { body_id: string; bodies: { name: string } | null }[] | null
     one_time_room_bookings: {
       id: string
       room_name: string
@@ -65,8 +71,14 @@ const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
 export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }: EditOneTimeFormProps) {
   const [form, setForm] = useState({
-    body_id: booking.body_id,
     purpose: booking.purpose,
+  })
+
+  const [scopeValue, setScopeValue] = useState<BookingScopeValue>({
+    scope: booking.scope ?? 'single',
+    body_id: booking.body_id,
+    division: booking.division ?? null,
+    body_ids: (booking.booking_bodies ?? []).map(b => b.body_id),
   })
 
   const [sessions, setSessions] = useState<OneTimeSession[]>(
@@ -88,8 +100,16 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
   }
 
   const handleSubmit = async () => {
-    if (!form.body_id || !form.purpose) {
+    if (!scopeValue.body_id || !form.purpose) {
       setError('Please fill out all required fields.')
+      return
+    }
+    if (scopeValue.scope === 'divisional' && !scopeValue.division) {
+      setError('Please select a division.')
+      return
+    }
+    if (scopeValue.scope === 'multi' && scopeValue.body_ids.filter(id => id !== scopeValue.body_id).length === 0) {
+      setError('Select at least one other body for a multi-body booking.')
       return
     }
     for (const s of sessions) {
@@ -105,7 +125,7 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         booking_id: booking.id,
-        body_id: form.body_id,
+        ...scopeValue,
         purpose: form.purpose,
         sessions,
       }),
@@ -123,19 +143,13 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
 
   return (
     <div className="space-y-3">
-      <div>
-        <label className={labelCls}>Body *</label>
-        <select
-          value={form.body_id}
-          onChange={e => setForm({ ...form, body_id: e.target.value })}
-          className={inputCls}
-        >
-          <option value="">Select Body</option>
-          {bodies.map(b => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
-      </div>
+      <BookingScopeSelector
+        value={scopeValue}
+        onChange={setScopeValue}
+        ownerBodies={bodies}
+        allBodies={bodies}
+        allowedDivisions={[...DIVISIONS]}
+      />
 
       <div>
         <label className={labelCls}>Purpose *</label>
