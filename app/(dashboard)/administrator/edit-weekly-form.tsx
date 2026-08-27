@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import TimePicker from './time-picker'
 import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
@@ -120,6 +120,16 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
   const [expandedOcc, setExpandedOcc] = useState<string | null>(initialExpandedOcc ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  // When opened from a grid cell, scroll that occurrence into view.
+  const initialOccRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!initialExpandedOcc) return
+    const raf = requestAnimationFrame(() => {
+      initialOccRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [initialExpandedOcc])
 
   // Still keyed on the owning body, which stays populated for every scope.
   const isSenate = bodies.find(b => b.id === scopeValue.body_id)?.name === 'Senate'
@@ -242,7 +252,11 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
           const isExpanded = expandedOcc === date
 
           return (
-            <div key={date} className="border border-[#1e5080] rounded-xl overflow-hidden">
+            <div
+              key={date}
+              ref={date === initialExpandedOcc ? initialOccRef : undefined}
+              className="border border-[#1e5080] rounded-xl overflow-hidden"
+            >
               <div
                 className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-[#1a4d8a]"
                 onClick={() => setExpandedOcc(isExpanded ? null : date)}
