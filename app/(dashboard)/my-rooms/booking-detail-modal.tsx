@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import BookingModal from '../administrator/booking-modal'
 import { type FlatBooking, statusTextColors, senateTypeBadgeColors, DEFAULT_SENATE_BADGE } from './shared'
 
@@ -29,6 +30,12 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
   const canCancel = isLeadership && !['Pending Cancellation', 'Cancelled', 'Virtual'].includes(booking.status)
   const canRevise = isLeadership && !['Cancelled', 'Missed', 'Repurposed'].includes(booking.status)
 
+  // A multi-body booking collapses to "Owner + N others". There is no hover on
+  // touch, so the field has to be tap-to-expand to reveal the peer bodies (#28).
+  const [bodiesExpanded, setBodiesExpanded] = useState(false)
+  const scopeFull = booking.scopeFull ?? [booking.scopeLabel]
+  const hasPeerBodies = scopeFull.length > 1
+
   return (
     <BookingModal title="Booking Details" onClose={onClose}>
       <div className="space-y-4">
@@ -41,8 +48,19 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <p className="text-lg font-bold text-[#f0f6ff]">{booking.scopeLabel}</p>
+        <div className="flex items-center gap-2 flex-wrap">
+          {hasPeerBodies ? (
+            <button
+              type="button"
+              onClick={() => setBodiesExpanded(v => !v)}
+              aria-expanded={bodiesExpanded}
+              className="text-lg font-bold text-[#f0f6ff] text-left underline decoration-dotted underline-offset-4 hover:text-[#c8102e] transition-colors"
+            >
+              {bodiesExpanded ? scopeFull.join(' + ') : booking.scopeLabel}
+            </button>
+          ) : (
+            <p className="text-lg font-bold text-[#f0f6ff]">{booking.scopeLabel}</p>
+          )}
           {booking.senateType && (
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${senateTypeBadgeColors[booking.senateType] || DEFAULT_SENATE_BADGE}`}>{booking.senateType}</span>
           )}
