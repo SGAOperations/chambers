@@ -236,7 +236,7 @@ export default function SpaceBookingModal({
           </div>
 
           {/* Times */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Start Time</label>
               <TimePicker value={startTime} onChange={setStartTime} interval={15} />

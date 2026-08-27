@@ -202,12 +202,12 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
               <DateField value={s.booking_date} onChange={v => updateSession(i, 'booking_date', v)} />
             </div>
 
-            <div className="flex gap-3">
-              <div className="flex-1">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 min-w-0">
                 <label className={labelCls}>Start Time *</label>
                 <TimePicker value={s.start_time} onChange={v => updateSession(i, 'start_time', v)} />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <label className={labelCls}>End Time *</label>
                 <TimePicker value={s.end_time} onChange={v => updateSession(i, 'end_time', v)} />
               </div>

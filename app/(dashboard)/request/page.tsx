@@ -62,13 +62,18 @@ interface OneTimeSession {
 const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
+// Most meetings booked through this form run in the evening, so default to a common
+// 5-8pm slot rather than mid-morning -- still fully editable per session.
+const DEFAULT_START_TIME = '17:00'
+const DEFAULT_END_TIME = '20:00'
+
 const emptySession = (): TablingSession => ({
   session_date: '',
-  start_time: '09:00',
-  end_time: '10:00',
+  start_time: DEFAULT_START_TIME,
+  end_time: DEFAULT_END_TIME,
 })
 
-const emptyOneTimeSession = (): OneTimeSession => ({ session_date: '', start_time: '09:00', end_time: '10:00', room_name: '' })
+const emptyOneTimeSession = (): OneTimeSession => ({ session_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME, room_name: '' })
 
 function GuidelinesPanel({ type }: { type: RequestType }) {
   const email = 'sgaOperations@northeastern.edu'
@@ -197,8 +202,8 @@ export default function RequestPage() {
     room_name: '',
     start_date: '',
     end_date: '',
-    start_time: '09:00',
-    end_time: '10:00',
+    start_time: DEFAULT_START_TIME,
+    end_time: DEFAULT_END_TIME,
   })
 
   const [sessions, setSessions] = useState<TablingSession[]>([emptySession()])
@@ -354,7 +359,7 @@ export default function RequestPage() {
   }
 
   const resetForm = () => {
-    setForm({ purpose: '', notes: '', room_name: '', start_date: '', end_date: '', start_time: '09:00', end_time: '10:00' })
+    setForm({ purpose: '', notes: '', room_name: '', start_date: '', end_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME })
     setScopeValue({ scope: 'single', body_id: '', division: null, body_ids: [] })
     setSessions([emptySession()])
     setOneTimeSessions([emptyOneTimeSession()])
@@ -608,12 +613,12 @@ export default function RequestPage() {
                       <label className={labelCls}>Date *</label>
                       <DateField value={s.session_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={v => updateOneTimeSession(i, 'session_date', v)} />
                     </div>
-                    <div className="flex gap-3">
-                      <div className="flex-1">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1 min-w-0">
                         <label className={labelCls}>Start Time *</label>
                         <TimePicker value={s.start_time} onChange={v => updateOneTimeSession(i, 'start_time', v)} />
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <label className={labelCls}>End Time *</label>
                         <TimePicker value={s.end_time} onChange={v => updateOneTimeSession(i, 'end_time', v)} />
                       </div>
@@ -640,7 +645,7 @@ export default function RequestPage() {
                     <DateField value={form.end_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={v => setForm({ ...form, end_date: v })} />
                   </div>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   <div className="flex-1 min-w-0">
                     <label className={labelCls}>Start Time *</label>
                     <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
@@ -685,12 +690,12 @@ export default function RequestPage() {
                       <DateField value={s.session_date} min={minDaysTabling > 0 ? getMinDate(minDaysTabling) : undefined} onChange={v => updateSession(i, 'session_date', v)} />
                     </div>
 
-                    <div className="flex gap-3">
-                      <div className="flex-1">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1 min-w-0">
                         <label className={labelCls}>Start Time *</label>
                         <TimePicker value={s.start_time} onChange={v => updateSession(i, 'start_time', v)} />
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <label className={labelCls}>End Time *</label>
                         <TimePicker value={s.end_time} onChange={v => updateSession(i, 'end_time', v)} />
                       </div>

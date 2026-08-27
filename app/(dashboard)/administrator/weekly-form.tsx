@@ -211,12 +211,12 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <div className="flex-1">
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex-1 min-w-0">
           <label className={labelCls}>Start Time *</label>
           <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <label className={labelCls}>End Time *</label>
           <TimePicker value={form.end_time} onChange={v => setForm({ ...form, end_time: v })} />
         </div>
