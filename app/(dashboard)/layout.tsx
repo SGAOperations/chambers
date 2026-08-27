@@ -9,6 +9,7 @@ import SettingsModal, { type Settings as SettingsData } from './settings-modal'
 import { CountsContext, EMPTY_COUNTS, type Counts } from './counts-context'
 import { getAuthedUser } from '@/lib/auth'
 import { loadIdentity, clearIdentity } from '@/lib/identity'
+import type { AlertRow } from '@/lib/dashboard-data'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -26,6 +27,7 @@ export default function DashboardLayout({
   const [isIEMS, setIsIEMS] = useState(false)
   const [isLeadership, setIsLeadership] = useState(false)
   const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS)
+  const [alerts, setAlerts] = useState<AlertRow[]>([])
   const [userName, setUserName] = useState('')
   const [showIdleWarning, setShowIdleWarning] = useState(false)
   const [idleCountdown, setIdleCountdown] = useState(60)
@@ -40,26 +42,29 @@ export default function DashboardLayout({
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const fetchCounts = useCallback(async () => {
-    const res = await fetch('/api/administrator/counts')
+  // One call for the whole shell: pending-action counts (admins) + this user's
+  // alerts. Fired on mount in parallel with the auth check -- it authenticates
+  // itself -- so neither the sidebar badge nor the notification bell adds its own
+  // round trip to first paint.
+  const fetchDashboard = useCallback(async () => {
+    const res = await fetch('/api/dashboard')
     if (res.ok) {
       const data = await res.json()
-      setCounts(data)
+      setCounts(data.counts ?? EMPTY_COUNTS)
+      setAlerts(data.alerts ?? [])
     }
   }, [])
 
   useEffect(() => {
     const checkUser = async () => {
+      // Not awaited: runs concurrently with the auth check below.
+      fetchDashboard()
+
       const user = await getAuthedUser(supabase)
       if (!user) return
 
-      if (user.app_metadata?.is_admin) {
-        setIsAdmin(true)
-        fetchCounts()
-      }
-      if (user.app_metadata?.iems_role) {
-        setIsIEMS(true)
-      }
+      if (user.app_metadata?.is_admin) setIsAdmin(true)
+      if (user.app_metadata?.iems_role) setIsIEMS(true)
 
       // Shared with AuthGuard -- one users + board_memberships read for the whole
       // shell instead of each component fetching its own. See lib/identity.ts.
@@ -69,7 +74,7 @@ export default function DashboardLayout({
       if (identity?.isLeadership) setIsLeadership(true)
     }
     checkUser()
-  }, [fetchCounts, supabase])
+  }, [fetchDashboard, supabase])
 
   const handleLogout = async () => {
     localStorage.removeItem('chambers_last_active')
@@ -161,8 +166,8 @@ export default function DashboardLayout({
   }, [])
 
   const countsValue = useMemo(
-    () => ({ counts, refreshCounts: fetchCounts }),
-    [counts, fetchCounts]
+    () => ({ counts, alerts, refreshCounts: fetchDashboard }),
+    [counts, alerts, fetchDashboard]
   )
 
   const navLink = (href: string, label: string, badge?: number) => {
