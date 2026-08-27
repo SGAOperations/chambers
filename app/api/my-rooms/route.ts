@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUser } from '@/lib/auth'
+import { getActiveSemesterId } from '@/lib/active-semester'
 import { canManageScoped, loadScopeContext, type ScopedRow } from '@/lib/booking-scope'
 
 interface BookingRow {
@@ -28,15 +29,15 @@ export async function GET() {
 
   // The scope context, the active semester and the Senate type preferences are all independent,
   // so fetch them at once.
-  const [ctx, { data: activeSemester }, { data: profile }] = await Promise.all([
+  const [ctx, activeSemesterId, { data: profile }] = await Promise.all([
     loadScopeContext(supabase, user),
-    supabase.from('semesters').select('id').eq('is_active', true).single(),
+    getActiveSemesterId(supabase),
     supabase.from('users').select('senate_type_preferences').eq('id', user.id).single(),
   ])
 
   const senateTypePreferences = profile?.senate_type_preferences ?? {}
 
-  if (ctx.bodyIds.length === 0 || !activeSemester) {
+  if (ctx.bodyIds.length === 0 || !activeSemesterId) {
     return NextResponse.json({
       oneTimeBookings: [],
       weeklyBookings: [],
@@ -61,7 +62,7 @@ export async function GET() {
           .select('id')
           .eq('scope', 'divisional')
           .in('division', ctx.divisions)
-          .eq('semester_id', activeSemester.id)
+          .eq('semester_id', activeSemesterId)
       : Promise.resolve({ data: [] as { id: string }[] }),
   ])
 
@@ -78,6 +79,17 @@ export async function GET() {
     ? `body_id.in.(${ctx.bodyIds.join(',')}),id.in.(${extraIds.join(',')})`
     : null
 
+  // The client only ever renders today-or-later sessions, but the query used to
+  // return every occurrence for the whole semester -- a full semester of weekly
+  // rows per booking, most of them already in the past -- and the client threw
+  // them away after parsing. Filter the child tables to the future server-side
+  // instead. The one-day lookback absorbs the UTC-vs-local date boundary (the
+  // function runs in UTC); the client's own future-only pass still trims the
+  // exact edge. Filtering an embedded resource keeps its parent row with a
+  // narrowed child array -- a booking whose next session is far off still comes
+  // back, just with no stale history attached.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
   let oneTimeQ = supabase
     .from('bookings')
     .select(`
@@ -85,19 +97,21 @@ export async function GET() {
       one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
     `)
     .eq('type', 'One-Time Room')
-    .eq('semester_id', activeSemester.id)
+    .eq('semester_id', activeSemesterId)
+    .gte('one_time_room_bookings.booking_date', since)
   oneTimeQ = orFilter ? oneTimeQ.or(orFilter) : oneTimeQ.in('body_id', ctx.bodyIds)
 
   let weeklyQ = supabase
     .from('bookings')
     .select(`
       ${SELECT_BASE},
-      weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
+      weekly_room_bookings(id, room_name, start_time, end_time, status, reservation_code,
         weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type)
       )
     `)
     .eq('type', 'Weekly Room')
-    .eq('semester_id', activeSemester.id)
+    .eq('semester_id', activeSemesterId)
+    .gte('weekly_room_bookings.weekly_room_occurrences.occurrence_date', since)
   weeklyQ = orFilter ? weeklyQ.or(orFilter) : weeklyQ.in('body_id', ctx.bodyIds)
 
   let tablingQ = supabase
@@ -109,7 +123,8 @@ export async function GET() {
       )
     `)
     .eq('type', 'Tabling')
-    .eq('semester_id', activeSemester.id)
+    .eq('semester_id', activeSemesterId)
+    .gte('tabling_bookings.tabling_sessions.session_date', since)
   tablingQ = orFilter ? tablingQ.or(orFilter) : tablingQ.in('body_id', ctx.bodyIds)
 
   const [oneTimeRes, weeklyRes, tablingRes] = await Promise.all([oneTimeQ, weeklyQ, tablingQ])

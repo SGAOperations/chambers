@@ -1,17 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-
-interface Alert {
-  id: string
-  booking_type: string
-  booking_date: string | null
-  start_time: string | null
-  created_at: string
-  denial_reason: string | null
-  bookings: { bodies: { name: string } | null } | null
-  room_requests: { bodies: { name: string } | null } | null
-}
+import { useCounts } from '../counts-context'
+import type { AlertRow as Alert } from '@/lib/dashboard-data'
 
 function formatTime(time: string) {
   const [h, m] = time.split(':')
@@ -29,20 +20,15 @@ function formatDate(date: string) {
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false)
-  const [alerts, setAlerts] = useState<Alert[]>([])
+  // Seeded from the shell's single /api/dashboard fetch; kept as local state so
+  // the optimistic removes below still work. Re-syncs if the shell refetches.
+  const { alerts: shellAlerts } = useCounts()
+  const [alerts, setAlerts] = useState<Alert[]>(shellAlerts)
   const overlayRef = useRef<HTMLDivElement>(null)
 
-  const fetchAlerts = async () => {
-    const res = await fetch('/api/alerts')
-    if (res.ok) {
-      const data = await res.json()
-      setAlerts(data)
-    }
-  }
-
   useEffect(() => {
-    fetchAlerts()
-  }, [])
+    setAlerts(shellAlerts)
+  }, [shellAlerts])
 
   useEffect(() => {
     if (!open) return

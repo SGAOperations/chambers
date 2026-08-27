@@ -34,6 +34,36 @@ function BookingSettingsTabSkeleton() {
 const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
+// Pending-action thresholds (issue #38). Display fallbacks only -- the server's
+// DEFAULT_PA_SETTINGS in lib/pending-actions.ts is authoritative; keep in sync.
+const PA_DEFAULTS: Record<string, number> = {
+  pa_warning_lead_days: 7,
+  pa_event_trigger_months: 2,
+  pa_request_room_danger_start: 17,
+  pa_request_room_danger_end: 11,
+  pa_request_tabling_danger_start: 17,
+  pa_request_tabling_danger_end: 14,
+  pa_revision_danger_start: 17,
+  pa_revision_danger_end: 11,
+  pa_cancellation_regular_danger_days: 0,
+  pa_cancellation_event_danger_start: 21,
+  pa_cancellation_event_danger_end: 14,
+  pa_event_mgmt_danger_start: 35,
+  pa_event_mgmt_danger_end: 28,
+  pa_event_engage_danger_start: 28,
+  pa_event_engage_danger_end: 21,
+}
+
+// [label, farEdgeKey, nearEdgeKey] -- rendered as "N to M days out".
+const PA_RANGE_ROWS: [string, string, string][] = [
+  ['One-Time / Multiple Room request', 'pa_request_room_danger_start', 'pa_request_room_danger_end'],
+  ['Tabling request', 'pa_request_tabling_danger_start', 'pa_request_tabling_danger_end'],
+  ['Revision request', 'pa_revision_danger_start', 'pa_revision_danger_end'],
+  ['Event cancellation', 'pa_cancellation_event_danger_start', 'pa_cancellation_event_danger_end'],
+  ['Event Management Form', 'pa_event_mgmt_danger_start', 'pa_event_mgmt_danger_end'],
+  ['Engage Form', 'pa_event_engage_danger_start', 'pa_event_engage_danger_end'],
+]
+
 interface Semester {
   id: string
   name: string
@@ -49,6 +79,11 @@ export default function BookingSettingsTab() {
   const [minHoursSpaces, setMinHoursSpaces] = useState(24)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+
+  // Pending-action thresholds (issue #38)
+  const [pa, setPa] = useState<Record<string, number>>(PA_DEFAULTS)
+  const [paSaving, setPaSaving] = useState(false)
+  const [paMsg, setPaMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   // Semester state
   const [semesters, setSemesters] = useState<Semester[]>([])
@@ -78,6 +113,13 @@ export default function BookingSettingsTab() {
         setMinDaysRoom(data.min_days_advance_room ?? 0)
         setMinDaysTabling(data.min_days_advance_tabling ?? 0)
         setMinHoursSpaces(data.min_hours_advance_spaces ?? 24)
+        setPa(prev => {
+          const merged = { ...prev }
+          for (const k of Object.keys(PA_DEFAULTS)) {
+            if (typeof data[k] === 'number') merged[k] = data[k]
+          }
+          return merged
+        })
         setLoading(false)
       })
 
@@ -131,6 +173,28 @@ export default function BookingSettingsTab() {
       setError(data.error || 'Something went wrong.')
     }
     setSaving(false)
+  }
+
+  const setPaField = (key: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPaMsg(null)
+    setPa(p => ({ ...p, [key]: Math.max(0, parseInt(e.target.value) || 0) }))
+  }
+
+  const handlePaSave = async () => {
+    setPaMsg(null)
+    setPaSaving(true)
+    const res = await fetch('/api/administrator/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(pa),
+    })
+    if (res.ok) {
+      setPaMsg({ ok: true, text: 'Thresholds saved.' })
+    } else {
+      const data = await res.json()
+      setPaMsg({ ok: false, text: data.error || 'Something went wrong.' })
+    }
+    setPaSaving(false)
   }
 
   const handleCreateSemester = async () => {
@@ -202,7 +266,7 @@ export default function BookingSettingsTab() {
   if (loading) return <BookingSettingsTabSkeleton />
 
   return (
-    <div className="max-w-sm space-y-8">
+    <div className="max-w-md space-y-8">
       {/* Advance Notice Requirements */}
       <div>
         <h2 className="text-sm font-semibold text-[#f0f6ff] mb-4">Advance Notice Requirements</h2>
@@ -248,6 +312,53 @@ export default function BookingSettingsTab() {
           className="mt-4 px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
         >
           {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+
+      {/* Pending Action Thresholds (issue #38) */}
+      <div>
+        <h2 className="text-sm font-semibold text-[#f0f6ff] mb-1">Pending Action Thresholds</h2>
+        <p className="text-xs text-[#6a96bb] mb-4">
+          How close to a deadline a pending action turns yellow (warning) then red (danger).
+          Values are whole days out from the relevant date. Danger persists once the range is entered.
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label className={labelCls}>Warning lead time — days before a danger range opens</label>
+            <input type="number" min={0} value={pa.pa_warning_lead_days} onChange={setPaField('pa_warning_lead_days')} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Event form trigger window — months before the event</label>
+            <input type="number" min={0} value={pa.pa_event_trigger_months} onChange={setPaField('pa_event_trigger_months')} className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Regular cancellation — danger within N days of the booking</label>
+            <input type="number" min={0} value={pa.pa_cancellation_regular_danger_days} onChange={setPaField('pa_cancellation_regular_danger_days')} className={inputCls} />
+          </div>
+
+          {PA_RANGE_ROWS.map(([label, startKey, endKey]) => (
+            <div key={startKey}>
+              <label className={labelCls}>{label} — danger range (days out)</label>
+              <div className="flex items-center gap-2">
+                <input type="number" min={0} value={pa[startKey]} onChange={setPaField(startKey)} className={inputCls} />
+                <span className="text-xs text-[#6a96bb]">to</span>
+                <input type="number" min={0} value={pa[endKey]} onChange={setPaField(endKey)} className={inputCls} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {paMsg && (
+          <p className={`text-sm mt-3 ${paMsg.ok ? 'text-green-400' : 'text-[#c8102e]'}`}>{paMsg.text}</p>
+        )}
+
+        <button
+          onClick={handlePaSave}
+          disabled={paSaving}
+          className="mt-4 px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
+        >
+          {paSaving ? 'Saving...' : 'Save'}
         </button>
       </div>
 

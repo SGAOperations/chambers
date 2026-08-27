@@ -18,19 +18,19 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Space Grotesk', sans-serif;
+  --font-sans: var(--font-space-grotesk), sans-serif;
 }
 
 body {
   background: var(--surface);
   color: var(--text-primary);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-space-grotesk), sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 input, select, textarea {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-space-grotesk), sans-serif;
 }
 
 option {
@@ -64,4 +64,60 @@ option {
 .date-field-native-input::selection {
   background: transparent;
   color: transparent;
+}
+
+/* Pending Actions severity (issue #38). The danger badge alternates between
+   (red text, white fill, red ring) and (white text, red fill, white ring) --
+   an intermittent hard swap, not a fade, so linear timing over constant
+   half-keyframes is deliberate. */
+@keyframes pa-danger-flash {
+  0%, 49% {
+    background-color: #ffffff;
+    color: var(--red);
+    box-shadow: inset 0 0 0 1.5px var(--red);
+  }
+  50%, 100% {
+    background-color: var(--red);
+    color: #ffffff;
+    box-shadow: inset 0 0 0 1.5px #ffffff;
+  }
+}
+.pa-badge-danger {
+  animation: pa-danger-flash 1.1s linear infinite;
+}
+
+/* Settled state: a danger action's origin row is on screen, so the total stops
+   flashing (issue #38 #5). */
+.pa-badge-danger-static {
+  background-color: var(--red);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1.5px #ffffff;
+}
+
+@keyframes pa-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.pa-dot-danger {
+  animation: pa-dot-pulse 1.1s ease-in-out infinite;
+}
+
+/* A danger row's title pulses red <-> white on its tab. */
+@keyframes pa-title-flash {
+  0%, 49% { color: var(--red); }
+  50%, 100% { color: #ffffff; }
+}
+.pa-row-danger .pa-row-title {
+  animation: pa-title-flash 1.1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-badge-danger {
+    animation: none;
+    background-color: var(--red);
+    color: #ffffff;
+    box-shadow: inset 0 0 0 1.5px #ffffff;
+  }
+  .pa-dot-danger { animation: none; }
+  .pa-row-danger .pa-row-title { animation: none; color: var(--red); }
 }
