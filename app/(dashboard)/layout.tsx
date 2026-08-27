@@ -8,6 +8,7 @@ import AuthGuard from './authguard'
 import SettingsModal, { type Settings as SettingsData } from './settings-modal'
 import { CountsContext, EMPTY_COUNTS, type Counts } from './counts-context'
 import { getAuthedUser } from '@/lib/auth'
+import { loadIdentity, clearIdentity } from '@/lib/identity'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -60,26 +61,19 @@ export default function DashboardLayout({
         setIsIEMS(true)
       }
 
-      // These two reads only need the user id, so run them together instead of
-      // back to back.
-      const [{ data: profile }, { data: memberships }] = await Promise.all([
-        supabase.from('users').select('full_name').eq('id', user.id).single(),
-        supabase
-          .from('board_memberships')
-          .select('role')
-          .eq('user_id', user.id)
-          .eq('role', 'Leadership')
-          .limit(1),
-      ])
+      // Shared with AuthGuard -- one users + board_memberships read for the whole
+      // shell instead of each component fetching its own. See lib/identity.ts.
+      const identity = await loadIdentity(supabase, user.id)
 
-      if (profile?.full_name) setUserName(profile.full_name)
-      if (memberships && memberships.length > 0) setIsLeadership(true)
+      if (identity?.fullName) setUserName(identity.fullName)
+      if (identity?.isLeadership) setIsLeadership(true)
     }
     checkUser()
   }, [fetchCounts, supabase])
 
   const handleLogout = async () => {
     localStorage.removeItem('chambers_last_active')
+    clearIdentity()
     await supabase.auth.signOut()
     router.push('/')
   }
@@ -95,6 +89,7 @@ export default function DashboardLayout({
         clearInterval(countdownIntervalRef.current!)
         countdownIntervalRef.current = null
         localStorage.removeItem('chambers_last_active')
+        clearIdentity()
         supabase.auth.signOut().then(() => router.push('/'))
       }
     }, 1000)
@@ -119,6 +114,7 @@ export default function DashboardLayout({
     if (storedLastActive) {
       const elapsed = Date.now() - parseInt(storedLastActive, 10)
       if (elapsed >= IDLE_MS) {
+        clearIdentity()
         supabase.auth.signOut().then(() => router.push('/'))
         return
       }
@@ -144,6 +140,7 @@ export default function DashboardLayout({
           if (elapsed >= IDLE_MS) {
             if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
             if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current)
+            clearIdentity()
             supabase.auth.signOut().then(() => router.push('/'))
           }
         }
@@ -173,6 +170,12 @@ export default function DashboardLayout({
     return (
       <Link
         href={href}
+        // Default (viewport) prefetch here fired an RSC prefetch for every
+        // dashboard route the moment the sidebar mounted -- ~35 requests plus the
+        // 150 KB administrator page chunk -- all contending with /api/my-rooms on
+        // first paint. prefetch={false} keeps the on-hover/touch prefetch, so
+        // navigation still feels instant, without the on-load stampede.
+        prefetch={false}
         onClick={() => setSidebarOpen(false)}
         className={`group relative flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium overflow-hidden transition-colors ${
           isActive
@@ -288,9 +291,9 @@ export default function DashboardLayout({
               Sign Out
             </button>
             <div className="px-1 pt-2 flex flex-wrap gap-x-2 gap-y-0.5">
-              <Link href="/legal#privacy" className="text-[10px] text-slate-600 hover:text-slate-400 transition">Privacy Policy</Link>
-              <Link href="/legal#terms" className="text-[10px] text-slate-600 hover:text-slate-400 transition">Terms of Service</Link>
-              <Link href="/faq" className="text-[10px] text-slate-600 hover:text-slate-400 transition">FAQ</Link>
+              <Link prefetch={false} href="/legal#privacy" className="text-[10px] text-slate-600 hover:text-slate-400 transition">Privacy Policy</Link>
+              <Link prefetch={false} href="/legal#terms" className="text-[10px] text-slate-600 hover:text-slate-400 transition">Terms of Service</Link>
+              <Link prefetch={false} href="/faq" className="text-[10px] text-slate-600 hover:text-slate-400 transition">FAQ</Link>
             </div>
             <p className="px-1 text-[10px] text-slate-700">© 2026 NUSGA</p>
           </div>
