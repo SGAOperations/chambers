@@ -18,19 +18,19 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: 'Space Grotesk', sans-serif;
+  --font-sans: var(--font-space-grotesk), sans-serif;
 }
 
 body {
   background: var(--surface);
   color: var(--text-primary);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-space-grotesk), sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 input, select, textarea {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-space-grotesk), sans-serif;
 }
 
 option {
