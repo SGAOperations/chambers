@@ -11,6 +11,7 @@ import {
   type FlatBooking,
   scopeKeyOf,
   scopeLabelOf,
+  scopeFullOf,
   statusColors,
   statusBarColors,
   statusTextColors,
@@ -137,6 +138,7 @@ export default function MyRoomsPage() {
             canManage: !!b.canManage,
             scopeKey: scopeKeyOf(b),
             scopeLabel: scopeLabelOf(b),
+            scopeFull: scopeFullOf(b),
           })
         }
       }
@@ -162,6 +164,7 @@ export default function MyRoomsPage() {
           canManage: !!b.canManage,
           scopeKey: scopeKeyOf(b),
           scopeLabel: scopeLabelOf(b),
+          scopeFull: scopeFullOf(b),
         })
       }
     }
@@ -187,6 +190,7 @@ export default function MyRoomsPage() {
           canManage: !!b.canManage,
           scopeKey: scopeKeyOf(b),
           scopeLabel: scopeLabelOf(b),
+          scopeFull: scopeFullOf(b),
         })
       }
     }
