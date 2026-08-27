@@ -1,17 +1,13 @@
 'use client'
 
 import { createContext, useContext } from 'react'
-import type { Counts, AlertRow } from '@/lib/dashboard-data'
+import type { AlertRow } from '@/lib/dashboard-data'
+import { EMPTY_PENDING_ACTIONS, type PendingActionsResult } from '@/lib/pending-actions'
 
-export type { Counts } from '@/lib/dashboard-data'
+export type Counts = PendingActionsResult
+export type { PendingAction, Severity } from '@/lib/pending-actions'
 
-export const EMPTY_COUNTS: Counts = {
-  requests: 0,
-  cancellations: 0,
-  revisions: 0,
-  membership_requests: 0,
-  total: 0,
-}
+export const EMPTY_COUNTS: Counts = EMPTY_PENDING_ACTIONS
 
 type CountsContextValue = {
   counts: Counts
