@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import TimePicker from './time-picker'
+import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import ScopeLabel from '@/app/_components/scope-label'
 import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
@@ -202,21 +203,11 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
       <div className="flex gap-3">
         <div className="flex-1">
           <label className={labelCls}>Start Date *</label>
-          <input
-            type="date"
-            value={form.start_date}
-            onChange={e => setForm({ ...form, start_date: e.target.value })}
-            className={inputCls}
-          />
+          <DateField value={form.start_date} onChange={v => setForm({ ...form, start_date: v })} />
         </div>
         <div className="flex-1">
           <label className={labelCls}>End Date *</label>
-          <input
-            type="date"
-            value={form.end_date}
-            onChange={e => setForm({ ...form, end_date: e.target.value })}
-            className={inputCls}
-          />
+          <DateField value={form.end_date} onChange={v => setForm({ ...form, end_date: v })} />
         </div>
       </div>
 

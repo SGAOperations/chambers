@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import TimePicker from '../administrator/time-picker'
+import DateField from '@/app/_components/date-field'
 
 interface User {
   id: string
@@ -231,13 +232,7 @@ export default function SpaceBookingModal({
           {/* Date */}
           <div>
             <label className={labelCls}>Date <span className="text-[#c8102e]">*</span></label>
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className={inputCls}
-              required
-            />
+            <DateField value={date} onChange={setDate} required />
           </div>
 
           {/* Times */}

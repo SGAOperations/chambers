@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import TimePicker from './time-picker'
+import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import ScopeLabel from '@/app/_components/scope-label'
 import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
@@ -261,12 +262,7 @@ export default function TablingForm({ bodies, semesters, onClose, onSuccess }: T
 
             <div>
               <label className={labelCls}>Date *</label>
-              <input
-                type="date"
-                value={s.session_date}
-                onChange={e => updateSession(i, 'session_date', e.target.value)}
-                className={inputCls}
-              />
+              <DateField value={s.session_date} onChange={v => updateSession(i, 'session_date', v)} />
             </div>
 
             <div className="flex gap-3">

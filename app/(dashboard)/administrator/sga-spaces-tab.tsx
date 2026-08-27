@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import TimePicker from './time-picker'
 import { Skeleton } from '@/app/_components/skeleton'
+import DateField from '@/app/_components/date-field'
 
 function TableSkeleton({ cols }: { cols: number }) {
   return (
@@ -427,7 +428,7 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className={labelCls}>Start Date</label>
-            <input type="date" value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} className={inputCls} required />
+            <DateField value={form.start_date} onChange={v => setForm(f => ({ ...f, start_date: v }))} required />
           </div>
           <div>
             <label className={labelCls}>Start Time</label>
@@ -435,7 +436,7 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
           </div>
           <div>
             <label className={labelCls}>End Date</label>
-            <input type="date" value={form.end_date} onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))} className={inputCls} required />
+            <DateField value={form.end_date} onChange={v => setForm(f => ({ ...f, end_date: v }))} required />
           </div>
           <div>
             <label className={labelCls}>End Time</label>
@@ -526,7 +527,7 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className={labelCls}>Start Date</label>
-                  <input type="date" value={editForm.start_date} onChange={e => setEditForm(f => f && ({ ...f, start_date: e.target.value }))} className={inputCls} required />
+                  <DateField value={editForm.start_date} onChange={v => setEditForm(f => f && ({ ...f, start_date: v }))} required />
                 </div>
                 <div>
                   <label className={labelCls}>Start Time</label>
@@ -534,7 +535,7 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
                 </div>
                 <div>
                   <label className={labelCls}>End Date</label>
-                  <input type="date" value={editForm.end_date} onChange={e => setEditForm(f => f && ({ ...f, end_date: e.target.value }))} className={inputCls} required />
+                  <DateField value={editForm.end_date} onChange={v => setEditForm(f => f && ({ ...f, end_date: v }))} required />
                 </div>
                 <div>
                   <label className={labelCls}>End Time</label>
