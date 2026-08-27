@@ -6,7 +6,8 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import AuthGuard from './authguard'
 import SettingsModal, { type Settings as SettingsData } from './settings-modal'
-import { CountsContext, EMPTY_COUNTS, type Counts } from './counts-context'
+import { CountsContext, EMPTY_COUNTS, type Counts, type Severity } from './counts-context'
+import PendingActionsPopover from './pending-actions-popover'
 import { getAuthedUser } from '@/lib/auth'
 import { loadIdentity, clearIdentity } from '@/lib/identity'
 import type { AlertRow } from '@/lib/dashboard-data'
@@ -16,6 +17,15 @@ function getGreeting() {
   if (hour < 12) return 'Good Morning'
   if (hour < 18) return 'Good Afternoon'
   return 'Good Evening'
+}
+
+// Pending Actions total badge, coloured by the most severe action (issue #38).
+// Danger flashes via the .pa-badge-danger keyframes in globals.css.
+function paBadgeClass(severity: Severity): string {
+  const base = 'text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center'
+  if (severity === 'danger') return `${base} pa-badge-danger`
+  if (severity === 'warning') return `${base} bg-[#fbbf24] text-[#1a1400]`
+  return `${base} bg-[#4285f4] text-white`
 }
 
 export default function DashboardLayout({
@@ -282,11 +292,14 @@ export default function DashboardLayout({
           {/* Total badge + Sign out */}
           <div className="px-3 py-4 border-t border-white/10 space-y-1">
             {isAdmin && counts.total > 0 && (
-              <div className="flex items-center justify-between px-4 py-2">
-                <span className="text-xs text-slate-500">Pending Actions</span>
-                <span className="bg-[#c8102e] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
-                  {counts.total}
-                </span>
+              <div className="relative group">
+                <div className="flex items-center justify-between px-4 py-2 cursor-default">
+                  <span className="text-xs text-slate-500">Pending Actions</span>
+                  <span className={paBadgeClass(counts.severity)}>{counts.total}</span>
+                </div>
+                <div className="absolute left-0 bottom-full hidden pb-2 group-hover:block group-focus-within:block">
+                  <PendingActionsPopover actions={counts.actions} />
+                </div>
               </div>
             )}
             <button
