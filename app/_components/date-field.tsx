@@ -47,11 +47,14 @@ export default function DateField({ value, onChange, min, required }: DateFieldP
         onChange={e => onChange(e.target.value)}
         min={min}
         required={required}
-        // date-field-native-input hides this engine's own calendar-picker-indicator (see
-        // globals.css) -- some engines (desktop Chrome, confirmed) still render it even
-        // though the value/placeholder text is transparent, which would otherwise show
-        // faintly behind our own drawn icon below. Hiding it via opacity, not display,
-        // keeps it hit-testable so clicking that corner still opens the native picker.
+        // date-field-native-input hides two things this engine still renders despite the
+        // input's text being transparent (both confirmed, see globals.css):
+        //   - the calendar-picker-indicator, which would otherwise show faintly behind our
+        //     own drawn icon on engines that don't tie its fill to text color;
+        //   - the focused-segment selection highlight (e.g. tabbing into "mm"), which
+        //     browsers render with their own default foreground specifically so selected
+        //     text stays legible against transparent-text tricks -- it renders right over
+        //     our overlay text otherwise.
         className="date-field-native-input absolute inset-0 w-full h-full m-0 px-3 box-border bg-transparent border-none text-sm text-transparent [color-scheme:dark] focus:outline-none appearance-none"
       />
       <span className="absolute inset-0 flex items-center justify-between gap-2 pl-3 pr-2.5 pointer-events-none">
