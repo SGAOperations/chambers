@@ -47,15 +47,15 @@ export default function DateField({ value, onChange, min, required }: DateFieldP
         onChange={e => onChange(e.target.value)}
         min={min}
         required={required}
-        // date-field-native-input hides two things this engine still renders despite the
-        // input's text being transparent (both confirmed, see globals.css):
-        //   - the calendar-picker-indicator, which would otherwise show faintly behind our
-        //     own drawn icon on engines that don't tie its fill to text color;
-        //   - the focused-segment selection highlight (e.g. tabbing into "mm"), which
-        //     browsers render with their own default foreground specifically so selected
-        //     text stays legible against transparent-text tricks -- it renders right over
-        //     our overlay text otherwise.
-        className="date-field-native-input absolute inset-0 w-full h-full m-0 px-3 box-border bg-transparent border-none text-sm text-transparent [color-scheme:dark] focus:outline-none appearance-none"
+        // opacity-0 rather than text-transparent: on desktop Blink the empty
+        // "mm/dd/yyyy" placeholder segments and the focused-segment selection
+        // highlight both render with their own colour and ignore the input's
+        // `color`, so they showed through under our overlay text. Making the whole
+        // native control invisible is the only reliable fix across engines; it
+        // stays a real, focusable, tappable form control (opacity doesn't affect
+        // hit-testing) and its value still drives everything. The
+        // date-field-native-input rules in globals.css remain as belt-and-braces.
+        className="date-field-native-input absolute inset-0 w-full h-full m-0 px-3 box-border bg-transparent border-none text-sm opacity-0 [color-scheme:dark] focus:outline-none appearance-none"
       />
       <span className="absolute inset-0 flex items-center justify-between gap-2 pl-3 pr-2.5 pointer-events-none">
         <span className={`text-sm truncate ${display ? 'text-[#f0f6ff]' : 'text-[#6a96bb]'}`}>
