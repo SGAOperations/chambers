@@ -1,5 +1,6 @@
 'use client'
 
+import { Fragment } from 'react'
 import type { BookingScope, Division } from '@/lib/booking-scope'
 
 interface WeeklyOccurrence {
@@ -43,6 +44,13 @@ interface WeeklyBookingGridProps {
 }
 
 
+const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+/** Monday-first weekday index (Mon = 0 … Sun = 6). */
+function weekdayIndex(dateStr: string): number {
+  return (new Date(dateStr + 'T00:00:00').getDay() + 6) % 7
+}
+
 function getMondayKey(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
   const day = d.getDay()
@@ -80,8 +88,8 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
       const wa = a.weekly_room_bookings?.[0]
       const wb = b.weekly_room_bookings?.[0]
       if (!wa || !wb) return 0
-      const dayA = (new Date(wa.start_date + 'T00:00:00').getDay() + 6) % 7
-      const dayB = (new Date(wb.start_date + 'T00:00:00').getDay() + 6) % 7
+      const dayA = weekdayIndex(wa.start_date)
+      const dayB = weekdayIndex(wb.start_date)
       if (dayA !== dayB) return dayA - dayB
       return wa.start_time.localeCompare(wb.start_time)
     })
@@ -106,6 +114,15 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
         <table className="border-separate border-spacing-1 text-xs">
           <thead>
             <tr>
+              <th aria-hidden className="pb-0.5" />
+              <th
+                colSpan={weeks.length}
+                className="text-left text-[10px] text-[#6a96bb] font-semibold uppercase tracking-wide pb-0.5"
+              >
+                Week of
+              </th>
+            </tr>
+            <tr>
               <th className="text-left text-[#6a96bb] font-medium pr-4 pb-1 whitespace-nowrap">Booking</th>
               {weeks.map(wk => (
                 <th key={wk} className="text-[#6a96bb] font-medium pb-1 min-w-[28px]">
@@ -115,12 +132,26 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
             </tr>
           </thead>
           <tbody>
-            {active.map(b => {
+            {active.map((b, i) => {
               const w = b.weekly_room_bookings![0]
+              const day = weekdayIndex(w.start_date)
+              const prevBooking = i > 0 ? active[i - 1].weekly_room_bookings?.[0] : null
+              const showDayHeader = !prevBooking || weekdayIndex(prevBooking.start_date) !== day
               const occMap = new Map<string, WeeklyOccurrence>()
               w.weekly_room_occurrences?.forEach(o => occMap.set(getMondayKey(o.occurrence_date), o))
               return (
-                <tr key={b.id}>
+                <Fragment key={b.id}>
+                {showDayHeader && (
+                  <tr>
+                    <td
+                      colSpan={weeks.length + 1}
+                      className="pt-2.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#6a96bb]"
+                    >
+                      {WEEKDAY_LABELS[day]}
+                    </td>
+                  </tr>
+                )}
+                <tr>
                   <td className="pr-4 text-[#93b8d8] whitespace-nowrap py-0.5">
                     {b.bodies?.name} — {formatTime(w.start_time)}
                   </td>
@@ -140,6 +171,7 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
                     )
                   })}
                 </tr>
+                </Fragment>
               )
             })}
           </tbody>
