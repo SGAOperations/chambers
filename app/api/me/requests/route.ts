@@ -21,11 +21,12 @@ export async function GET() {
   const { data: requests, error } = await adminSupabase
     .from('room_requests')
     .select(`
-      id, type, purpose, status, notes, created_at,
+      id, type, purpose, status, notes, created_at, body_id, scope, division,
       bodies(name),
       room_request_details(room_name, start_date, start_time, end_time, end_date),
       tabling_request_sessions(session_date, start_time, end_time),
-      user_alerts(denial_reason)
+      user_alerts(denial_reason),
+      room_request_bodies(body_id, bodies(name))
     `)
     .eq('requested_by', user.id)
     .order('created_at', { ascending: false })

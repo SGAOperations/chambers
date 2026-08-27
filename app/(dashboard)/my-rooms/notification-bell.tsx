@@ -101,8 +101,10 @@ export default function NotificationBell() {
         )}
       </button>
 
+      {/* Width clamped to the viewport (issue #24) -- a fixed w-80 overflowed off the right
+          edge on mobile since the bell sits near the left of its header row. */}
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-80 bg-[#184073] border border-[#1e5080] rounded-xl shadow-2xl z-50 overflow-hidden">
+        <div className="absolute left-0 top-full mt-2 w-[min(20rem,calc(100vw-2rem))] bg-[#184073] border border-[#1e5080] rounded-xl shadow-2xl z-50 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e5080]">
             <span className="text-sm font-semibold text-[#f0f6ff]">Notifications</span>
             {alerts.length > 0 && (

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import FulfillModal from './fulfill-modal'
 import DenyModal from './deny-modal'
 import { Skeleton } from '@/app/_components/skeleton'
+import ScopeLabel from '@/app/_components/scope-label'
+import type { BookingScope, Division } from '@/lib/booking-scope'
 
 function RequestsTabSkeleton() {
   const card = (wide: boolean) => (
@@ -62,8 +64,11 @@ interface RoomRequest {
   status: RequestStatus
   notes: string | null
   created_at: string
+  scope: BookingScope
+  division: Division | null
   bodies: { name: string } | null
   users: { full_name: string } | null
+  room_request_bodies: { body_id: string; bodies: { name: string } | null }[] | null
   room_request_details: {
     room_name: string | null
     start_date: string
@@ -113,7 +118,12 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   type: string
   purpose: string
   body_id: string
+  bodyName: string
+  scope: BookingScope
+  division: Division | null
+  linkedBodies: { id: string; name: string }[]
 } | null>(null)
+  const [typeFilter, setTypeFilter] = useState<'all' | BookingScope>('all')
 
   const fetchRequests = async () => {
     const [reqRes, revRes] = await Promise.all([
@@ -134,6 +144,15 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   if (loading) return <RequestsTabSkeleton />
 
   if (requests.length === 0 && revisions.length === 0) return <div className="text-[#6a96bb] text-sm">No requests found.</div>
+
+  const filteredRequests = requests.filter(r => typeFilter === 'all' || r.scope === typeFilter)
+
+  const TYPE_FILTERS: { value: 'all' | BookingScope; label: string }[] = [
+    { value: 'all', label: 'All' },
+    { value: 'single', label: 'Single Body' },
+    { value: 'divisional', label: 'Divisional' },
+    { value: 'multi', label: 'Multi-Body' },
+  ]
 
   return (
     <div className="space-y-6">
@@ -175,13 +194,38 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
 
       {requests.length > 0 && (
         <div className="space-y-3">
-          {revisions.length > 0 && <h3 className="text-xs font-semibold uppercase tracking-widest text-[#6a96bb]">Room Requests</h3>}
-          {requests.map(r => (
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            {revisions.length > 0 && (
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-[#6a96bb]">Room Requests</h3>
+            )}
+            <div className="flex gap-1 flex-wrap ml-auto">
+              {TYPE_FILTERS.map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setTypeFilter(f.value)}
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
+                    typeFilter === f.value
+                      ? 'bg-[#c8102e] text-white'
+                      : 'bg-[#0f2a4a] border border-[#1e5080] text-[#93b8d8] hover:text-[#f0f6ff] hover:border-[#93b8d8]'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {filteredRequests.length === 0 ? (
+            <p className="text-sm text-[#6a96bb]">No requests match this filter.</p>
+          ) : filteredRequests.map(r => (
         <div key={r.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm space-y-3">
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <span className="font-semibold text-[#f0f6ff]">{r.bodies?.name || 'Unknown Body'}</span>
+              <ScopeLabel
+                row={r}
+                linkedBodies={(r.room_request_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))}
+                className="font-semibold text-[#f0f6ff]"
+              />
               <span className="mx-2 text-[#1e5080]">·</span>
               <span className="text-sm text-[#93b8d8]">{r.type === 'One-Time Room' ? 'One-Time/Multiple Room' : r.type}</span>
             </div>
@@ -245,7 +289,16 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
             ) : (
               <div className="flex gap-2 pt-1">
                 <button
-                  onClick={() => setFulfillingRequest({ id: r.id, type: r.type, purpose: r.purpose, body_id: r.body_id })}
+                  onClick={() => setFulfillingRequest({
+                    id: r.id,
+                    type: r.type,
+                    purpose: r.purpose,
+                    body_id: r.body_id,
+                    bodyName: r.bodies?.name ?? 'Unknown',
+                    scope: r.scope,
+                    division: r.division,
+                    linkedBodies: (r.room_request_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' })),
+                  })}
                   className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
                 >
                   Fulfill
