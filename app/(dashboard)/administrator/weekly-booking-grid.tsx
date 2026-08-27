@@ -40,7 +40,7 @@ interface WeeklyBooking {
 
 interface WeeklyBookingGridProps {
   bookings: WeeklyBooking[]
-  onBookingClick: (booking: WeeklyBooking) => void
+  onBookingClick: (booking: WeeklyBooking, occurrenceDate?: string) => void
 }
 
 
@@ -162,7 +162,7 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
                     return (
                       <td key={wk} className="py-0.5">
                         <button
-                          onClick={() => onBookingClick(b)}
+                          onClick={() => onBookingClick(b, occ.occurrence_date)}
                           title={`${occ.occurrence_date}: ${occ.status ?? w.status}`}
                           style={{ backgroundColor: hex }}
                           className="w-10 h-5 rounded hover:opacity-70 transition-opacity block"
