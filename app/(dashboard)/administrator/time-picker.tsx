@@ -71,7 +71,7 @@ export default function TimePicker({ value, onChange, interval = 5 }: TimePicker
       <div className="relative flex w-full h-8 rounded-lg border border-[#1e5080] bg-[#0f2a4a] p-0.5">
         <div
           aria-hidden
-          className={`absolute inset-y-0.5 left-0.5 w-[calc(50%-3px)] rounded-md bg-[#c8102e] transition-transform duration-200 ease-out ${
+          className={`absolute inset-y-0.5 left-0.5 w-[calc(50%-3px)] rounded-md bg-[#4285f4] transition-transform duration-200 ease-out ${
             period === 'PM' ? 'translate-x-[calc(100%+2px)]' : 'translate-x-0'
           }`}
         />
