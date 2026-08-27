@@ -20,6 +20,7 @@
   }
   input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) brightness(0.7); }
   .withSystemFont { font-family: -apple-system, system-ui, sans-serif; }
+  .noAppearance { -webkit-appearance: none; appearance: none; }
   .caption { color: #f0f6ff; font-size: 11px; margin-top: 4px; }
 </style>
 </head>
@@ -34,7 +35,7 @@
     <div class="caption">^ is the mm/dd/yyyy placeholder visible above, or does it look blank?</div>
   </div>
   <div class="card">
-    <label>Date * (native date, EMPTY, system font -- our current fix)</label>
+    <label>Date * (native date, EMPTY, system font)</label>
     <input class="inputCls withSystemFont" type="date">
     <div class="caption">^ same question with the system-font fallback applied</div>
   </div>
@@ -42,6 +43,16 @@
     <label>Date * (native date, WITH a value filled in)</label>
     <input class="inputCls" type="date" value="2026-08-26">
     <div class="caption">^ is "8/26/2026" clearly readable, or hard to see against the dark background?</div>
+  </div>
+  <div class="card">
+    <label>Date * (EMPTY, -webkit-appearance: none -- new theory)</label>
+    <input class="inputCls noAppearance" type="date">
+    <div class="caption">^ contained in the box now? placeholder visible?</div>
+  </div>
+  <div class="card">
+    <label>Date * (FILLED, -webkit-appearance: none -- new theory)</label>
+    <input class="inputCls noAppearance" type="date" value="2026-08-26">
+    <div class="caption">^ contained in the box now? left-aligned like the other fields, not centered?</div>
   </div>
 </body>
 </html>
