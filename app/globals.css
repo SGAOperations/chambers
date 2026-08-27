@@ -38,22 +38,17 @@ option {
   color: #f0f6ff;
 }
 
-input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(0.7);
-}
-
-/* Native <input type="date"> on mobile WebKit/Blink keeps its own default control
-   chrome layered underneath our custom border/padding/background unless that
-   default is explicitly stripped. With it left in place, the browser's own
-   native layout for the day/month/year segments wins over our box's declared
-   width and renders wider than it, spilling past the container's right edge --
-   reproduced on real devices regardless of value, content, or font (issue #24;
-   a font-family fallback was tried first and made no difference, confirmed via
-   a side-by-side test page before landing this). Resetting -webkit-appearance
-   makes the box fully author-styled, so width/box-sizing are respected like any
-   other element; tap-to-open-the-picker behavior is unaffected. */
-input[type="date"] {
-  -webkit-appearance: none;
-  appearance: none;
-  text-align: left;
+/* Every date field in the app renders through app/_components/date-field.tsx (issue #24),
+   which keeps a real <input type="date"> as an invisible, full-size tap target and draws its
+   own left-aligned text and calendar icon on top -- confirmed on-device that the native
+   control's text alignment can't be reached by author CSS at all on mobile WebKit/Blink, and
+   that -webkit-appearance: none (needed to stop the native chrome overflowing its box) throws
+   away the native placeholder and icon anyway, so there was nothing left for a bare CSS rule
+   to usefully target here.
+   This one rule hides that native input's own calendar-picker-indicator, which some engines
+   (desktop Chrome, confirmed) still render even once the input's text is transparent -- left
+   alone it would show faintly behind DateField's own drawn icon. Hidden via opacity, not
+   display, so it stays hit-testable and clicking that corner still opens the native picker. */
+.date-field-native-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
 }
