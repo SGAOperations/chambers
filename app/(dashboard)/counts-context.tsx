@@ -29,9 +29,9 @@ export function severityOf(actions: PendingAction[]): Severity {
  * tab badges): blue regular, amber warning, flashing red danger. The danger flash
  * lives in .pa-badge-danger in globals.css.
  */
-export function paBadgeClass(severity: Severity): string {
+export function paBadgeClass(severity: Severity, staticDanger = false): string {
   const base = 'text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center'
-  if (severity === 'danger') return `${base} pa-badge-danger`
+  if (severity === 'danger') return `${base} ${staticDanger ? 'pa-badge-danger-static' : 'pa-badge-danger'}`
   if (severity === 'warning') return `${base} bg-[#fbbf24] text-[#1a1400]`
   return `${base} bg-[#4285f4] text-white`
 }

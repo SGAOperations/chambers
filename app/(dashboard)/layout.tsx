@@ -8,6 +8,7 @@ import AuthGuard from './authguard'
 import SettingsModal, { type Settings as SettingsData } from './settings-modal'
 import { CountsContext, EMPTY_COUNTS, paBadgeClass, type Counts } from './counts-context'
 import PendingActionsPopover from './pending-actions-popover'
+import { PendingActionsWatchContext } from './pending-actions-watch'
 import { getAuthedUser } from '@/lib/auth'
 import { loadIdentity, clearIdentity } from '@/lib/identity'
 import type { AlertRow } from '@/lib/dashboard-data'
@@ -42,6 +43,81 @@ export default function DashboardLayout({
   const supabase = useMemo(() => createClient(), [])
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // --- Pending-actions "danger idling" (issue #38 #5) --------------------------
+  // Observe the tab rows that are a danger action's origin; while any is on
+  // screen, the sidebar total stops flashing and settles static red.
+  const dangerOriginIds = useMemo(
+    () => new Set(counts.actions.filter(a => a.severity === 'danger').map(a => a.originId)),
+    [counts.actions]
+  )
+  // Origin ids currently on screen. Held in state (not a ref) so the visible
+  // danger count derives during render -- no setState inside the observer effect.
+  const [visibleOriginIds, setVisibleOriginIds] = useState<Set<string>>(() => new Set())
+  const paEls = useRef<Map<string, HTMLElement>>(new Map())
+  const paObserver = useRef<IntersectionObserver | null>(null)
+  const paCallbacks = useRef<Map<string, (el: HTMLElement | null) => void>>(new Map())
+
+  const visibleDangerCount = useMemo(() => {
+    let n = 0
+    for (const id of visibleOriginIds) if (dangerOriginIds.has(id)) n++
+    return n
+  }, [visibleOriginIds, dangerOriginIds])
+
+  useEffect(() => {
+    const io = new IntersectionObserver(
+      entries => {
+        setVisibleOriginIds(prev => {
+          const next = new Set(prev)
+          for (const e of entries) {
+            const id = (e.target as HTMLElement).dataset.paOrigin
+            if (!id) continue
+            if (e.isIntersecting) next.add(id)
+            else next.delete(id)
+          }
+          return next
+        })
+      },
+      { threshold: 0.01 }
+    )
+    paObserver.current = io
+    for (const el of paEls.current.values()) io.observe(el)
+    return () => {
+      io.disconnect()
+      paObserver.current = null
+    }
+  }, [])
+
+  const registerOrigin = useCallback((originId: string) => {
+    let cb = paCallbacks.current.get(originId)
+    if (!cb) {
+      cb = (el: HTMLElement | null) => {
+        const prev = paEls.current.get(originId)
+        if (prev && prev !== el) {
+          paObserver.current?.unobserve(prev)
+          paEls.current.delete(originId)
+          setVisibleOriginIds(prevSet => {
+            if (!prevSet.has(originId)) return prevSet
+            const next = new Set(prevSet)
+            next.delete(originId)
+            return next
+          })
+        }
+        if (el) {
+          el.dataset.paOrigin = originId
+          paEls.current.set(originId, el)
+          paObserver.current?.observe(el)
+        }
+      }
+      paCallbacks.current.set(originId, cb)
+    }
+    return cb
+  }, [])
+
+  const paWatchValue = useMemo(
+    () => ({ isDanger: (id: string) => dangerOriginIds.has(id), registerOrigin }),
+    [dangerOriginIds, registerOrigin]
+  )
 
   // One call for the whole shell: pending-action counts (admins) + this user's
   // alerts. Fired on mount in parallel with the auth check -- it authenticates
@@ -286,7 +362,7 @@ export default function DashboardLayout({
               <div className="relative group z-50">
                 <div className="flex items-center justify-between px-4 py-2 cursor-default">
                   <span className="text-xs text-slate-500">Pending Actions</span>
-                  <span className={paBadgeClass(counts.severity)}>{counts.total}</span>
+                  <span className={paBadgeClass(counts.severity, visibleDangerCount > 0)}>{counts.total}</span>
                 </div>
                 <div className="absolute left-0 bottom-full z-50 hidden pb-2 group-hover:block group-focus-within:block">
                   <PendingActionsPopover actions={counts.actions} />
@@ -315,7 +391,9 @@ export default function DashboardLayout({
               instead of the whole app staying blank during the auth check. */}
           <AuthGuard>
             <CountsContext.Provider value={countsValue}>
-              {children}
+              <PendingActionsWatchContext.Provider value={paWatchValue}>
+                {children}
+              </PendingActionsWatchContext.Provider>
             </CountsContext.Provider>
           </AuthGuard>
         </main>

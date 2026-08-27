@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
+import { usePendingActionsWatch } from '../pending-actions-watch'
 
 function CancellationsTabSkeleton() {
   return (
@@ -63,6 +64,7 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
   const [cancellations, setCancellations] = useState<CancellationRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
+  const { isDanger, registerOrigin } = usePendingActionsWatch()
 
   const fetchCancellations = async () => {
     const res = await fetch('/api/administrator/cancellations')
@@ -96,10 +98,14 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
   return (
     <div className="space-y-4">
       {cancellations.map(c => (
-        <div key={c.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm">
+        <div
+          key={c.id}
+          ref={registerOrigin(c.id)}
+          className={`border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm ${isDanger(c.id) ? 'pa-row-danger' : ''}`}
+        >
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-semibold text-[#f0f6ff]">{c.bookings?.bodies?.name}</p>
+              <p className="font-semibold text-[#f0f6ff] pa-row-title">{c.bookings?.bodies?.name}</p>
               <p className="text-sm text-[#93b8d8]">{c.bookings?.purpose} · {c.bookings?.type}</p>
             </div>
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
