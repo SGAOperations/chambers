@@ -58,6 +58,8 @@ interface EditWeeklyFormProps {
     }[] | null
   }
   bodies: Body[]
+  /** Occurrence date (YYYY-MM-DD) to expand on open, e.g. when arriving from a grid cell click. */
+  initialExpandedOcc?: string | null
   onClose: () => void
   onSuccess: () => void
 }
@@ -90,7 +92,7 @@ function getWeeklyDates(startDate: string, endDate: string): string[] {
   return dates
 }
 
-export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: EditWeeklyFormProps) {
+export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, onClose, onSuccess }: EditWeeklyFormProps) {
   const w = booking.weekly_room_bookings?.[0]
 
   const [scopeValue, setScopeValue] = useState<BookingScopeValue>({
@@ -115,7 +117,7 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
     w?.weekly_room_occurrences || []
   )
 
-  const [expandedOcc, setExpandedOcc] = useState<string | null>(null)
+  const [expandedOcc, setExpandedOcc] = useState<string | null>(initialExpandedOcc ?? null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
