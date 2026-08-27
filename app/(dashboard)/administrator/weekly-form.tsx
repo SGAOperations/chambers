@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import TimePicker from './time-picker'
+import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
-import { DIVISIONS, type Division } from '@/lib/booking-scope'
+import ScopeLabel from '@/app/_components/scope-label'
+import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
 
 const STATUSES = [
   'Reserved',
@@ -38,7 +40,10 @@ interface PendingRequest {
   status: string
   created_at: string
   body_id: string
+  scope: BookingScope
+  division: Division | null
   bodies: { name: string } | null
+  room_request_bodies: { body_id: string; bodies: { name: string } | null }[] | null
   room_request_details: Array<{
     start_date: string | null
     end_date: string | null
@@ -85,6 +90,7 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([])
+  const [requestTypeFilter, setRequestTypeFilter] = useState<'all' | BookingScope>('all')
 
   useEffect(() => {
     fetch('/api/administrator/requests')
@@ -97,9 +103,9 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
       .catch(() => {})
   }, [])
 
-  const visibleRequests = scopeValue.body_id
-    ? pendingRequests.filter(r => r.body_id === scopeValue.body_id)
-    : pendingRequests
+  const visibleRequests = pendingRequests
+    .filter(r => !scopeValue.body_id || r.body_id === scopeValue.body_id)
+    .filter(r => requestTypeFilter === 'all' || r.scope === requestTypeFilter)
 
   const handleSubmit = async () => {
     if (!semesterId) {
@@ -197,30 +203,20 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
       <div className="flex gap-3">
         <div className="flex-1">
           <label className={labelCls}>Start Date *</label>
-          <input
-            type="date"
-            value={form.start_date}
-            onChange={e => setForm({ ...form, start_date: e.target.value })}
-            className={inputCls}
-          />
+          <DateField value={form.start_date} onChange={v => setForm({ ...form, start_date: v })} />
         </div>
         <div className="flex-1">
           <label className={labelCls}>End Date *</label>
-          <input
-            type="date"
-            value={form.end_date}
-            onChange={e => setForm({ ...form, end_date: e.target.value })}
-            className={inputCls}
-          />
+          <DateField value={form.end_date} onChange={v => setForm({ ...form, end_date: v })} />
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <div className="flex-1">
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex-1 min-w-0">
           <label className={labelCls}>Start Time *</label>
           <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <label className={labelCls}>End Time *</label>
           <TimePicker value={form.end_time} onChange={v => setForm({ ...form, end_time: v })} />
         </div>
@@ -271,7 +267,19 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
 
       <div className="w-96 shrink-0">
         <div className="rounded-xl border border-[#1e5080] bg-[#0f2a4a] p-4 h-full">
-          <p className="text-xs font-semibold text-[#93b8d8] uppercase tracking-wide mb-3">Open Requests</p>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <p className="text-xs font-semibold text-[#93b8d8] uppercase tracking-wide">Open Requests</p>
+            <select
+              value={requestTypeFilter}
+              onChange={e => setRequestTypeFilter(e.target.value as 'all' | BookingScope)}
+              className="text-xs bg-[#0a1f38] border border-[#1e5080] rounded-lg px-2 py-1 text-[#93b8d8] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e]"
+            >
+              <option value="all">All Types</option>
+              <option value="single">Single Body</option>
+              <option value="divisional">Divisional</option>
+              <option value="multi">Multi-Body</option>
+            </select>
+          </div>
           {visibleRequests.length === 0 ? (
             <p className="text-xs text-[#6a96bb]">No open requests</p>
           ) : (
@@ -279,7 +287,11 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
               {visibleRequests.map(r => (
                 <div key={r.id} className="rounded-lg bg-[#0a1f38] border border-[#1e5080]/60 px-3 py-2.5">
                   <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                    <span className="text-sm font-semibold text-[#f0f6ff]">{r.bodies?.name ?? '—'}</span>
+                    <ScopeLabel
+                      row={r}
+                      linkedBodies={(r.room_request_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))}
+                      className="text-sm font-semibold text-[#f0f6ff]"
+                    />
                     <span className="text-xs text-[#6a96bb] shrink-0">{new Date(r.created_at).toLocaleDateString()}</span>
                   </div>
                   <p className="text-xs text-[#93b8d8] mb-1.5">{r.purpose}</p>

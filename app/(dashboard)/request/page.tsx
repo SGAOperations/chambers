@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { getAuthedUser } from '@/lib/auth'
 import TimePicker from '../administrator/time-picker'
+import DateField from '@/app/_components/date-field'
 import { Skeleton } from '@/app/_components/skeleton'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
-import type { Division } from '@/lib/booking-scope'
+import ScopeLabel from '@/app/_components/scope-label'
+import type { Division, BookingScope } from '@/lib/booking-scope'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
 
@@ -24,7 +26,11 @@ interface MyRequest {
   status: 'Pending' | 'Fulfilled' | 'Denied'
   notes: string | null
   created_at: string
+  body_id: string
+  scope: BookingScope
+  division: Division | null
   bodies: { name: string } | null
+  room_request_bodies: { body_id: string; bodies: { name: string } | null }[] | null
   room_request_details: {
     room_name: string | null
     start_date: string
@@ -56,13 +62,18 @@ interface OneTimeSession {
 const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 
+// Most meetings booked through this form run in the evening, so default to a common
+// 5-8pm slot rather than mid-morning -- still fully editable per session.
+const DEFAULT_START_TIME = '17:00'
+const DEFAULT_END_TIME = '20:00'
+
 const emptySession = (): TablingSession => ({
   session_date: '',
-  start_time: '09:00',
-  end_time: '10:00',
+  start_time: DEFAULT_START_TIME,
+  end_time: DEFAULT_END_TIME,
 })
 
-const emptyOneTimeSession = (): OneTimeSession => ({ session_date: '', start_time: '09:00', end_time: '10:00', room_name: '' })
+const emptyOneTimeSession = (): OneTimeSession => ({ session_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME, room_name: '' })
 
 function GuidelinesPanel({ type }: { type: RequestType }) {
   const email = 'sgaOperations@northeastern.edu'
@@ -191,8 +202,8 @@ export default function RequestPage() {
     room_name: '',
     start_date: '',
     end_date: '',
-    start_time: '09:00',
-    end_time: '10:00',
+    start_time: DEFAULT_START_TIME,
+    end_time: DEFAULT_END_TIME,
   })
 
   const [sessions, setSessions] = useState<TablingSession[]>([emptySession()])
@@ -348,7 +359,7 @@ export default function RequestPage() {
   }
 
   const resetForm = () => {
-    setForm({ purpose: '', notes: '', room_name: '', start_date: '', end_date: '', start_time: '09:00', end_time: '10:00' })
+    setForm({ purpose: '', notes: '', room_name: '', start_date: '', end_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME })
     setScopeValue({ scope: 'single', body_id: '', division: null, body_ids: [] })
     setSessions([emptySession()])
     setOneTimeSessions([emptyOneTimeSession()])
@@ -376,13 +387,15 @@ export default function RequestPage() {
     <div className="flex gap-8 items-start">
       {/* Form — left column */}
       <div className="flex-1 space-y-6 min-w-0">
-      {/* Type selector */}
-      <div className="flex gap-1 border-b border-[#1e5080]">
+      {/* Type selector -- horizontally scrollable so the toggle stays reachable on narrow
+          screens instead of overflowing off-screen (issue #24), matching the Administrator
+          tab bar's established pattern. */}
+      <div className="flex gap-1 border-b border-[#1e5080] overflow-x-auto overflow-y-hidden">
         {(['One-Time Room', 'Weekly Room', 'Tabling'] as RequestType[]).map(t => (
           <button
             key={t}
             onClick={() => setType(t)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
               type === t
                 ? 'border-[#c8102e] text-[#f0f6ff] font-semibold'
                 : 'border-transparent text-[#93b8d8] hover:text-[#c8102e]'
@@ -391,8 +404,8 @@ export default function RequestPage() {
             {t === 'One-Time Room' ? 'One-Time/Multiple Room' : t}
           </button>
         ))}
-        <label className="ml-auto flex items-center gap-2.5 cursor-pointer pb-2 select-none">
-          <span className={`text-sm font-medium transition-colors ${showMyRequests ? 'text-[#f0f6ff]' : 'text-[#93b8d8]'}`}>
+        <label className="ml-auto flex items-center gap-2.5 cursor-pointer pb-2 pl-3 select-none flex-shrink-0">
+          <span className={`text-sm font-medium whitespace-nowrap transition-colors ${showMyRequests ? 'text-[#f0f6ff]' : 'text-[#93b8d8]'}`}>
             Viewing Previous Requests
           </span>
           <button
@@ -453,7 +466,10 @@ export default function RequestPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-[#f0f6ff] truncate">{req.purpose}</p>
                         <p className="text-sm text-[#6a96bb]">
-                          {req.bodies?.name}
+                          <ScopeLabel
+                            row={req}
+                            linkedBodies={(req.room_request_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))}
+                          />
                           {dateLabel ? ` · ${dateLabel}` : ''}
                         </p>
                       </div>
@@ -469,7 +485,12 @@ export default function RequestPage() {
                       <div className="bg-[#0f2a4a] rounded-b-xl px-5 py-4 space-y-2 border-t border-[#1e5080]">
                         <div>
                           <span className="text-xs font-medium text-[#93b8d8]">Body</span>
-                          <p className="text-sm text-[#f0f6ff]">{req.bodies?.name ?? '—'}</p>
+                          <p className="text-sm text-[#f0f6ff]">
+                            <ScopeLabel
+                              row={req}
+                              linkedBodies={(req.room_request_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))}
+                            />
+                          </p>
                         </div>
                         <div>
                           <span className="text-xs font-medium text-[#93b8d8]">Type</span>
@@ -590,14 +611,14 @@ export default function RequestPage() {
                     </div>
                     <div>
                       <label className={labelCls}>Date *</label>
-                      <input type="date" value={s.session_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => updateOneTimeSession(i, 'session_date', e.target.value)} className={inputCls} />
+                      <DateField value={s.session_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={v => updateOneTimeSession(i, 'session_date', v)} />
                     </div>
-                    <div className="flex gap-3">
-                      <div className="flex-1">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1 min-w-0">
                         <label className={labelCls}>Start Time *</label>
                         <TimePicker value={s.start_time} onChange={v => updateOneTimeSession(i, 'start_time', v)} />
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <label className={labelCls}>End Time *</label>
                         <TimePicker value={s.end_time} onChange={v => updateOneTimeSession(i, 'end_time', v)} />
                       </div>
@@ -615,21 +636,21 @@ export default function RequestPage() {
                   <input type="text" placeholder="Optional" value={form.room_name} onChange={e => setForm({ ...form, room_name: e.target.value })} className={inputCls} />
                 </div>
                 <div className="flex gap-3">
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <label className={labelCls}>Start Date *</label>
-                    <input type="date" value={form.start_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => setForm({ ...form, start_date: e.target.value })} className={inputCls} />
+                    <DateField value={form.start_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={v => setForm({ ...form, start_date: v })} />
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <label className={labelCls}>End Date *</label>
-                    <input type="date" value={form.end_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={e => setForm({ ...form, end_date: e.target.value })} className={inputCls} />
+                    <DateField value={form.end_date} min={minDaysRoom > 0 ? getMinDate(minDaysRoom) : undefined} onChange={v => setForm({ ...form, end_date: v })} />
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <div className="flex-1">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 min-w-0">
                     <label className={labelCls}>Start Time *</label>
                     <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <label className={labelCls}>End Time *</label>
                     <TimePicker value={form.end_time} onChange={v => setForm({ ...form, end_time: v })} />
                   </div>
@@ -666,15 +687,15 @@ export default function RequestPage() {
 
                     <div>
                       <label className={labelCls}>Date *</label>
-                      <input type="date" value={s.session_date} min={minDaysTabling > 0 ? getMinDate(minDaysTabling) : undefined} onChange={e => updateSession(i, 'session_date', e.target.value)} className={inputCls} />
+                      <DateField value={s.session_date} min={minDaysTabling > 0 ? getMinDate(minDaysTabling) : undefined} onChange={v => updateSession(i, 'session_date', v)} />
                     </div>
 
-                    <div className="flex gap-3">
-                      <div className="flex-1">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex-1 min-w-0">
                         <label className={labelCls}>Start Time *</label>
                         <TimePicker value={s.start_time} onChange={v => updateSession(i, 'start_time', v)} />
                       </div>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <label className={labelCls}>End Time *</label>
                         <TimePicker value={s.end_time} onChange={v => updateSession(i, 'end_time', v)} />
                       </div>

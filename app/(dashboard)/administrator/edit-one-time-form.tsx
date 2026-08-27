@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import TimePicker from './time-picker'
+import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
 
@@ -198,20 +199,15 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
 
             <div>
               <label className={labelCls}>Date *</label>
-              <input
-                type="date"
-                value={s.booking_date}
-                onChange={e => updateSession(i, 'booking_date', e.target.value)}
-                className={inputCls}
-              />
+              <DateField value={s.booking_date} onChange={v => updateSession(i, 'booking_date', v)} />
             </div>
 
-            <div className="flex gap-3">
-              <div className="flex-1">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 min-w-0">
                 <label className={labelCls}>Start Time *</label>
                 <TimePicker value={s.start_time} onChange={v => updateSession(i, 'start_time', v)} />
               </div>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <label className={labelCls}>End Time *</label>
                 <TimePicker value={s.end_time} onChange={v => updateSession(i, 'end_time', v)} />
               </div>

@@ -101,12 +101,12 @@ export default function RevisionModal({ booking, onClose, onSuccess }: RevisionM
         {showTime && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-[#93b8d8]">Requested Time</p>
-            <div className="flex gap-3">
-              <div className="flex-1 space-y-1">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 min-w-0 space-y-1">
                 <label className="text-xs text-[#6a96bb]">Start</label>
                 <TimePicker value={newStartTime} onChange={setNewStartTime} />
               </div>
-              <div className="flex-1 space-y-1">
+              <div className="flex-1 min-w-0 space-y-1">
                 <label className="text-xs text-[#6a96bb]">End</label>
                 <TimePicker value={newEndTime} onChange={setNewEndTime} />
               </div>

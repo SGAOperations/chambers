@@ -133,13 +133,21 @@ export async function GET() {
    * bookings.
    *
    * Hidden bookings stay visible only to someone who can manage them.
+   *
+   * canManage is evaluated as if the caller were not an admin. my-rooms is the member-facing list
+   * -- it is already scoped to the bodies you belong to even for admins (see the .or() above), and
+   * manage rights follow the same rule: an admin who merely sits on a booking's body is a plain
+   * member here and acts from /administrator instead. Without this, a hidden multi-body booking
+   * surfaced on the personal page of every admin on a linked body, tagged "Leadership" (issue #29).
    */
+  const memberCtx = { ...ctx, isAdmin: false }
+
   const decorate = (rows: BookingRow[] | null) =>
     (rows ?? [])
       .map(b => ({
         ...b,
         canManage: canManageScoped(
-          ctx,
+          memberCtx,
           b,
           (b.booking_bodies ?? []).map(x => x.body_id)
         ),

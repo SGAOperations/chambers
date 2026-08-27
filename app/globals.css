@@ -38,6 +38,30 @@ option {
   color: #f0f6ff;
 }
 
-input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) brightness(0.7);
+/* Every date field in the app renders through app/_components/date-field.tsx (issue #24),
+   which keeps a real <input type="date"> as an invisible, full-size tap target and draws its
+   own left-aligned text and calendar icon on top -- confirmed on-device that the native
+   control's text alignment can't be reached by author CSS at all on mobile WebKit/Blink, and
+   that -webkit-appearance: none (needed to stop the native chrome overflowing its box) throws
+   away the native placeholder and icon anyway, so there was nothing left for a bare CSS rule
+   to usefully target here.
+   These rules hide two things the browser still renders despite this input's text being
+   transparent -- both confirmed by reproducing them directly and checking the fix removed
+   them before landing either:
+     - the native calendar-picker-indicator, which some engines (desktop Chrome) render
+       regardless of text color, and would otherwise show faintly behind DateField's own
+       drawn icon;
+     - the focused-segment selection highlight (e.g. tabbing into the "mm" segment), which
+       browsers render with their own default foreground specifically so selected text stays
+       legible against transparent-text tricks like this one -- it rendered right on top of
+       DateField's overlay text otherwise.
+   Both are hidden via opacity/color, not display, so the input stays hit-testable and
+   focusable -- clicking or tabbing into it still opens/drives the native picker. */
+.date-field-native-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+}
+
+.date-field-native-input::selection {
+  background: transparent;
+  color: transparent;
 }

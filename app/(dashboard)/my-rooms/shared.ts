@@ -20,6 +20,8 @@ export interface FlatBooking {
   scopeKey: string
   /** Display name for a group heading -- body name, division, or "X + N others". */
   scopeLabel: string
+  /** Every body in the audience, owner first. Length > 1 only for a multi booking with peers. */
+  scopeFull: string[]
 }
 
 /** The scope-bearing shape /api/my-rooms returns for each booking. */
@@ -48,6 +50,14 @@ export function scopeLabelOf(b: ScopedBookingRow): string {
     b,
     (b.booking_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))
   ).short
+}
+
+/** The full audience list (owner first) behind scopeLabelOf's collapsed "X + N others". */
+export function scopeFullOf(b: ScopedBookingRow): string[] {
+  return formatScopeLabel(
+    b,
+    (b.booking_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))
+  ).full
 }
 
 export const SENATE_TYPES = ['Full Body', 'Weekly', 'Office Hours'] as const

@@ -244,7 +244,7 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
                   <select
                     value={selectedBodyId}
                     onChange={e => setSelectedBodyId(e.target.value)}
-                    className="flex-1 bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2 text-sm text-[#f0f6ff] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
+                    className="flex-1 min-w-0 bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2 text-sm text-[#f0f6ff] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
                   >
                     <option value="">Add a body…</option>
                     {settings.available_bodies.map(b => (

@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import TimePicker from './time-picker'
+import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
 
@@ -199,20 +200,20 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
       <div className="flex gap-3">
         <div className="flex-1">
           <label className={labelCls}>Start Date *</label>
-          <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className={inputCls} />
+          <DateField value={form.start_date} onChange={v => setForm({ ...form, start_date: v })} />
         </div>
         <div className="flex-1">
           <label className={labelCls}>End Date *</label>
-          <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })} className={inputCls} />
+          <DateField value={form.end_date} onChange={v => setForm({ ...form, end_date: v })} />
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <div className="flex-1">
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex-1 min-w-0">
           <label className={labelCls}>Start Time *</label>
           <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
         </div>
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <label className={labelCls}>End Time *</label>
           <TimePicker value={form.end_time} onChange={v => setForm({ ...form, end_time: v })} />
         </div>
@@ -266,15 +267,15 @@ export default function EditWeeklyForm({ booking, bodies, onClose, onSuccess }: 
                     />
                   </div>
 
-                  <div className="flex gap-3">
-                    <div className="flex-1">
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1 min-w-0">
                       <label className={labelCls}>Start Time Override</label>
                       <TimePicker
                         value={occ.start_time?.slice(0, 5) ?? form.start_time}
                         onChange={v => updateOccurrence(occ.id, 'start_time', v)}
                       />
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <label className={labelCls}>End Time Override</label>
                       <TimePicker
                         value={occ.end_time?.slice(0, 5) ?? form.end_time}

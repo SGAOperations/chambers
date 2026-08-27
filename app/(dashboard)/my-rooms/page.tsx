@@ -11,6 +11,7 @@ import {
   type FlatBooking,
   scopeKeyOf,
   scopeLabelOf,
+  scopeFullOf,
   statusColors,
   statusBarColors,
   statusTextColors,
@@ -137,6 +138,7 @@ export default function MyRoomsPage() {
             canManage: !!b.canManage,
             scopeKey: scopeKeyOf(b),
             scopeLabel: scopeLabelOf(b),
+            scopeFull: scopeFullOf(b),
           })
         }
       }
@@ -162,6 +164,7 @@ export default function MyRoomsPage() {
           canManage: !!b.canManage,
           scopeKey: scopeKeyOf(b),
           scopeLabel: scopeLabelOf(b),
+          scopeFull: scopeFullOf(b),
         })
       }
     }
@@ -187,6 +190,7 @@ export default function MyRoomsPage() {
           canManage: !!b.canManage,
           scopeKey: scopeKeyOf(b),
           scopeLabel: scopeLabelOf(b),
+          scopeFull: scopeFullOf(b),
         })
       }
     }
@@ -237,7 +241,7 @@ export default function MyRoomsPage() {
     <div className="space-y-10">
       {/* My Upcoming Spaces */}
       <section>
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold text-[#f0f6ff]">My Upcoming Spaces</h2>
             <NotificationBell />

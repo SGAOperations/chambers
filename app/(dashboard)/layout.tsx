@@ -244,7 +244,7 @@ export default function DashboardLayout({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.13.0</p>
+            <p className="text-slate-600 text-xs mt-1">v1.13.1</p>
             {userName && (
               <div className="flex items-start justify-between mt-2">
                 <p className="text-slate-500 text-xs italic">{getGreeting()},<br />{userName}</p>
@@ -296,7 +296,9 @@ export default function DashboardLayout({
           </div>
         </nav>
 
-        <main className="flex-1 bg-gradient-to-br from-[#112244] via-[#0a1628] to-[#060e1a] p-8 overflow-y-auto overflow-x-hidden">
+        {/* pt-20 on mobile clears the fixed hamburger button (top-4, ~40px tall) so page
+            content -- e.g. My Rooms' filter row -- doesn't render underneath it (issue #24) */}
+        <main className="flex-1 bg-gradient-to-br from-[#112244] via-[#0a1628] to-[#060e1a] p-8 pt-20 md:pt-8 overflow-y-auto overflow-x-hidden">
           {/* Scoped to the content area so the sidebar paints immediately
               instead of the whole app staying blank during the auth check. */}
           <AuthGuard>

@@ -113,7 +113,10 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 1000)
+    // Skip the tick while backgrounded -- nothing reads `now` when the display isn't visible.
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') setNow(new Date())
+    }, 1000)
     return () => clearInterval(interval)
   }, [])
 
@@ -146,8 +149,27 @@ function DisplayContent({ spaceId }: { spaceId: string }) {
     }
 
     fetchData()
-    const interval = setInterval(fetchData, 50_000)
-    return () => clearInterval(interval)
+
+    // Issue #25: request logs showed a display left open kept polling every 50s around the
+    // clock regardless of whether the tab was actually on screen -- exactly the profile of
+    // the reported overnight usage/battery spike. The interval keeps running (cheap), but the
+    // network request itself is skipped while backgrounded; a visibilitychange listener
+    // fetches immediately on return so the display catches up rather than waiting out the
+    // rest of the interval. A kiosk whose screen genuinely stays on and visible the whole
+    // time is unaffected -- this only stops polling once nobody could be looking at it.
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchData()
+    }, 50_000)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchData()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [spaceId, key, accessDenied])
 
   // Booking times are stored as UTC wall-clock (T17:00Z = 5pm local).
