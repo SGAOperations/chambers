@@ -176,6 +176,7 @@ export default function BookingsTab() {
   const [showModal, setShowModal] = useState(false)
   const [editingBooking, setEditingBooking] = useState<OneTimeBooking | null>(null)
   const [editingWeekly, setEditingWeekly] = useState<WeeklyBooking | null>(null)
+  const [editingWeeklyOcc, setEditingWeeklyOcc] = useState<string | null>(null)
   const [editingTabling, setEditingTabling] = useState<TablingBooking | null>(null)
   const [cancellingAdminBooking, setCancellingAdminBooking] = useState<{
     booking: { id: string; type: 'One-Time Room' | 'Tabling'; bodyName: string; purpose: string }
@@ -348,12 +349,13 @@ export default function BookingsTab() {
       {editingWeekly && (
         <BookingModal
             title="Edit Weekly Room Booking"
-            onClose={() => setEditingWeekly(null)}
+            onClose={() => { setEditingWeekly(null); setEditingWeeklyOcc(null) }}
         >
             <EditWeeklyForm
                 booking={editingWeekly}
                 bodies={bodies}
-                onClose={() => setEditingWeekly(null)}
+                initialExpandedOcc={editingWeeklyOcc}
+                onClose={() => { setEditingWeekly(null); setEditingWeeklyOcc(null) }}
                 onSuccess={() => fetchBookings(showAll)}
             />
         </BookingModal>
@@ -488,7 +490,7 @@ export default function BookingsTab() {
         <div className="space-y-4">
           <WeeklyBookingGrid
             bookings={weekly}
-            onBookingClick={(b) => setEditingWeekly(b)}
+            onBookingClick={(b, occurrenceDate) => { setEditingWeekly(b); setEditingWeeklyOcc(occurrenceDate ?? null) }}
           />
           <div className="space-y-6">
           {weekly.length === 0 ? (
@@ -525,7 +527,7 @@ export default function BookingsTab() {
                         {b.hidden ? 'Unhide' : 'Hide'}
                       </button>
                       <button
-                        onClick={() => setEditingWeekly(b)}
+                        onClick={() => { setEditingWeekly(b); setEditingWeeklyOcc(null) }}
                         className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
                       >
                         Edit
