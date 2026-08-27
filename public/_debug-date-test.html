@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { background:#0a1628; padding: 24px; font-family: sans-serif; }
+  .card { background:#184073; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  label { display:block; color:#93b8d8; font-size:12px; margin-bottom: 4px; }
+  .inputCls {
+    width: 100%;
+    background:#0f2a4a;
+    border: 1px solid #1e5080;
+    border-radius: 0.5rem;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    color: #f0f6ff;
+    font-family: 'Space Grotesk', sans-serif;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1) brightness(0.7); }
+  .caption { color: #f0f6ff; font-size: 11px; margin-top: 4px; }
+
+  /* Candidate A: text-align on the host input (what's live in prod right now) */
+  .alignA { text-align: left; }
+
+  /* Candidate B: target the internal edit-fields part directly instead of the host */
+  .alignB::-webkit-datetime-edit { text-align: left; }
+  .alignB::-webkit-datetime-edit-fields-wrapper { text-align: left; }
+
+  /* Candidate C: force ltr direction alongside text-align, some engines need both */
+  .alignC { text-align: left; direction: ltr; }
+
+  /* Placeholder overlay approach: a positioned wrapper + sibling span shown/hidden by JS
+     watching the input's own value -- this is what a real DateField component would do. */
+  .fieldWrap { position: relative; }
+  .fieldWrap .fakePlaceholder {
+    position: absolute;
+    inset: 1px;
+    display: flex;
+    align-items: center;
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    color: #6a96bb;
+    pointer-events: none;
+    background: #0f2a4a;
+    border-radius: 0.5rem;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <label>Preferred Room (text, empty) -- baseline</label>
+    <input class="inputCls" type="text" placeholder="Optional">
+  </div>
+
+  <div class="card">
+    <label>A: text-align:left on host input (currently shipped)</label>
+    <input class="inputCls alignA" type="date" value="2026-08-26">
+    <div class="caption">^ left-aligned now, or still centered?</div>
+  </div>
+
+  <div class="card">
+    <label>B: text-align on ::-webkit-datetime-edit parts directly</label>
+    <input class="inputCls alignB" type="date" value="2026-08-26">
+    <div class="caption">^ left-aligned now, or still centered?</div>
+  </div>
+
+  <div class="card">
+    <label>C: text-align:left + direction:ltr on host input</label>
+    <input class="inputCls alignC" type="date" value="2026-08-26">
+    <div class="caption">^ left-aligned now, or still centered?</div>
+  </div>
+
+  <div class="card">
+    <label>Placeholder overlay (empty) -- should show "Select a date"</label>
+    <div class="fieldWrap">
+      <input class="inputCls" type="date" id="d1" oninput="document.getElementById('ph1').style.display=this.value?'none':'flex'">
+      <span class="fakePlaceholder" id="ph1">Select a date</span>
+    </div>
+    <div class="caption">^ do you see "Select a date" in gray? Tap it, pick a date, does the hint disappear and the real value show cleanly?</div>
+  </div>
+
+  <div class="card">
+    <label>Placeholder overlay (pre-filled) -- hint should be hidden, real value visible</label>
+    <div class="fieldWrap">
+      <input class="inputCls alignB" type="date" value="2026-08-26" id="d2" oninput="document.getElementById('ph2').style.display=this.value?'none':'flex'">
+      <span class="fakePlaceholder" id="ph2" style="display:none">Select a date</span>
+    </div>
+    <div class="caption">^ is "8/26/2026" visible and left-aligned, with no leftover gray hint text behind it?</div>
+  </div>
+</body>
+</html>
