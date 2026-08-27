@@ -20,7 +20,7 @@ const ADVANCE_KEYS = [
 // number of days (pa_event_trigger_weeks is weeks).
 const PA_KEYS = [
   'pa_warning_lead_days',
-  'pa_event_trigger_weeks',
+  'pa_event_trigger_months',
   'pa_request_room_danger_start',
   'pa_request_room_danger_end',
   'pa_request_tabling_danger_start',

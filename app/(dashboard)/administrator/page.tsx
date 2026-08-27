@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import AdminGuard from '../adminguard'
-import { useCounts } from '../counts-context'
+import { useCounts, paBadgeClass, severityOf } from '../counts-context'
 import RequestsTab from './requests-tab'
 import CancellationsTab from './cancellations-tab'
 import BookingsTab from './bookings-tab'
@@ -17,10 +17,12 @@ export default function AdministratorPage() {
   // endpoint on every Administrator page load.
   const { counts, refreshCounts } = useCounts()
 
-  const tabBadge = (tab: Tab) => {
-    if (tab === 'Requests') return counts.requests + counts.revisions
-    if (tab === 'Cancellations') return counts.cancellations
-    return 0
+  // Actions whose origin is this tab, so the badge count + colour match the
+  // sidebar total and its hover breakdown (issue #38).
+  const tabActions = (tab: Tab) => {
+    if (tab === 'Requests') return counts.actions.filter(a => a.originTab === 'Requests')
+    if (tab === 'Cancellations') return counts.actions.filter(a => a.originTab === 'Cancellations')
+    return []
   }
 
   return (
@@ -40,11 +42,11 @@ export default function AdministratorPage() {
               }`}
             >
               {tab}
-              {tabBadge(tab) > 0 && (
-                <span className="bg-[#c8102e] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
-                  {tabBadge(tab)}
-                </span>
-              )}
+              {(() => {
+                const acts = tabActions(tab)
+                if (acts.length === 0) return null
+                return <span className={paBadgeClass(severityOf(acts))}>{acts.length}</span>
+              })()}
             </button>
           ))}
         </div>

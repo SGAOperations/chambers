@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import AuthGuard from './authguard'
 import SettingsModal, { type Settings as SettingsData } from './settings-modal'
-import { CountsContext, EMPTY_COUNTS, type Counts, type Severity } from './counts-context'
+import { CountsContext, EMPTY_COUNTS, paBadgeClass, type Counts } from './counts-context'
 import PendingActionsPopover from './pending-actions-popover'
 import { getAuthedUser } from '@/lib/auth'
 import { loadIdentity, clearIdentity } from '@/lib/identity'
@@ -17,15 +17,6 @@ function getGreeting() {
   if (hour < 12) return 'Good Morning'
   if (hour < 18) return 'Good Afternoon'
   return 'Good Evening'
-}
-
-// Pending Actions total badge, coloured by the most severe action (issue #38).
-// Danger flashes via the .pa-badge-danger keyframes in globals.css.
-function paBadgeClass(severity: Severity): string {
-  const base = 'text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center'
-  if (severity === 'danger') return `${base} pa-badge-danger`
-  if (severity === 'warning') return `${base} bg-[#fbbf24] text-[#1a1400]`
-  return `${base} bg-[#4285f4] text-white`
 }
 
 export default function DashboardLayout({
@@ -255,7 +246,7 @@ export default function DashboardLayout({
       </button>
 
       <div className="flex h-screen">
-        <nav className={`fixed inset-y-0 left-0 z-40 w-56 bg-[#0a1628] flex flex-col flex-shrink-0 transition-transform duration-300 md:relative md:translate-x-0 md:inset-auto md:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <nav className={`fixed inset-y-0 left-0 z-40 w-56 bg-[#0a1628] flex flex-col flex-shrink-0 transition-transform duration-300 md:relative md:translate-x-0 md:inset-auto md:z-30 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           {/* Brand */}
           <div className="px-5 py-5 border-b border-white/10">
             <div className="flex items-baseline gap-1.5">
@@ -292,12 +283,12 @@ export default function DashboardLayout({
           {/* Total badge + Sign out */}
           <div className="px-3 py-4 border-t border-white/10 space-y-1">
             {isAdmin && counts.total > 0 && (
-              <div className="relative group">
+              <div className="relative group z-50">
                 <div className="flex items-center justify-between px-4 py-2 cursor-default">
                   <span className="text-xs text-slate-500">Pending Actions</span>
                   <span className={paBadgeClass(counts.severity)}>{counts.total}</span>
                 </div>
-                <div className="absolute left-0 bottom-full hidden pb-2 group-hover:block group-focus-within:block">
+                <div className="absolute left-0 bottom-full z-50 hidden pb-2 group-hover:block group-focus-within:block">
                   <PendingActionsPopover actions={counts.actions} />
                 </div>
               </div>

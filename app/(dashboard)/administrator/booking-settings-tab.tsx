@@ -38,7 +38,7 @@ const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 // DEFAULT_PA_SETTINGS in lib/pending-actions.ts is authoritative; keep in sync.
 const PA_DEFAULTS: Record<string, number> = {
   pa_warning_lead_days: 7,
-  pa_event_trigger_weeks: 10,
+  pa_event_trigger_months: 2,
   pa_request_room_danger_start: 17,
   pa_request_room_danger_end: 11,
   pa_request_tabling_danger_start: 17,
@@ -329,8 +329,8 @@ export default function BookingSettingsTab() {
             <input type="number" min={0} value={pa.pa_warning_lead_days} onChange={setPaField('pa_warning_lead_days')} className={inputCls} />
           </div>
           <div>
-            <label className={labelCls}>Event form trigger window — weeks before the event</label>
-            <input type="number" min={0} value={pa.pa_event_trigger_weeks} onChange={setPaField('pa_event_trigger_weeks')} className={inputCls} />
+            <label className={labelCls}>Event form trigger window — months before the event</label>
+            <input type="number" min={0} value={pa.pa_event_trigger_months} onChange={setPaField('pa_event_trigger_months')} className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>Regular cancellation — danger within N days of the booking</label>

@@ -15,9 +15,13 @@
 -- Single-row table (id = 1), so the defaults backfill immediately and nothing
 -- that reads app_settings today references these columns.
 
+-- pa_event_trigger_months: event-form actions are hidden until the event is
+-- within this many calendar months. (Earlier drafts used weeks; drop that.)
+alter table app_settings drop column if exists pa_event_trigger_weeks;
+
 alter table app_settings
   add column if not exists pa_warning_lead_days                integer not null default 7,
-  add column if not exists pa_event_trigger_weeks              integer not null default 10,
+  add column if not exists pa_event_trigger_months             integer not null default 2,
   add column if not exists pa_request_room_danger_start        integer not null default 17,
   add column if not exists pa_request_room_danger_end          integer not null default 11,
   add column if not exists pa_request_tabling_danger_start     integer not null default 17,

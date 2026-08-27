@@ -63,8 +63,8 @@ export const EMPTY_PENDING_ACTIONS: PendingActionsResult = {
 
 export interface PendingActionSettings {
   warningLeadDays: number
-  /** Events within this many days generate form actions (issue: "within 10 weeks"). */
-  eventTriggerDays: number
+  /** Event-form actions are hidden until the event is within this many calendar months. */
+  eventTriggerMonths: number
   /** [dangerStart, dangerEnd] in days-until; severity is danger once daysUntil <= dangerStart. */
   requestRoom: [number, number]
   requestTabling: [number, number]
@@ -78,7 +78,7 @@ export interface PendingActionSettings {
 
 export const DEFAULT_PA_SETTINGS: PendingActionSettings = {
   warningLeadDays: 7,
-  eventTriggerDays: 70,
+  eventTriggerMonths: 2,
   requestRoom: [17, 11],
   requestTabling: [17, 14],
   revision: [17, 11],
@@ -152,7 +152,7 @@ function settingsFromRow(row: SettingsRow | null): PendingActionSettings {
     typeof row?.[key] === 'number' ? (row[key] as number) : fallback
   return {
     warningLeadDays: n('pa_warning_lead_days', d.warningLeadDays),
-    eventTriggerDays: n('pa_event_trigger_weeks', 10) * 7,
+    eventTriggerMonths: n('pa_event_trigger_months', d.eventTriggerMonths),
     requestRoom: [
       n('pa_request_room_danger_start', d.requestRoom[0]),
       n('pa_request_room_danger_end', d.requestRoom[1]),
@@ -231,6 +231,9 @@ export async function fetchPendingActions(
   now: Date = new Date()
 ): Promise<PendingActionsResult> {
   const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  // The far date at which event-form actions start appearing = today + N months.
+  const triggerCutoffMs = (months: number) =>
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + months, now.getUTCDate())
 
   const [
     { data: settingsRow },
@@ -366,7 +369,8 @@ export async function fetchPendingActions(
     const eventDate = minDate(sessionDatesOf(b))
     if (!eventDate) continue
     const days = daysBetween(base, eventDate)
-    if (days < 0 || days > s.eventTriggerDays) continue // only inside the trigger window, before the event
+    // Only once the event is upcoming and within N calendar months.
+    if (days < 0 || utcMidnight(eventDate) > triggerCutoffMs(s.eventTriggerMonths)) continue
 
     const tracking = Array.isArray(b.event_tracking) ? b.event_tracking[0] : b.event_tracking
     const bodyName = nameOf(b.bodies ?? null)
