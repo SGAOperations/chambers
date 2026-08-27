@@ -5,6 +5,13 @@ import { getAuthedUser } from '@/lib/auth'
 import { getActiveSemesterId } from '@/lib/active-semester'
 import { canManageScoped, loadScopeContext, type ScopedRow } from '@/lib/booking-scope'
 
+// Edge: on the my-rooms first-paint path, measured cold-starting at ~1.05s on
+// Node. All I/O here is fetch-based (Supabase REST, Upstash, JWKS). The response
+// shaping is O(bookings x sessions) but bounded by the semester + future-date
+// filters above; watch the preview deploy's function metrics and fall back to
+// the Node runtime (delete this line) if CPU time trips.
+export const runtime = 'edge'
+
 interface BookingRow {
   id: string
   purpose: string

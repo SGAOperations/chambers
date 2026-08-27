@@ -2,25 +2,24 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { getAuthedUser } from '@/lib/auth'
+import { fetchUserAlerts } from '@/lib/dashboard-data'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+// Edge: on the dashboard first-paint path (the notification bell reads alerts
+// via /api/dashboard; this route still serves the dismiss actions). Was
+// cold-starting at ~1s on Node. Both handlers are fetch-only.
+export const runtime = 'edge'
+
 export async function GET() {
   const supabase = await createClient()
   const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data } = await adminSupabase
-    .from('user_alerts')
-    .select('id, booking_id, request_id, booking_type, booking_date, start_time, created_at, denial_reason, bookings!booking_id(bodies(name)), room_requests!request_id(bodies(name))')
-    .eq('user_id', user.id)
-    .eq('dismissed', false)
-    .order('created_at', { ascending: false })
-
-  return NextResponse.json(data || [])
+  return NextResponse.json(await fetchUserAlerts(adminSupabase, user.id))
 }
 
 export async function PATCH(request: Request) {
