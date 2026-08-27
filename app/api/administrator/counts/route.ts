@@ -4,13 +4,6 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUser } from '@/lib/auth'
 import { fetchPendingCounts } from '@/lib/dashboard-data'
 
-// Edge: this route is on the dashboard's first-paint path (via /api/dashboard,
-// and here for the Administrator page's targeted refreshes) and was measured
-// cold-starting at ~1.1s on the Node runtime. Everything it touches
-// (@supabase/ssr, Upstash, getClaims/WebCrypto) runs on edge, where cold start
-// is ~10-20ms.
-export const runtime = 'edge'
-
 export async function GET() {
   const supabase = await createClient()
 

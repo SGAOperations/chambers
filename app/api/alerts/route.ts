@@ -9,11 +9,6 @@ const adminSupabase = createAdminClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Edge: on the dashboard first-paint path (the notification bell reads alerts
-// via /api/dashboard; this route still serves the dismiss actions). Was
-// cold-starting at ~1s on Node. Both handlers are fetch-only.
-export const runtime = 'edge'
-
 export async function GET() {
   const supabase = await createClient()
   const user = await getAuthedUser(supabase)
