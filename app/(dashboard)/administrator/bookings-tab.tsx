@@ -111,6 +111,13 @@ function formatDate(date: string) {
   })
 }
 
+const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+/** Monday-first weekday index (Mon = 0 … Sun = 6). */
+function weekdayIndex(dateStr: string): number {
+  return (new Date(dateStr + 'T00:00:00').getDay() + 6) % 7
+}
+
 const statusColors: Record<string, string> = {
   'Reserved': 'bg-[#0f3d20] text-[#4ade80]',
   'Alternate Room': 'bg-[#0e2f4f] text-[#4285f4]',
@@ -235,11 +242,23 @@ export default function BookingsTab() {
     const wa = a.weekly_room_bookings?.[0]
     const wb = b.weekly_room_bookings?.[0]
     if (!wa || !wb) return 0
-    const dayA = (new Date(wa.start_date + 'T00:00:00').getDay() + 6) % 7
-    const dayB = (new Date(wb.start_date + 'T00:00:00').getDay() + 6) % 7
+    const dayA = weekdayIndex(wa.start_date)
+    const dayB = weekdayIndex(wb.start_date)
     if (dayA !== dayB) return dayA - dayB
     return wa.start_time.localeCompare(wb.start_time)
   })
+
+  // Group the already day-of-week-sorted list so each weekday's bookings sit
+  // under their own heading instead of running together (issue #27).
+  const weeklyByDay: { day: string; items: WeeklyBooking[] }[] = []
+  for (const b of sortedWeekly) {
+    const w = b.weekly_room_bookings?.[0]
+    if (!w) continue
+    const label = WEEKDAY_LABELS[weekdayIndex(w.start_date)]
+    const group = weeklyByDay[weeklyByDay.length - 1]
+    if (group && group.day === label) group.items.push(b)
+    else weeklyByDay.push({ day: label, items: [b] })
+  }
 
   return (
     <div className="space-y-4">
@@ -471,11 +490,14 @@ export default function BookingsTab() {
             bookings={weekly}
             onBookingClick={(b) => setEditingWeekly(b)}
           />
-          <div className="space-y-3">
+          <div className="space-y-6">
           {weekly.length === 0 ? (
             <p className="text-[#6a96bb] text-sm">No weekly room bookings found.</p>
           ) : (
-            sortedWeekly.map(b => {
+            weeklyByDay.map(group => (
+              <div key={group.day} className="space-y-3">
+                <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6a96bb]">{group.day}</h3>
+                {group.items.map(b => {
               const w = b.weekly_room_bookings?.[0]
               if (!w) return null
               return (
@@ -523,7 +545,9 @@ export default function BookingsTab() {
                   </div>
                 </div>
               )
-            })
+                })}
+              </div>
+            ))
           )}
           </div>
         </div>
