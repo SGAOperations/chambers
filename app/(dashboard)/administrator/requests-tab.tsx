@@ -6,6 +6,7 @@ import DenyModal from './deny-modal'
 import { Skeleton } from '@/app/_components/skeleton'
 import ScopeLabel from '@/app/_components/scope-label'
 import type { BookingScope, Division } from '@/lib/booking-scope'
+import { usePendingActionsWatch } from '../pending-actions-watch'
 
 function RequestsTabSkeleton() {
   const card = (wide: boolean) => (
@@ -111,6 +112,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   const [requests, setRequests] = useState<RoomRequest[]>([])
   const [revisions, setRevisions] = useState<RevisionRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const { isDanger, registerOrigin } = usePendingActionsWatch()
   const [confirmingDenial, setConfirmingDenial] = useState<string | null>(null)
   const [denyingRequest, setDenyingRequest] = useState<string | null>(null)
   const [fulfillingRequest, setFulfillingRequest] = useState<{
@@ -160,10 +162,14 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
         <div className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[#6a96bb]">Revision Requests</h3>
           {revisions.map(rv => (
-            <div key={rv.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm space-y-3">
+            <div
+              key={rv.id}
+              ref={registerOrigin(rv.id)}
+              className={`border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm space-y-3 ${isDanger(rv.id) ? 'pa-row-danger' : ''}`}
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="font-semibold text-[#f0f6ff]">{rv.bookings?.bodies?.name || 'Unknown Body'}</span>
+                  <span className="font-semibold text-[#f0f6ff] pa-row-title">{rv.bookings?.bodies?.name || 'Unknown Body'}</span>
                   <span className="mx-2 text-[#1e5080]">·</span>
                   <span className="text-sm text-[#93b8d8]">{rv.bookings?.type === 'One-Time Room' ? 'One-Time/Multiple Room' : rv.bookings?.type}</span>
                 </div>
@@ -217,14 +223,18 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
           {filteredRequests.length === 0 ? (
             <p className="text-sm text-[#6a96bb]">No requests match this filter.</p>
           ) : filteredRequests.map(r => (
-        <div key={r.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm space-y-3">
+        <div
+          key={r.id}
+          ref={registerOrigin(r.id)}
+          className={`border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm space-y-3 ${isDanger(r.id) ? 'pa-row-danger' : ''}`}
+        >
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
               <ScopeLabel
                 row={r}
                 linkedBodies={(r.room_request_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))}
-                className="font-semibold text-[#f0f6ff]"
+                className="font-semibold text-[#f0f6ff] pa-row-title"
               />
               <span className="mx-2 text-[#1e5080]">·</span>
               <span className="text-sm text-[#93b8d8]">{r.type === 'One-Time Room' ? 'One-Time/Multiple Room' : r.type}</span>

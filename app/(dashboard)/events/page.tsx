@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import EventsGuard from '../eventsguard'
 import { Skeleton } from '@/app/_components/skeleton'
+import { usePendingActionsWatch } from '../pending-actions-watch'
 
 interface EventBooking {
   id: string
@@ -120,6 +121,7 @@ function BookingDetails({ booking }: { booking: EventBooking }) {
 export default function EventsPage() {
   const [bookings, setBookings] = useState<EventBooking[]>([])
   const [loading, setLoading] = useState(true)
+  const { isDanger, registerOrigin } = usePendingActionsWatch()
   const [checklist, setChecklist] = useState<Record<string, { event_management_form: boolean; engage_form: boolean }>>({})
 
   useEffect(() => {
@@ -208,12 +210,16 @@ export default function EventsPage() {
             {bookings.map(b => {
               const steps = checklist[b.id] ?? { event_management_form: false, engage_form: false }
               return (
-                <div key={b.id} className="border border-[#1e5080] rounded-xl bg-[#184073] shadow-sm overflow-hidden">
+                <div
+                  key={b.id}
+                  ref={registerOrigin(b.id)}
+                  className={`border border-[#1e5080] rounded-xl bg-[#184073] shadow-sm overflow-hidden ${isDanger(b.id) ? 'pa-row-danger' : ''}`}
+                >
                   {/* Header */}
                   <div className="p-5 space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-semibold text-[#f0f6ff]">{b.bodies?.name}</p>
+                        <p className="font-semibold text-[#f0f6ff] pa-row-title">{b.bodies?.name}</p>
                         <p className="text-sm text-[#93b8d8]">{b.purpose}</p>
                         {b.users?.full_name && (
                           <p className="text-xs text-[#6a96bb] mt-0.5">Requested by {b.users.full_name}</p>

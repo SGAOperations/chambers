@@ -6,7 +6,10 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import AuthGuard from './authguard'
 import SettingsModal, { type Settings as SettingsData } from './settings-modal'
-import { CountsContext, EMPTY_COUNTS, type Counts } from './counts-context'
+import { CountsContext, EMPTY_COUNTS, paBadgeClass, type Counts } from './counts-context'
+import PendingActionsPopover from './pending-actions-popover'
+import { PendingActionsWatchContext } from './pending-actions-watch'
+import type { OriginTab } from '@/lib/pending-actions'
 import { getAuthedUser } from '@/lib/auth'
 import { loadIdentity, clearIdentity } from '@/lib/identity'
 import type { AlertRow } from '@/lib/dashboard-data'
@@ -41,6 +44,138 @@ export default function DashboardLayout({
   const supabase = useMemo(() => createClient(), [])
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // --- Pending-actions "danger idling" cascade (issue #38 #5) -----------------
+  // One IntersectionObserver over two kinds of registered element:
+  //   [data-pa-origin]  a tab row (level 3 indicator -- its title flashes)
+  //   [data-pa-tab]     an Administrator tab badge (level 2 indicator)
+  // The sidebar total (level 1) settles static while any level-2/3 danger
+  // indicator is on screen; a tab badge settles static while one of its danger
+  // rows is on screen.
+  const dangerActions = useMemo(
+    () => counts.actions.filter(a => a.severity === 'danger'),
+    [counts.actions]
+  )
+  const dangerOriginIds = useMemo(
+    () => new Set(dangerActions.map(a => a.originId)),
+    [dangerActions]
+  )
+
+  // Visible elements, held as state so idle flags derive during render (no
+  // setState inside the observer effect).
+  const [visibleOriginIds, setVisibleOriginIds] = useState<Set<string>>(() => new Set())
+  const [visibleTabs, setVisibleTabs] = useState<Set<string>>(() => new Set())
+  const paEls = useRef<Map<string, HTMLElement>>(new Map())
+  const paObserver = useRef<IntersectionObserver | null>(null)
+  const paCallbacks = useRef<Map<string, (el: HTMLElement | null) => void>>(new Map())
+
+  const totalIsIdle = useMemo(
+    () =>
+      dangerActions.some(
+        a => visibleOriginIds.has(a.originId) || visibleTabs.has(a.originTab)
+      ),
+    [dangerActions, visibleOriginIds, visibleTabs]
+  )
+
+  const tabBadgeIsIdle = useCallback(
+    (tab: OriginTab) =>
+      dangerActions.some(a => a.originTab === tab && visibleOriginIds.has(a.originId)),
+    [dangerActions, visibleOriginIds]
+  )
+
+  useEffect(() => {
+    const io = new IntersectionObserver(
+      entries => {
+        const originDelta: [string, boolean][] = []
+        const tabDelta: [string, boolean][] = []
+        for (const e of entries) {
+          const el = e.target as HTMLElement
+          if (el.dataset.paOrigin) originDelta.push([el.dataset.paOrigin, e.isIntersecting])
+          else if (el.dataset.paTab) tabDelta.push([el.dataset.paTab, e.isIntersecting])
+        }
+        if (originDelta.length) {
+          setVisibleOriginIds(prev => {
+            const next = new Set(prev)
+            for (const [id, on] of originDelta) {
+              if (on) next.add(id)
+              else next.delete(id)
+            }
+            return next
+          })
+        }
+        if (tabDelta.length) {
+          setVisibleTabs(prev => {
+            const next = new Set(prev)
+            for (const [t, on] of tabDelta) {
+              if (on) next.add(t)
+              else next.delete(t)
+            }
+            return next
+          })
+        }
+      },
+      { threshold: 0.01 }
+    )
+    paObserver.current = io
+    for (const el of paEls.current.values()) io.observe(el)
+    return () => {
+      io.disconnect()
+      paObserver.current = null
+    }
+  }, [])
+
+  // Stable per-key ref callback that (un)observes the element and drops it from
+  // the visible set when it unmounts. `attr` is 'paOrigin' or 'paTab'.
+  const makeRegister = useCallback(
+    (attr: 'paOrigin' | 'paTab', setVisible: React.Dispatch<React.SetStateAction<Set<string>>>) =>
+      (key: string) => {
+        const cacheKey = `${attr}:${key}`
+        let cb = paCallbacks.current.get(cacheKey)
+        if (!cb) {
+          cb = (el: HTMLElement | null) => {
+            const prev = paEls.current.get(cacheKey)
+            if (prev && prev !== el) {
+              paObserver.current?.unobserve(prev)
+              paEls.current.delete(cacheKey)
+              setVisible(prevSet => {
+                if (!prevSet.has(key)) return prevSet
+                const next = new Set(prevSet)
+                next.delete(key)
+                return next
+              })
+            }
+            if (el) {
+              el.dataset[attr] = key
+              paEls.current.set(cacheKey, el)
+              paObserver.current?.observe(el)
+            }
+          }
+          paCallbacks.current.set(cacheKey, cb)
+        }
+        return cb
+      },
+    []
+  )
+
+  const registerOrigin = useMemo(
+    () => makeRegister('paOrigin', setVisibleOriginIds),
+    [makeRegister]
+  )
+  const registerTabBadge = useMemo(
+    () => (tab: OriginTab) => makeRegister('paTab', setVisibleTabs)(tab),
+    [makeRegister]
+  )
+
+  const paWatchValue = useMemo(
+    () => ({
+      isDanger: (id: string) => dangerOriginIds.has(id),
+      registerOrigin,
+      registerTabBadge,
+      totalIsIdle,
+      tabBadgeIsIdle,
+    }),
+    [dangerOriginIds, registerOrigin, registerTabBadge, totalIsIdle, tabBadgeIsIdle]
+  )
 
   // One call for the whole shell: pending-action counts (admins) + this user's
   // alerts. Fired on mount in parallel with the auth check -- it authenticates
@@ -245,14 +380,14 @@ export default function DashboardLayout({
       </button>
 
       <div className="flex h-screen">
-        <nav className={`fixed inset-y-0 left-0 z-40 w-56 bg-[#0a1628] flex flex-col flex-shrink-0 transition-transform duration-300 md:relative md:translate-x-0 md:inset-auto md:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <nav className={`fixed inset-y-0 left-0 z-40 w-56 bg-[#0a1628] flex flex-col flex-shrink-0 transition-transform duration-300 md:relative md:translate-x-0 md:inset-auto md:z-30 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           {/* Brand */}
           <div className="px-5 py-5 border-b border-white/10">
             <div className="flex items-baseline gap-1.5">
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.13.1</p>
+            <p className="text-slate-600 text-xs mt-1">v1.13.2</p>
             {userName && (
               <div className="flex items-start justify-between mt-2">
                 <p className="text-slate-500 text-xs italic">{getGreeting()},<br />{userName}</p>
@@ -282,11 +417,14 @@ export default function DashboardLayout({
           {/* Total badge + Sign out */}
           <div className="px-3 py-4 border-t border-white/10 space-y-1">
             {isAdmin && counts.total > 0 && (
-              <div className="flex items-center justify-between px-4 py-2">
-                <span className="text-xs text-slate-500">Pending Actions</span>
-                <span className="bg-[#c8102e] text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
-                  {counts.total}
-                </span>
+              <div className="relative group z-50">
+                <div className="flex items-center justify-between px-4 py-2 cursor-default">
+                  <span className="text-xs text-slate-500">Pending Actions</span>
+                  <span className={paBadgeClass(counts.severity, totalIsIdle)}>{counts.total}</span>
+                </div>
+                <div className="absolute left-0 bottom-full z-50 hidden pb-2 group-hover:block group-focus-within:block">
+                  <PendingActionsPopover actions={counts.actions} />
+                </div>
               </div>
             )}
             <button
@@ -311,7 +449,9 @@ export default function DashboardLayout({
               instead of the whole app staying blank during the auth check. */}
           <AuthGuard>
             <CountsContext.Provider value={countsValue}>
-              {children}
+              <PendingActionsWatchContext.Provider value={paWatchValue}>
+                {children}
+              </PendingActionsWatchContext.Provider>
             </CountsContext.Provider>
           </AuthGuard>
         </main>

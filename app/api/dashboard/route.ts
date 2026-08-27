@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { getAuthedUser } from '@/lib/auth'
-import { fetchPendingCounts, fetchUserAlerts, type Counts } from '@/lib/dashboard-data'
+import { fetchUserAlerts } from '@/lib/dashboard-data'
+import { fetchPendingActions, type PendingActionsResult } from '@/lib/pending-actions'
 
 // One call for the dashboard shell -- admin pending-action counts (null for
 // non-admins) plus the caller's alerts. Replaces the separate
@@ -25,7 +26,7 @@ export async function GET() {
   const isAdmin = !!user.app_metadata?.is_admin
 
   const [counts, alerts] = await Promise.all([
-    isAdmin ? fetchPendingCounts(supabase) : Promise.resolve<Counts | null>(null),
+    isAdmin ? fetchPendingActions(adminSupabase) : Promise.resolve<PendingActionsResult | null>(null),
     fetchUserAlerts(adminSupabase, user.id),
   ])
 
