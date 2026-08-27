@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import AdminGuard from '../adminguard'
 import { useCounts, paBadgeClass, severityOf } from '../counts-context'
+import { usePendingActionsWatch } from '../pending-actions-watch'
 import RequestsTab from './requests-tab'
 import CancellationsTab from './cancellations-tab'
 import BookingsTab from './bookings-tab'
@@ -16,6 +17,7 @@ export default function AdministratorPage() {
   // Shared with the layout's sidebar badge instead of refetching the same
   // endpoint on every Administrator page load.
   const { counts, refreshCounts } = useCounts()
+  const { registerTabBadge, tabBadgeIsIdle } = usePendingActionsWatch()
 
   // Actions whose origin is this tab, so the badge count + colour match the
   // sidebar total and its hover breakdown (issue #38).
@@ -45,7 +47,16 @@ export default function AdministratorPage() {
               {(() => {
                 const acts = tabActions(tab)
                 if (acts.length === 0) return null
-                return <span className={paBadgeClass(severityOf(acts))}>{acts.length}</span>
+                const sev = severityOf(acts)
+                const originTab = tab as 'Requests' | 'Cancellations'
+                return (
+                  <span
+                    ref={registerTabBadge(originTab)}
+                    className={paBadgeClass(sev, sev === 'danger' && tabBadgeIsIdle(originTab))}
+                  >
+                    {acts.length}
+                  </span>
+                )
               })()}
             </button>
           ))}

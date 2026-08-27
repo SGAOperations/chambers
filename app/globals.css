@@ -102,10 +102,10 @@ option {
   animation: pa-dot-pulse 1.1s ease-in-out infinite;
 }
 
-/* A danger row's title pulses red on its tab. */
+/* A danger row's title pulses red <-> white on its tab. */
 @keyframes pa-title-flash {
   0%, 49% { color: var(--red); }
-  50%, 100% { color: #ff6b6b; }
+  50%, 100% { color: #ffffff; }
 }
 .pa-row-danger .pa-row-title {
   animation: pa-title-flash 1.1s linear infinite;

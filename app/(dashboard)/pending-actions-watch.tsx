@@ -1,25 +1,41 @@
 'use client'
 
 import { createContext, useContext } from 'react'
+import type { OriginTab } from '@/lib/pending-actions'
 
 /**
- * Bridges the sidebar total (rendered by the layout) and the tab rows that are a
- * danger action's origin (issue #38 #4/#5):
+ * The danger-idling cascade (issue #38 #5). Three indicators, most specific last:
  *
- *  - `isDanger(originId)` -- true when that row has a danger-severity action, so
- *    a tab can flash its title (`pa-row-danger` + `pa-row-title`).
- *  - `registerOrigin(originId)` -- a stable ref callback the tab spreads onto the
- *    row element; the layout observes it and, while any danger row is on screen,
- *    settles the sidebar total from flashing to static red.
+ *   1. sidebar total        -- flashes unless a more specific danger indicator
+ *                              (an Administrator tab badge, or a row title) is
+ *                              on screen.
+ *   2. Administrator tab    -- flashes unless one of its danger rows' flashing
+ *      badge (Requests /       titles is on screen.
+ *      Cancellations)
+ *   3. row title            -- always flashes while the row's action is danger.
+ *
+ * The layout owns one IntersectionObserver over the registered elements and
+ * exposes the resolved idle state for levels 1 and 2.
  */
 export interface PendingActionsWatch {
+  /** Row's action is danger -> flash its title. */
   isDanger: (originId: string) => boolean
+  /** Ref callback for a tab row (level 3). */
   registerOrigin: (originId: string) => (el: HTMLElement | null) => void
+  /** Ref callback for an Administrator tab badge (level 2). */
+  registerTabBadge: (tab: OriginTab) => (el: HTMLElement | null) => void
+  /** Level 1: the sidebar total should sit static rather than flash. */
+  totalIsIdle: boolean
+  /** Level 2: this tab's badge should sit static rather than flash. */
+  tabBadgeIsIdle: (tab: OriginTab) => boolean
 }
 
 export const PendingActionsWatchContext = createContext<PendingActionsWatch>({
   isDanger: () => false,
   registerOrigin: () => () => {},
+  registerTabBadge: () => () => {},
+  totalIsIdle: false,
+  tabBadgeIsIdle: () => false,
 })
 
 export const usePendingActionsWatch = () => useContext(PendingActionsWatchContext)
