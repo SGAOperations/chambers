@@ -255,7 +255,11 @@ export function flattenMyRooms(data: MyRoomsResponse, today: string): FlatBookin
         bookingId: b.id,
         type: 'Weekly Room',
         bodyName: b.bodies?.name || '',
-        purpose: b.purpose,
+        // `??` rather than the `||` used by the fields below: an occurrence may
+        // deliberately override the series purpose, and only null means inherit.
+        // Empty strings are normalised to null when written (see the weekly PATCH
+        // handler), so they cannot reach here and read as an intentional blank.
+        purpose: occ.purpose ?? b.purpose,
         location: occ.room_name || w.room_name,
         date: occ.occurrence_date,
         startTime: occ.start_time || w.start_time,

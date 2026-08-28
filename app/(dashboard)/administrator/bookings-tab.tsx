@@ -77,6 +77,12 @@ interface WeeklyBooking extends BookingBase {
         status: string | null
         reservation_code: string | null
         senate_type: string | null
+        /** Overrides the booking's purpose for this date; null inherits (issue #55). */
+        purpose: string | null
+        /** Overrides the booking's hidden flag; null inherits (issue #55). */
+        hidden: boolean | null
+        /** Marks this single occurrence as an event. Authoritative, not an override (issue #55). */
+        is_event: boolean
     }[]
   }[] | null
 }
