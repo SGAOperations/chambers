@@ -1,8 +1,23 @@
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUser } from '@/lib/auth'
 import { sessionDatesOf, minDate, subtractDays, settingsFromRow, type SettingsRow } from '@/lib/pending-actions'
+
+// The Events tab is "every event this semester", for the two roles allowed to see
+// it. RLS cannot express that: bookings_select_admin_or_member grants a row to
+// admins and to members of the owning body, and IEMS is neither -- it is an
+// app-level role the policy has no concept of. An IEMS user was therefore served
+// only the events belonging to bodies they happen to sit on (1 of 4, on current
+// data) and read that as "there are no events".
+//
+// So the listing runs as service role, gated by the explicit admin-or-IEMS check
+// below rather than by RLS. Same shape as /api/dashboard's alerts read.
+const adminSupabase = createAdminClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function GET() {
   const supabase = await createClient()
@@ -24,7 +39,7 @@ export async function GET() {
   if (!activeSemester) return NextResponse.json({ bookings: [] })
 
   const [{ data: bookings, error }, { data: settingsRow }] = await Promise.all([
-    supabase
+    adminSupabase
       .from('bookings')
       .select(`
         id, purpose, type, created_at,
