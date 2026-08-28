@@ -111,6 +111,15 @@ option {
   animation: pa-title-flash 1.1s linear infinite;
 }
 
+/* A missing form's own label flashes red <-> white directly (issue #45) --
+   unlike .pa-row-title above, this isn't gated by a .pa-row-danger ancestor:
+   one form on a booking can be overdue on its own while the row's other
+   action (or no action at all) is not, so it's applied per-label instead of
+   cascading from the row. */
+.pa-text-danger {
+  animation: pa-title-flash 1.1s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pa-badge-danger {
     animation: none;
@@ -120,4 +129,5 @@ option {
   }
   .pa-dot-danger { animation: none; }
   .pa-row-danger .pa-row-title { animation: none; color: var(--red); }
+  .pa-text-danger { animation: none; color: var(--red); }
 }
