@@ -11,6 +11,16 @@ import {
 interface CalendarViewProps {
   bookings: FlatBooking[]
   onSelect: (booking: FlatBooking) => void
+  /**
+   * Today as 'YYYY-MM-DD' in APP_TIME_ZONE, resolved once by the server page.
+   *
+   * Passed in rather than read from `new Date()` here: this component renders
+   * during SSR, and the highlighted cell plus the month the calendar opens on
+   * both derive from it. Reading the runtime clock would make the server (UTC)
+   * and the browser disagree for the last hours of every Eastern day -- and on
+   * the 1st of a month that means rendering a different month on each side.
+   */
+  today: string
 }
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -20,15 +30,12 @@ function toDateKey(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 }
 
-function todayKey() {
-  const now = new Date()
-  return toDateKey(now.getFullYear(), now.getMonth(), now.getDate())
-}
+export default function CalendarView({ bookings, onSelect, today }: CalendarViewProps) {
+  const todayKey = () => today
 
-export default function CalendarView({ bookings, onSelect }: CalendarViewProps) {
   const [cursor, setCursor] = useState(() => {
-    const now = new Date()
-    return { year: now.getFullYear(), month: now.getMonth() }
+    const [year, month] = today.split('-').map(Number)
+    return { year, month: month - 1 }
   })
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
@@ -67,9 +74,12 @@ export default function CalendarView({ bookings, onSelect }: CalendarViewProps) 
   }
 
   const goToToday = () => {
-    const now = new Date()
-    setCursor({ year: now.getFullYear(), month: now.getMonth() })
-    setSelectedDate(todayKey())
+    // Derived from the same `today` the highlighted cell uses, so the jump always
+    // lands on the day the calendar is pointing at -- for a viewer outside
+    // Eastern time those were previously two different days.
+    const [year, month] = today.split('-').map(Number)
+    setCursor({ year, month: month - 1 })
+    setSelectedDate(today)
   }
 
   const selectedBookings = selectedDate ? byDate.get(selectedDate) ?? [] : []

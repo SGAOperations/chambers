@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { randomBytes, createHash } from 'crypto'
 import { sendOtpInviteEmail } from '@/lib/emails/otp-invite'
-import { getAuthedUser } from '@/lib/auth'
+import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,7 +21,7 @@ const ROLE_EDITORS = [
 export async function GET() {
   const supabase = await createClient()
 
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -47,7 +47,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const supabase = await createClient()
 
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -121,7 +121,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const supabase = await createClient()
 
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -173,6 +173,33 @@ export async function PATCH(request: Request) {
         iems_role: isSettingIEMS ? body.iems_role : null,
       },
     })
+  }
+
+  // End every session this user holds when their standing changes.
+  //
+  // Not just on revocation: a grant goes through here too, so that whatever they
+  // were carrying is replaced by a token minted under the new role. The cost is a
+  // forced sign-in after a change that happens rarely, and it means there is no
+  // case where someone is walking around with a token that disagrees with the
+  // users row.
+  //
+  // Deliberately after the writes above, so a failure to revoke cannot leave the
+  // role change itself unapplied -- and reported, rather than swallowed, because
+  // an admin who thinks they cut someone off needs to know if they did not.
+  if ('admin_role' in body || 'iems_role' in body || 'is_active' in body) {
+    const { error: revokeError } = await adminSupabase.rpc('revoke_user_sessions', {
+      target: id,
+    })
+    if (revokeError) {
+      console.error('revoke_user_sessions failed:', revokeError)
+      return NextResponse.json(
+        {
+          error:
+            'The role was updated, but their existing sessions could not be ended. They may keep the old access until it expires.',
+        },
+        { status: 500 }
+      )
+    }
   }
 
   if ('full_name' in updateData) {

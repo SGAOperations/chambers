@@ -1,29 +1,23 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { getAuthedUser } from '@/lib/auth'
-import { PageSkeleton } from '@/app/_components/skeleton'
+import { useIdentity } from './identity-context'
 
+/**
+ * Events gate -- admins and IEMS staff. Synchronous for the same reason as
+ * AdminGuard: the identity came down with the document. See ./identity-context.
+ */
 export default function EventsGuard({ children }: { children: React.ReactNode }) {
-  const [checking, setChecking] = useState(true)
+  const { isAdmin, isIEMS } = useIdentity()
   const router = useRouter()
-  const supabase = useMemo(() => createClient(), [])
+  const allowed = isAdmin || isIEMS
 
   useEffect(() => {
-    const checkAccess = async () => {
-      const user = await getAuthedUser(supabase)
-      if (!user || (!user.app_metadata?.is_admin && !user.app_metadata?.iems_role)) {
-        router.push('/my-rooms')
-      } else {
-        setChecking(false)
-      }
-    }
-    checkAccess()
-  }, [])
+    if (!allowed) router.replace('/my-rooms')
+  }, [allowed, router])
 
-  if (checking) return <PageSkeleton />
+  if (!allowed) return null
 
   return <>{children}</>
 }

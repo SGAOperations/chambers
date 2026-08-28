@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import type { AuthedUser } from './auth'
+import { hasLiveAdmin, type AuthedUser } from './auth'
 
 /**
  * Multi-body bookings (issue #19).
@@ -112,7 +112,13 @@ export async function loadScopeContext(
   supabase: SupabaseClient,
   user: AuthedUser
 ): Promise<ScopeContext> {
-  const isAdmin = !!user.app_metadata?.is_admin
+  // hasLiveAdmin rather than reading the claim: ctx.isAdmin is what lets
+  // validateScopeSelection skip the "you hold Leadership in that body" check, so
+  // a stale claim here is a direct route to requesting bookings for bodies you do
+  // not lead. Callers that have not resolved live roles get isAdmin false, which
+  // is correct for the one such caller (my-rooms forces it false anyway) and
+  // fails closed for any future one.
+  const isAdmin = hasLiveAdmin(user)
 
   const { data } = await supabase
     .from('board_memberships')
@@ -444,7 +450,11 @@ export async function requireBookingManager(
 
   const row = data as ScopedRow & { type: string }
 
-  if (user.app_metadata?.is_admin) return { error: null, row }
+  // Admins may manage any booking -- but only on a live-verified role. This
+  // short-circuit is what /api/cancellation-requests and /api/revision-requests
+  // reach, and both of them used to arrive here with a token-derived user, so a
+  // revoked admin could still cancel or revise anyone's booking.
+  if (hasLiveAdmin(user)) return { error: null, row }
 
   const ctx = await loadScopeContext(supabase, user)
 

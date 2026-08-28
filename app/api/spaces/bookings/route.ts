@@ -3,7 +3,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingConfirmedEmail } from '@/lib/emails/space-booking-confirmed'
-import { getAuthedUser } from '@/lib/auth'
+import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
 
 const adminSupabase = createAdminClient(
@@ -49,7 +49,7 @@ function touchesDeadZone(startIso: string, endIso: string): boolean {
 
 export async function GET(request: Request) {
   const supabase = await createClient()
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(request.url)
@@ -100,7 +100,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const supabase = await createClient()
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const rateLimitRes = await checkRateLimit(user.id)
