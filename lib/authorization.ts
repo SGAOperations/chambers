@@ -71,6 +71,10 @@ export async function getAuthedUserWithLiveRoles(
 
   return {
     ...user,
+    // Marks these role fields as re-read from the users table. Shared code that
+    // grants privilege requires this rather than trusting app_metadata, so a
+    // route that forgets to resolve live roles fails closed. See hasLiveAdmin().
+    rolesVerifiedLive: true,
     app_metadata: {
       ...user.app_metadata,
       is_admin: !!profile.admin_role,
