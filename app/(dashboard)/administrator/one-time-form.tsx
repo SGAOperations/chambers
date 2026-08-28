@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { getJson } from '@/lib/fetch-json'
 import TimePicker from './time-picker'
 import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
@@ -100,14 +101,12 @@ export default function OneTimeForm({ bodies, semesters, onClose, onSuccess }: O
   const [requestTypeFilter, setRequestTypeFilter] = useState<'all' | BookingScope>('all')
 
   useEffect(() => {
-    fetch('/api/administrator/requests')
-      .then(r => r.json())
+    getJson<{ requests?: PendingRequest[] }>('/api/administrator/requests', {})
       .then(({ requests }) => {
         setPendingRequests(
           (requests ?? []).filter((r: PendingRequest) => r.status === 'Pending' && r.type === 'One-Time Room')
         )
       })
-      .catch(() => {})
   }, [])
 
   const visibleRequests = pendingRequests

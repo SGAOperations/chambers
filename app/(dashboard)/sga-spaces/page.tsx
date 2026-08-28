@@ -139,6 +139,7 @@ function CalendarSkeleton() {
 export default function SGASpacesPage() {
   const [spaces, setSpaces] = useState<Space[]>([])
   const [spacesLoading, setSpacesLoading] = useState(true)
+  const [spacesError, setSpacesError] = useState(false)
   const [selectedSpaceId, setSelectedSpaceId] = useState<string | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
   const [blackouts, setBlackouts] = useState<Blackout[]>([])
@@ -184,15 +185,39 @@ export default function SGASpacesPage() {
     })
   }, [])
 
-  useEffect(() => {
-    fetch('/api/spaces')
-      .then(r => r.json())
-      .then((data: Space[]) => {
-        setSpaces(data)
-        if (data.length > 0) setSelectedSpaceId(data[0].id)
-      })
-      .finally(() => setSpacesLoading(false))
+  // Handled explicitly rather than via getJson: on this page an empty list is a
+  // meaningful answer ("no rooms configured"), so quietly substituting one for a
+  // failed request would tell the user something untrue.
+  //
+  // Issue #53: /api/spaces returned a transient 401, r.json() resolved happily
+  // with { error: 'Unauthorized' }, that object went into `spaces`, and the page
+  // died on the next spaces.find(). The response shape is now checked before it
+  // is trusted, so a bad response can only ever produce an error state.
+  const loadSpaces = useCallback(async () => {
+    setSpacesLoading(true)
+    setSpacesError(false)
+    try {
+      const res = await fetch('/api/spaces')
+      if (!res.ok) throw new Error(`/api/spaces responded ${res.status}`)
+
+      const data: unknown = await res.json()
+      if (!Array.isArray(data)) throw new Error('/api/spaces did not return a list')
+
+      const list = data as Space[]
+      setSpaces(list)
+      if (list.length > 0) setSelectedSpaceId(prev => prev || list[0].id)
+    } catch (err) {
+      console.error('Failed to load spaces:', err)
+      setSpaces([])
+      setSpacesError(true)
+    } finally {
+      setSpacesLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    loadSpaces()
+  }, [loadSpaces])
 
   // Remaining hours only change when the user books or cancels -- not when the
   // calendar week changes. Keying this off `bookings` refetched it on every week
@@ -277,6 +302,29 @@ export default function SGASpacesPage() {
 
   if (spacesLoading) {
     return <SGASpacesSkeleton />
+  }
+
+  // Distinct from "no rooms configured", which renders the normal empty calendar
+  // below. The failure that prompted this was transient and a reload cleared it,
+  // so the useful thing to offer is another attempt.
+  if (spacesError) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-2xl font-bold text-[#f0f6ff]">SGA Spaces</h1>
+        <div className="border border-[#1e5080] rounded-xl bg-[#184073] p-6 max-w-md">
+          <p className="text-[#f0f6ff] font-medium mb-1">Couldn&apos;t load the spaces</p>
+          <p className="text-sm text-[#93b8d8] mb-4">
+            Something went wrong reaching the server. This is usually temporary.
+          </p>
+          <button
+            onClick={loadSpaces}
+            className="py-2 px-4 bg-[#c8102e] hover:bg-[#a50d26] text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            Try again
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (

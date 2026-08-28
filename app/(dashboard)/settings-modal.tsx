@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { getJson } from '@/lib/fetch-json'
 import { Skeleton } from '@/app/_components/skeleton'
 import { getPrefsForRole, EMAIL_PREF_LABELS, EmailPrefKey } from '@/lib/email-preferences'
 
@@ -57,16 +58,19 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
 
   const loadSettings = () => {
     setLoading(true)
-    fetch('/api/me/settings')
-      .then(r => r.json())
-      .then((data: Settings) => {
+    // null rather than a blank Settings object on failure. Every consumer below
+    // is already guarded on `settings &&`, so null renders as empty sections,
+    // whereas an error body cast to Settings would put undefined into the name
+    // field and the preference toggles and invite the user to save it back.
+    getJson<Settings | null>('/api/me/settings', null)
+      .then(data => {
+        setLoading(false)
+        if (!data) return
         setSettings(data)
         setNameValue(data.full_name ?? '')
         setSelectedBodyId('')
-        setLoading(false)
         onSettingsLoaded?.(data)
       })
-      .catch(() => setLoading(false))
   }
 
   useEffect(() => { if (cachedSettings == null) loadSettings() }, [])

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { getJson } from '@/lib/fetch-json'
 import { createBrowserClient } from '@supabase/ssr'
 import { getAuthedUser } from '@/lib/auth'
 import { Skeleton } from '@/app/_components/skeleton'
@@ -107,9 +108,14 @@ export default function BookingSettingsTab() {
   const [deletePermissionChecked, setDeletePermissionChecked] = useState(false)
 
   useEffect(() => {
-    fetch('/api/administrator/settings')
-      .then(r => r.json())
+    // The stakes here are higher than a blank screen. Every field below falls
+    // back to a hardcoded default when the value is missing, so an error body
+    // would silently populate the form with 0 / 0 / 24 -- and an admin who then
+    // pressed Save would write those over the real booking limits. Failing the
+    // load outright keeps the tab on its skeleton instead.
+    getJson<Record<string, number> | null>('/api/administrator/settings', null)
       .then(data => {
+        if (!data) return
         setMinDaysRoom(data.min_days_advance_room ?? 0)
         setMinDaysTabling(data.min_days_advance_tabling ?? 0)
         setMinHoursSpaces(data.min_hours_advance_spaces ?? 24)

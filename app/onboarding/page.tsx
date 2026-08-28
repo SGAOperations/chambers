@@ -45,6 +45,9 @@ export default function OnboardingPage() {
         .single()
 
       if (!profile?.is_active) {
+        // Global scope deliberately: the account is deactivated, so every
+        // session it holds should end, not only this browser's. See
+        // dashboard-shell for the ordinary 'local' sign-out.
         await supabase.auth.signOut()
         router.push('/')
         return
