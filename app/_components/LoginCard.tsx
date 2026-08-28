@@ -53,6 +53,9 @@ export default function LoginCard() {
       .single()
 
     if (!profile?.is_active) {
+      // Global scope kept deliberately here and below: these mean the account
+      // may not be used at all, so every session it holds should end. An
+      // ordinary sign-out (dashboard-shell) is scoped 'local' instead.
       await supabase.auth.signOut()
       setError('Your account has been deactivated. Please contact an administrator.')
       setLoading(false)
