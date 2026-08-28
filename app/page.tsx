@@ -1,5 +1,23 @@
-import { createClient } from '@/lib/supabase/server'
+import { anonSupabase } from '@/lib/supabase/anon'
 import LoginCard from '@/app/_components/LoginCard'
+
+/**
+ * Regenerate at most once a minute.
+ *
+ * This is the first page every user hits, and it was re-rendering -- and
+ * re-querying -- on every single request, measured at 0.5-1.1s TTFB against
+ * production. Nothing on it is per-user: a comptroller's name, the active
+ * semester, and a booking count, all readable by `anon` under RLS. It was
+ * dynamic only because it built its Supabase client from cookies(), and calling
+ * cookies() opts a route into dynamic rendering whether or not the cookies end
+ * up mattering.
+ *
+ * Behaviour change worth knowing: the fact on the left is picked with
+ * Math.random() at render time, so it now varies per revalidation window rather
+ * than per request. Two people signing in within the same minute see the same
+ * piece of trivia.
+ */
+export const revalidate = 60
 
 type StaticFact = { kind: 'static'; text: string }
 type LiveFact   = { kind: 'live'; label: string; value: number }
@@ -22,19 +40,15 @@ function FactDisplay({ fact }: { fact: Fact }) {
 }
 
 export default async function LoginPage() {
-  const supabase = await createClient()
-
-  const now = new Date()
-  const todayDate = now.toISOString().split('T')[0]           // 'YYYY-MM-DD'
-  const nowTime   = now.toTimeString().split(' ')[0].slice(0, 5) // 'HH:MM'
-
-  // Run all independent queries in parallel
-  const [comptrollerResult, semResult, c1Result, c2Result, c3Result] = await Promise.allSettled([
-    supabase.from('users').select('full_name').eq('admin_role', 'Comptroller').eq('is_active', true).limit(1).single(),
-    supabase.from('semesters').select('id').eq('is_active', true).single(),
-    supabase.from('one_time_room_bookings').select('id', { count: 'exact', head: true }).eq('booking_date', todayDate).lte('start_time', nowTime).gte('end_time', nowTime).eq('status', 'Confirmed'),
-    supabase.from('weekly_room_occurrences').select('id', { count: 'exact', head: true }).eq('occurrence_date', todayDate).lte('start_time', nowTime).gte('end_time', nowTime).eq('status', 'Confirmed'),
-    supabase.from('tabling_sessions').select('id', { count: 'exact', head: true }).eq('session_date', todayDate).lte('start_time', nowTime).gte('end_time', nowTime).eq('status', 'Confirmed'),
+  // Anonymous client, not the cookie-scoped one -- see lib/supabase/anon.ts and
+  // the revalidate note above. Reading as `anon` is also the more correct
+  // reading here: "Bookings this semester" means all of them, whereas the
+  // cookie client would have counted only what the visitor's RLS lets them see,
+  // so a signed-in visitor and a signed-out one saw different numbers for a
+  // figure that is supposed to describe the whole organisation.
+  const [comptrollerResult, semResult] = await Promise.allSettled([
+    anonSupabase.from('users').select('full_name').eq('admin_role', 'Comptroller').eq('is_active', true).limit(1).single(),
+    anonSupabase.from('semesters').select('id').eq('is_active', true).single(),
   ])
 
   // Comptroller name (for static fact #8)
@@ -48,19 +62,13 @@ export default async function LoginPage() {
   const sem = semResult.status === 'fulfilled' ? semResult.value.data : null
   if (sem) {
     try {
-      const { count } = await supabase
+      const { count } = await anonSupabase
         .from('bookings')
         .select('id', { count: 'exact', head: true })
         .eq('semester_id', sem.id)
       if (typeof count === 'number') bookingsThisSemester = count
     } catch {}
   }
-
-  // Active reservations right now
-  let activeNow = 0
-  if (c1Result.status === 'fulfilled' && typeof c1Result.value.count === 'number') activeNow += c1Result.value.count
-  if (c2Result.status === 'fulfilled' && typeof c2Result.value.count === 'number') activeNow += c2Result.value.count
-  if (c3Result.status === 'fulfilled' && typeof c3Result.value.count === 'number') activeNow += c3Result.value.count
 
   // Build fact pool
   const pool: Fact[] = [
@@ -77,9 +85,13 @@ export default async function LoginPage() {
     ...(bookingsThisSemester !== null && bookingsThisSemester > 0
       ? [{ kind: 'live' as const, label: 'Bookings this semester', value: bookingsThisSemester }]
       : []),
-    ...(activeNow > 0
-      ? [{ kind: 'live' as const, label: 'Active reservations right now', value: activeNow }]
-      : []),
+    // An "Active reservations right now" fact used to live here. It filtered on
+    // status 'Confirmed', which exists in none of the three tables it queried --
+    // the real vocabulary is Reserved / Tentative / Virtual / Alternate Time /
+    // Waitlisted / Unavailable / Cancelled -- so its count was always 0 and the
+    // fact, gated on `> 0`, could never render. It also compared Boston booking
+    // times against a UTC clock. Its three queries ran on every load of the
+    // entry page to produce nothing, so they are gone rather than repaired.
   ]
 
   // Fisher-Yates shuffle, pick first 1
