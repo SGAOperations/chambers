@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import CancelModal from './cancel-modal'
 import RevisionModal from './revision-modal'
 import BookingDetailModal from './booking-detail-modal'
@@ -11,6 +11,7 @@ import {
   type FlatBooking,
   type MyRoomsResponse,
   flattenMyRooms,
+  isWithinDays,
   statusColors,
   statusBarColors,
   statusTextColors,
@@ -72,27 +73,26 @@ function MyRoomsSkeleton() {
 type Filter = 1 | 3 | 7
 type ViewMode = 'list' | 'calendar'
 
-function isWithinDays(dateStr: string, days: number) {
-  const now = new Date()
-  now.setHours(0, 0, 0, 0)
-  const target = new Date(dateStr + 'T00:00:00')
-  const diff = (target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-  return diff >= 0 && diff < days
-}
-
 export default function MyRoomsClient({
-  initialData,
+  initialBookings,
+  initialSenateTypePreferences,
+  today,
 }: {
-  initialData: MyRoomsResponse
+  initialBookings: FlatBooking[]
+  initialSenateTypePreferences: Record<string, boolean>
+  today: string
 }) {
   const [filter, setFilter] = useState<Filter>(7)
-  const [all, setAll] = useState<FlatBooking[]>([])
-  const [loading, setLoading] = useState(true)
+  // Seeded from the server render rather than fetched on mount, so the first
+  // paint is the real list instead of a skeleton that swaps out a frame later.
+  const [all, setAll] = useState<FlatBooking[]>(initialBookings)
+  const [loading, setLoading] = useState(false)
   const [detailBooking, setDetailBooking] = useState<FlatBooking | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
-  const [senateTypePreferences, setSenateTypePreferences] = useState<Record<string, boolean>>({})
+  const [senateTypePreferences, setSenateTypePreferences] =
+    useState<Record<string, boolean>>(initialSenateTypePreferences)
   const [cancellingBooking, setCancellingBooking] = useState<{
     id: string
     type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -111,7 +111,9 @@ export default function MyRoomsClient({
     location: string
   } | null>(null)
 
-  const fetchBookings = async () => {
+  // Memoised on `today` so the listener registered below is not re-bound on every
+  // render, and so it can never capture a stale boundary.
+  const fetchBookings = useCallback(async () => {
     setLoading(true)
     // /api/my-rooms resolves visibility and per-booking manage rights across the full scope, so
     // this needs no second round trip to auth + board_memberships.
@@ -119,34 +121,24 @@ export default function MyRoomsClient({
     const data: MyRoomsResponse = await res.json()
 
     setSenateTypePreferences(data.senateTypePreferences || {})
-    setAll(flattenMyRooms(data))
+    // Same `today` the server filtered against. A tab left open across midnight
+    // keeps yesterday's boundary until the next navigation, which is the same
+    // behaviour this page had when it derived the date once on mount.
+    setAll(flattenMyRooms(data, today))
     setLoading(false)
-  }
-
-  // Seeded from the server render -- no fetch on mount. This runs in an effect
-  // rather than as the useState initial value on purpose: flattenMyRooms drops
-  // anything before "today", and "today" is the *viewer's* local date. Computing
-  // that during the server render would use the function's UTC clock, so a user
-  // in EDT loading the page after 8pm would be served a list built for tomorrow
-  // and React would hydrate onto rows that don't match. Deriving it on the client
-  // keeps one clock in play. The cost is a frame of skeleton, not a round trip.
-  useEffect(() => {
-    setSenateTypePreferences(initialData.senateTypePreferences || {})
-    setAll(flattenMyRooms(initialData))
-    setLoading(false)
-  }, [initialData])
+  }, [today])
 
   useEffect(() => {
     // The Senate session-type preference lives in the Settings modal, which can
     // be opened over this page; refetch so a change there is reflected here.
     window.addEventListener('chambers:senate-prefs-updated', fetchBookings)
     return () => window.removeEventListener('chambers:senate-prefs-updated', fetchBookings)
-  }, [])
+  }, [fetchBookings])
 
   const passesSenateFilter = (b: FlatBooking) =>
     b.bodyName !== 'Senate' || !b.senateType || (senateTypePreferences[b.senateType] ?? true)
 
-  const filteredUpcoming = all.filter(b => isWithinDays(b.date, filter) && passesSenateFilter(b))
+  const filteredUpcoming = all.filter(b => isWithinDays(b.date, filter, today) && passesSenateFilter(b))
 
   const statusOptions = useMemo(
     () => ['All', ...Array.from(new Set(all.map(b => b.status))).sort()],
@@ -285,7 +277,7 @@ export default function MyRoomsClient({
             {visibleAll.length === 0 ? (
               <p className="text-[#6a96bb] text-sm">No bookings match your filters.</p>
             ) : viewMode === 'calendar' ? (
-              <CalendarView bookings={visibleAll} onSelect={setDetailBooking} />
+              <CalendarView bookings={visibleAll} onSelect={setDetailBooking} today={today} />
             ) : (() => {
               // Grouped by scope, not body: a divisional booking belongs to its division and a
               // multi booking stands alone, since in neither case does the owning body decide

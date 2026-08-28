@@ -138,6 +138,61 @@ export const senateTypeBadgeColors: Record<string, string> = {
 }
 export const DEFAULT_SENATE_BADGE = 'bg-[#1e3a5f] text-[#93b8d8] border border-[#2d5f8f]/40'
 
+/**
+ * The timezone every booking date is expressed in.
+ *
+ * `booking_date`, `occurrence_date` and `session_date` are all DATE columns --
+ * no time, no offset. They mean a calendar day in Boston, because that is where
+ * the rooms are. "Today" therefore has to mean Boston's today, not the server's
+ * and not the viewer's: a student on co-op in California at 10pm PT is still
+ * looking at Northeastern's schedule, and should see the same day their peers on
+ * campus see.
+ *
+ * Pinning it also makes the value reproducible, which is what lets this page be
+ * server-rendered at all -- see todayInAppZone().
+ */
+export const APP_TIME_ZONE = 'America/New_York'
+
+/**
+ * Today's date in APP_TIME_ZONE, as 'YYYY-MM-DD'.
+ *
+ * Deliberately not `new Date()` + getFullYear()/getMonth()/getDate(), which read
+ * the *runtime's* timezone: UTC inside a Vercel function, the viewer's zone in
+ * the browser. Those disagree for the last few hours of every Eastern day -- at
+ * 9pm EDT the server's clock has already rolled to tomorrow -- so a list filtered
+ * on the server would not match the one React computed while hydrating, and the
+ * server HTML would be thrown away and redrawn.
+ *
+ * 'en-CA' is the shortest route to ISO-ordered output from Intl.
+ */
+export function todayInAppZone(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now)
+}
+
+/**
+ * Whole days from one 'YYYY-MM-DD' to another; negative when `to` is earlier.
+ *
+ * Anchored at UTC noon rather than subtracting Date objects built from local
+ * midnight: on a DST boundary two local midnights are 23 or 25 hours apart, and
+ * dividing that by 86,400,000 lands on 0.958 or 1.04 rather than a whole day.
+ */
+export function dayDiff(from: string, to: string): number {
+  const [y1, m1, d1] = from.split('-').map(Number)
+  const [y2, m2, d2] = to.split('-').map(Number)
+  return (Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000
+}
+
+/** True when `dateStr` falls in the window [today, today + days). */
+export function isWithinDays(dateStr: string, days: number, today: string): boolean {
+  const diff = dayDiff(today, dateStr)
+  return diff >= 0 && diff < days
+}
+
 export function formatTime(time: string) {
   const [h, m] = time.split(':')
   const hour = parseInt(h)
@@ -163,7 +218,7 @@ export function formatDate(date: string) {
  * Both must produce byte-identical rows or React would hydrate onto a different
  * list than the server drew.
  */
-export function flattenMyRooms(data: MyRoomsResponse): FlatBooking[] {
+export function flattenMyRooms(data: MyRoomsResponse, today: string): FlatBooking[] {
     const flat: FlatBooking[] = []
 
     for (const b of data.oneTimeBookings || []) {
@@ -244,9 +299,8 @@ export function flattenMyRooms(data: MyRoomsResponse): FlatBooking[] {
 
   flat.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const futureOnly = flat.filter(b => new Date(b.date + 'T00:00:00') >= today)
-
-  return futureOnly
+  // `today` is supplied rather than read from the clock so the server and the
+  // hydrating client filter against the same boundary. Both sides are
+  // 'YYYY-MM-DD', so lexicographic comparison is chronological comparison.
+  return flat.filter(b => b.date >= today)
 }
