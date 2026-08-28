@@ -49,7 +49,7 @@ export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
   const [{ data: profile }, { data: memberships }] = await Promise.all([
     supabase
       .from('users')
-      .select('is_active, has_completed_onboarding, full_name')
+      .select('is_active, has_completed_onboarding, full_name, admin_role, iems_role')
       .eq('id', user.id)
       .single(),
     supabase.from('board_memberships').select('role').eq('user_id', user.id),
@@ -67,8 +67,26 @@ export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
       isLeadership: (memberships ?? []).some(
         (m: { role: string }) => m.role === 'Leadership'
       ),
-      isAdmin: !!user.app_metadata?.is_admin,
-      isIEMS: !!user.app_metadata?.iems_role,
+      // Read from `users`, not from the JWT's app_metadata.
+      //
+      // Both describe the same fact, but app_metadata is a copy stamped into the
+      // access token when it was issued. Granting or revoking a role updates the
+      // users row and the auth metadata, and neither touches a token already in
+      // someone's browser -- so an admin whose role was revoked kept passing
+      // `app_metadata.is_admin` until their token expired (an hour by default) or
+      // they signed out. The users row is the fact itself, and this query is
+      // already being made, so consulting it costs nothing.
+      //
+      // `is_admin` in the token is exactly `admin_role != null` (see the sync in
+      // app/api/administrator/users/route.ts), so this is the same predicate read
+      // from the authoritative side.
+      //
+      // NOTE: this closes the gap for what the dashboard *renders*. The admin API
+      // routes and the SQL is_admin() used by RLS both still read the token, so a
+      // revoked admin can continue to call them until it expires. See the PR
+      // discussion -- that needs its own change.
+      isAdmin: !!profile.admin_role,
+      isIEMS: !!profile.iems_role,
     },
   }
 }
