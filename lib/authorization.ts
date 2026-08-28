@@ -43,11 +43,31 @@ export async function getAuthedUserWithLiveRoles(
   // which users_select_admin_or_own already permits without admin rights.
   const { data: profile } = await supabase
     .from('users')
-    .select('admin_role, iems_role, is_active')
+    .select('admin_role, iems_role, is_active, sessions_revoked_at')
     .eq('id', user.id)
     .single()
 
   if (!profile || !profile.is_active) return null
+
+  // Refuse a token minted before this user's sessions were revoked.
+  //
+  // revoke_user_sessions() deletes the session rows, which stops the refresh --
+  // but the access token already in their browser is ES256 and verified locally
+  // against a cached JWKS, so it keeps passing until it expires. Without this
+  // comparison, revoking someone would take up to another hour to bite.
+  //
+  // `iat` is whole seconds, so the stamp is floored before comparing, and the
+  // test is strict: a token minted in the same second as the revocation is let
+  // through. That avoids rejecting the fresh token of someone who signs straight
+  // back in, and the window it opens is one second wide against an attacker who
+  // would have had to re-authenticate inside it -- at which point they hold a
+  // legitimate session anyway.
+  if (profile.sessions_revoked_at) {
+    const revokedAtSeconds = Math.floor(
+      new Date(profile.sessions_revoked_at).getTime() / 1000
+    )
+    if (user.issuedAt === null || user.issuedAt < revokedAtSeconds) return null
+  }
 
   return {
     ...user,

@@ -3,6 +3,16 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export type AuthedUser = {
   id: string
   email?: string
+  /**
+   * The token's `iat`, in epoch seconds, or null if absent.
+   *
+   * Carried so callers can tell when this session was minted. Compared against
+   * users.sessions_revoked_at to refuse tokens issued before an admin revoked
+   * someone's sessions: deleting the session rows stops the *refresh*, but the
+   * access token already in their browser keeps verifying locally against the
+   * JWKS until it expires. See getAuthedUserWithLiveRoles().
+   */
+  issuedAt: number | null
   app_metadata: {
     is_admin?: boolean
     iems_role?: string
@@ -37,6 +47,7 @@ export async function getAuthedUser(
   return {
     id: claims.sub,
     email: typeof claims.email === 'string' ? claims.email : undefined,
+    issuedAt: typeof claims.iat === 'number' ? claims.iat : null,
     app_metadata: (claims.app_metadata ?? {}) as AuthedUser['app_metadata'],
   }
 }
