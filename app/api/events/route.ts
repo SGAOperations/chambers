@@ -38,8 +38,7 @@ export async function GET() {
         event_tracking(event_management_form, engage_form)
       `)
       .eq('is_event', true)
-      .eq('semester_id', activeSemester.id)
-      .order('created_at', { ascending: false }),
+      .eq('semester_id', activeSemester.id),
     supabase.from('app_settings').select('*').eq('id', 1).maybeSingle(),
   ])
 
@@ -53,9 +52,21 @@ export async function GET() {
     const eventDate = minDate(sessionDatesOf(b))
     return {
       ...b,
+      event_date: eventDate,
       event_management_form_due: eventDate ? subtractDays(eventDate, s.eventMgmt[1]) : null,
       engage_form_due: eventDate ? subtractDays(eventDate, s.eventEngage[1]) : null,
     }
+  })
+
+  // Issue #48: ordered by the event's own date -- the earliest session date
+  // across any of its child bookings -- not by when the tracking row was
+  // created. A booking with no session date at all (shouldn't happen for a
+  // real booking) sorts last rather than dropping off silently.
+  withDueDates.sort((a, b) => {
+    if (!a.event_date && !b.event_date) return 0
+    if (!a.event_date) return 1
+    if (!b.event_date) return -1
+    return a.event_date < b.event_date ? -1 : a.event_date > b.event_date ? 1 : 0
   })
 
   return NextResponse.json({ bookings: withDueDates })
