@@ -36,6 +36,31 @@ export interface ScopedBookingRow {
 }
 
 /**
+ * The /api/my-rooms payload, and the identical object the server page gets back
+ * from fetchMyRooms(). Loosely typed on the occurrence rows -- flattenMyRooms
+ * reads them structurally and the authoritative shape lives in lib/my-rooms-data.ts.
+ */
+export interface MyRoomsResponse {
+  oneTimeBookings: (ScopedBookingRow & {
+    purpose: string
+    one_time_room_bookings: Record<string, string>[] | null
+  })[]
+  weeklyBookings: (ScopedBookingRow & {
+    purpose: string
+    weekly_room_bookings: (Record<string, string> & {
+      weekly_room_occurrences: Record<string, string>[] | null
+    })[] | null
+  })[]
+  tablingBookings: (ScopedBookingRow & {
+    purpose: string
+    tabling_bookings: (Record<string, string> & {
+      tabling_sessions: Record<string, string>[] | null
+    })[] | null
+  })[]
+  senateTypePreferences: Record<string, boolean>
+}
+
+/**
  * A divisional booking groups by its division and a multi booking on its own, because in neither
  * case does the owning body determine who sees it.
  */
@@ -125,4 +150,103 @@ export function formatDate(date: string) {
   return new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric'
   })
+}
+
+/**
+ * Flattens the /api/my-rooms payload into the row list the page renders: one
+ * FlatBooking per occurrence/session, sorted by date then start time, with
+ * anything before today dropped.
+ *
+ * Lives here rather than inside the page component because it now has two
+ * callers -- the server page, which flattens the data it read directly while
+ * rendering the document, and the client, which re-flattens after a refresh.
+ * Both must produce byte-identical rows or React would hydrate onto a different
+ * list than the server drew.
+ */
+export function flattenMyRooms(data: MyRoomsResponse): FlatBooking[] {
+    const flat: FlatBooking[] = []
+
+    for (const b of data.oneTimeBookings || []) {
+      for (const d of b.one_time_room_bookings || []) {
+        flat.push({
+          id: d.id,
+          bodyId: b.body_id,
+          bookingId: b.id,
+          type: 'One-Time Room',
+          bodyName: b.bodies?.name || '',
+          purpose: b.purpose,
+          location: d.room_name,
+          date: d.booking_date,
+          startTime: d.start_time,
+          endTime: d.end_time,
+          status: d.status,
+          reservationCode: d.reservation_code,
+          senateType: null,
+          canManage: !!b.canManage,
+          scopeKey: scopeKeyOf(b),
+          scopeLabel: scopeLabelOf(b),
+          scopeFull: scopeFullOf(b),
+        })
+      }
+    }
+
+    for (const b of data.weeklyBookings || []) {
+      const w = b.weekly_room_bookings?.[0]
+      if (!w) continue
+      for (const occ of w.weekly_room_occurrences || []) {
+        flat.push({
+        id: occ.id,
+        bodyId: b.body_id,
+        bookingId: b.id,
+        type: 'Weekly Room',
+        bodyName: b.bodies?.name || '',
+        purpose: b.purpose,
+        location: occ.room_name || w.room_name,
+        date: occ.occurrence_date,
+        startTime: occ.start_time || w.start_time,
+        endTime: occ.end_time || w.end_time,
+        status: occ.status || w.status,
+        reservationCode: occ.reservation_code || w.reservation_code,
+        senateType: occ.senate_type ?? null,
+        canManage: !!b.canManage,
+        scopeKey: scopeKeyOf(b),
+        scopeLabel: scopeLabelOf(b),
+        scopeFull: scopeFullOf(b),
+      })
+    }
+  }
+
+  for (const b of data.tablingBookings || []) {
+    const t = b.tabling_bookings?.[0]
+    if (!t) continue
+    for (const s of t.tabling_sessions || []) {
+      flat.push({
+        id: s.id,
+        bodyId: b.body_id,
+        bookingId: b.id,
+        type: 'Tabling',
+        bodyName: b.bodies?.name || '',
+        purpose: b.purpose,
+        location: s.location,
+        date: s.session_date,
+        startTime: s.start_time,
+        endTime: s.end_time,
+        status: s.status,
+        reservationCode: s.reservation_code || t.reservation_code,
+        senateType: null,
+        canManage: !!b.canManage,
+        scopeKey: scopeKeyOf(b),
+        scopeLabel: scopeLabelOf(b),
+        scopeFull: scopeFullOf(b),
+      })
+    }
+  }
+
+  flat.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const futureOnly = flat.filter(b => new Date(b.date + 'T00:00:00') >= today)
+
+  return futureOnly
 }
