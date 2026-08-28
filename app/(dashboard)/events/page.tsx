@@ -37,6 +37,8 @@ interface EventBooking {
     event_management_form: boolean
     engage_form: boolean
   } | null
+  event_management_form_due: string | null
+  engage_form_due: string | null
 }
 
 function formatTime(time: string) {
@@ -56,22 +58,31 @@ function formatDate(date: string) {
 function ChecklistRow({
   label,
   checked,
+  dueDate,
+  danger,
   onChange,
 }: {
   label: string
   checked: boolean
+  dueDate: string | null
+  danger: boolean
   onChange: (checked: boolean) => void
 }) {
   return (
-    <label className="flex items-center gap-3 cursor-pointer select-none group">
+    <label className="flex items-start gap-3 cursor-pointer select-none group">
       <input
         type="checkbox"
         checked={checked}
         onChange={e => onChange(e.target.checked)}
-        className="w-4 h-4 rounded border border-[#1e5080] bg-[#0f2a4a] accent-[#c8102e] cursor-pointer"
+        className="w-4 h-4 mt-0.5 rounded border border-[#1e5080] bg-[#0f2a4a] accent-[#c8102e] cursor-pointer"
       />
-      <span className={`text-sm transition-colors ${checked ? 'text-[#4ade80] line-through' : 'text-[#f0f6ff] group-hover:text-white'}`}>
-        {label}
+      <span className="flex flex-col">
+        <span className={`text-sm transition-colors ${checked ? 'text-[#4ade80] line-through' : danger ? 'pa-text-danger' : 'text-[#f0f6ff] group-hover:text-white'}`}>
+          {label}
+        </span>
+        {!checked && dueDate && (
+          <span className="text-xs text-[#6a96bb]">Due {formatDate(dueDate)}</span>
+        )}
       </span>
     </label>
   )
@@ -79,23 +90,31 @@ function ChecklistRow({
 
 function BookingDetails({ booking }: { booking: EventBooking }) {
   if (booking.type === 'One-Time Room' && booking.one_time_room_bookings?.length) {
-    const d = booking.one_time_room_bookings[0]
+    const sessions = booking.one_time_room_bookings
     return (
-      <div className="text-sm text-[#93b8d8] space-y-0.5">
-        {d.room_name && <p><span className="font-medium text-[#f0f6ff]">Room:</span> {d.room_name}</p>}
-        <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(d.booking_date)}</p>
-        <p><span className="font-medium text-[#f0f6ff]">Time:</span> {formatTime(d.start_time)} – {formatTime(d.end_time)}</p>
+      <div className="text-sm text-[#93b8d8] space-y-1">
+        {sessions.map((d, i) => (
+          <div key={i} className={sessions.length > 1 ? 'border-t border-[#1e5080] pt-1 first:border-0 first:pt-0' : ''}>
+            {d.room_name && <p><span className="font-medium text-[#f0f6ff]">Room:</span> {d.room_name}</p>}
+            <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(d.booking_date)}</p>
+            <p><span className="font-medium text-[#f0f6ff]">Time:</span> {formatTime(d.start_time)} – {formatTime(d.end_time)}</p>
+          </div>
+        ))}
       </div>
     )
   }
 
   if (booking.type === 'Weekly Room' && booking.weekly_room_bookings?.length) {
-    const w = booking.weekly_room_bookings[0]
+    const sessions = booking.weekly_room_bookings
     return (
-      <div className="text-sm text-[#93b8d8] space-y-0.5">
-        {w.room_name && <p><span className="font-medium text-[#f0f6ff]">Room:</span> {w.room_name}</p>}
-        <p><span className="font-medium text-[#f0f6ff]">Dates:</span> {formatDate(w.start_date)} – {formatDate(w.end_date)}</p>
-        <p><span className="font-medium text-[#f0f6ff]">Time:</span> {formatTime(w.start_time)} – {formatTime(w.end_time)}</p>
+      <div className="text-sm text-[#93b8d8] space-y-1">
+        {sessions.map((w, i) => (
+          <div key={i} className={sessions.length > 1 ? 'border-t border-[#1e5080] pt-1 first:border-0 first:pt-0' : ''}>
+            {w.room_name && <p><span className="font-medium text-[#f0f6ff]">Room:</span> {w.room_name}</p>}
+            <p><span className="font-medium text-[#f0f6ff]">Dates:</span> {formatDate(w.start_date)} – {formatDate(w.end_date)}</p>
+            <p><span className="font-medium text-[#f0f6ff]">Time:</span> {formatTime(w.start_time)} – {formatTime(w.end_time)}</p>
+          </div>
+        ))}
       </div>
     )
   }
@@ -121,7 +140,7 @@ function BookingDetails({ booking }: { booking: EventBooking }) {
 export default function EventsPage() {
   const [bookings, setBookings] = useState<EventBooking[]>([])
   const [loading, setLoading] = useState(true)
-  const { isDanger, registerOrigin } = usePendingActionsWatch()
+  const { isDanger, isActionDanger, registerOrigin } = usePendingActionsWatch()
   const [checklist, setChecklist] = useState<Record<string, { event_management_form: boolean; engage_form: boolean }>>({})
 
   useEffect(() => {
@@ -219,8 +238,8 @@ export default function EventsPage() {
                   <div className="p-5 space-y-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="font-semibold text-[#f0f6ff] pa-row-title">{b.bodies?.name}</p>
-                        <p className="text-sm text-[#93b8d8]">{b.purpose}</p>
+                        <p className="font-semibold text-[#f0f6ff] pa-row-title">{b.purpose}</p>
+                        <p className="text-sm text-[#93b8d8]">{b.bodies?.name}</p>
                         {b.users?.full_name && (
                           <p className="text-xs text-[#6a96bb] mt-0.5">Requested by {b.users.full_name}</p>
                         )}
@@ -240,11 +259,15 @@ export default function EventsPage() {
                     <ChecklistRow
                       label="Event Management Form"
                       checked={steps.event_management_form}
+                      dueDate={b.event_management_form_due}
+                      danger={isActionDanger(`event-form:${b.id}:mgmt`)}
                       onChange={checked => updateStep(b.id, 'event_management_form', checked)}
                     />
                     <ChecklistRow
                       label="Engage Form"
                       checked={steps.engage_form}
+                      dueDate={b.engage_form_due}
+                      danger={isActionDanger(`event-form:${b.id}:engage`)}
                       onChange={checked => updateStep(b.id, 'engage_form', checked)}
                     />
                   </div>

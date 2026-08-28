@@ -20,6 +20,10 @@ import type { OriginTab } from '@/lib/pending-actions'
 export interface PendingActionsWatch {
   /** Row's action is danger -> flash its title. */
   isDanger: (originId: string) => boolean
+  /** A single action (by its `PendingAction.id`, e.g. `event-form:<bookingId>:mgmt`)
+   *  is danger -> flash just that action's own text (issue #45), independent of
+   *  whether the row's aggregate `isDanger` is also true. */
+  isActionDanger: (actionId: string) => boolean
   /** Ref callback for a tab row (level 3). */
   registerOrigin: (originId: string) => (el: HTMLElement | null) => void
   /** Ref callback for an Administrator tab badge (level 2). */
@@ -32,6 +36,7 @@ export interface PendingActionsWatch {
 
 export const PendingActionsWatchContext = createContext<PendingActionsWatch>({
   isDanger: () => false,
+  isActionDanger: () => false,
   registerOrigin: () => () => {},
   registerTabBadge: () => () => {},
   totalIsIdle: false,
