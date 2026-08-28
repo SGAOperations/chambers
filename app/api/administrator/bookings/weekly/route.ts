@@ -7,10 +7,21 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
 
+import {
+  loadScopeContext,
+  validateScopeSelection,
+  resolveBookingRecipients,
+  syncBookingBodies,
+  type ScopedRow,
+} from '@/lib/booking-scope'
+
 /**
- * One occurrence as the editor submits it. Every field but the date is an
- * override of the parent series, or of the booking above it for purpose and
- * hidden (issue #55), and null means inherit.
+ * One occurrence as the editor submits it (issue #55).
+ *
+ * Everything but the date and is_event is an override -- of the parent series,
+ * or of the booking above it for purpose and hidden -- where null means inherit.
+ * is_event is not an override: a weekly event is marked on the week it happens,
+ * so the occurrence is authoritative and has nothing to inherit from.
  */
 interface OccurrenceInput {
   occurrence_date: string
@@ -22,14 +33,8 @@ interface OccurrenceInput {
   senate_type: string | null
   purpose: string | null
   hidden: boolean | null
+  is_event: boolean
 }
-import {
-  loadScopeContext,
-  validateScopeSelection,
-  resolveBookingRecipients,
-  syncBookingBodies,
-  type ScopedRow,
-} from '@/lib/booking-scope'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -199,6 +204,9 @@ export async function PATCH(request: Request) {
       // occurrence visible even when its series is hidden, and `||` would
       // silently turn that back into inherit.
       hidden: existing?.hidden ?? null,
+      // Not an override: the occurrence is where a weekly event is marked, so an
+      // absent value is simply "not an event" rather than "inherit".
+      is_event: existing?.is_event ?? false,
     }
   })
 

@@ -135,7 +135,7 @@ export async function fetchMyRooms(
     .select(`
       ${SELECT_BASE},
       weekly_room_bookings(id, room_name, start_time, end_time, status, reservation_code,
-        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type, purpose, hidden)
+        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type, purpose, hidden, is_event)
       )
     `)
     .eq('type', 'Weekly Room')

@@ -39,6 +39,8 @@ interface Occurrence {
   purpose: string | null
   /** Overrides bookings.hidden; null inherits, false forces visible (issue #55). */
   hidden: boolean | null
+  /** Marks this single occurrence as an event. Authoritative, not an override (issue #55). */
+  is_event: boolean
 }
 
 interface EditWeeklyFormProps {
@@ -161,6 +163,9 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
       senate_type: null,
       purpose: null,
       hidden: null,
+      // is_event is deliberately not reset: it is not an override, it is a
+      // statement that this date is an event, and clearing the room and time
+      // overrides does not stop it being one.
     } : o))
   }
 
@@ -371,6 +376,20 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
                       <option value="hidden">Hidden</option>
                     </select>
                   </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    {/* A checkbox here, not a select like the two above, because
+                        this one genuinely is two-state: a weekly event is marked
+                        on the week it happens, so there is no parent value to
+                        inherit and no third option to express. */}
+                    <input
+                      type="checkbox"
+                      checked={occ.is_event}
+                      onChange={e => updateOccurrence(occ.id, 'is_event', e.target.checked)}
+                      className="accent-[#c8102e]"
+                    />
+                    <span className="text-sm text-[#f0f6ff]">Mark this date as an Event</span>
+                  </label>
 
                   {isSenate && (
                     <div>

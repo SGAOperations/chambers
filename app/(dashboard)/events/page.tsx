@@ -6,7 +6,17 @@ import { Skeleton } from '@/app/_components/skeleton'
 import { usePendingActionsWatch } from '../pending-actions-watch'
 
 interface EventBooking {
+  /**
+   * A booking event uses the booking's id. A weekly occurrence event uses
+   * `<bookingId>:<date>`, because every flagged week of one series would
+   * otherwise share an id -- and this keys both the checklist state and the
+   * pending-actions highlighting.
+   */
   id: string
+  /** The real booking id, set only on occurrence rows where `id` is synthetic. */
+  booking_id?: string
+  /** Set when this row is a single flagged week rather than a whole booking. */
+  occurrence_date: string | null
   purpose: string
   type: string
   created_at: string
@@ -111,7 +121,14 @@ function BookingDetails({ booking }: { booking: EventBooking }) {
         {sessions.map((w, i) => (
           <div key={i} className={sessions.length > 1 ? 'border-t border-[#1e5080] pt-1 first:border-0 first:pt-0' : ''}>
             {w.room_name && <p><span className="font-medium text-[#f0f6ff]">Room:</span> {w.room_name}</p>}
-            <p><span className="font-medium text-[#f0f6ff]">Dates:</span> {formatDate(w.start_date)} – {formatDate(w.end_date)}</p>
+            {/* An occurrence event is one week, so a "Dates: Sep 1 – Sep 1" range
+                would be noise. The row carries occurrence_date precisely so this
+                can say Date instead. */}
+            {booking.occurrence_date ? (
+              <p><span className="font-medium text-[#f0f6ff]">Date:</span> {formatDate(booking.occurrence_date)}</p>
+            ) : (
+              <p><span className="font-medium text-[#f0f6ff]">Dates:</span> {formatDate(w.start_date)} – {formatDate(w.end_date)}</p>
+            )}
             <p><span className="font-medium text-[#f0f6ff]">Time:</span> {formatTime(w.start_time)} – {formatTime(w.end_time)}</p>
           </div>
         ))}
@@ -167,23 +184,32 @@ export default function EventsPage() {
     fetchEvents()
   }, [])
 
-  const updateStep = async (bookingId: string, step: 'event_management_form' | 'engage_form', checked: boolean) => {
+  // Takes the row rather than an id: the checklist is keyed by the row's id
+  // (synthetic for an occurrence event) while the save has to address the real
+  // booking plus, for an occurrence, its date.
+  const updateStep = async (row: EventBooking, step: 'event_management_form' | 'engage_form', checked: boolean) => {
+    const key = row.id
     // Optimistic update, rolled back below if the save fails.
     setChecklist(prev => ({
       ...prev,
-      [bookingId]: { ...prev[bookingId], [step]: checked },
+      [key]: { ...prev[key], [step]: checked },
     }))
 
     const res = await fetch('/api/events/checklist', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ booking_id: bookingId, step, checked }),
+      body: JSON.stringify({
+        booking_id: row.booking_id ?? row.id,
+        occurrence_date: row.occurrence_date,
+        step,
+        checked,
+      }),
     })
 
     if (!res.ok) {
       setChecklist(prev => ({
         ...prev,
-        [bookingId]: { ...prev[bookingId], [step]: !checked },
+        [key]: { ...prev[key], [step]: !checked },
       }))
     }
   }
@@ -261,14 +287,14 @@ export default function EventsPage() {
                       checked={steps.event_management_form}
                       dueDate={b.event_management_form_due}
                       danger={isActionDanger(`event-form:${b.id}:mgmt`)}
-                      onChange={checked => updateStep(b.id, 'event_management_form', checked)}
+                      onChange={checked => updateStep(b, 'event_management_form', checked)}
                     />
                     <ChecklistRow
                       label="Engage Form"
                       checked={steps.engage_form}
                       dueDate={b.engage_form_due}
                       danger={isActionDanger(`event-form:${b.id}:engage`)}
-                      onChange={checked => updateStep(b.id, 'engage_form', checked)}
+                      onChange={checked => updateStep(b, 'engage_form', checked)}
                     />
                   </div>
                 </div>
