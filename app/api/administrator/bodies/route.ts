@@ -1,12 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
-import { getAuthedUser } from '@/lib/auth'
+import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 
 export async function GET() {
   const supabase = await createClient()
 
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -25,7 +25,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const supabase = await createClient()
 
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const supabase = await createClient()
 
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
