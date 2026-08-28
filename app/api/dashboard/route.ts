@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { getAuthedUser } from '@/lib/auth'
+import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { fetchUserAlerts } from '@/lib/dashboard-data'
 import { fetchPendingActions, type PendingActionsResult } from '@/lib/pending-actions'
 
@@ -20,7 +20,7 @@ const adminSupabase = createAdminClient(
 export async function GET() {
   const supabase = await createClient()
 
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const isAdmin = !!user.app_metadata?.is_admin
