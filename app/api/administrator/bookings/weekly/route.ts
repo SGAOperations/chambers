@@ -6,6 +6,23 @@ import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
+
+/**
+ * One occurrence as the editor submits it. Every field but the date is an
+ * override of the parent series, or of the booking above it for purpose and
+ * hidden (issue #55), and null means inherit.
+ */
+interface OccurrenceInput {
+  occurrence_date: string
+  room_name: string | null
+  start_time: string | null
+  end_time: string | null
+  status: string | null
+  reservation_code: string | null
+  senate_type: string | null
+  purpose: string | null
+  hidden: boolean | null
+}
 import {
   loadScopeContext,
   validateScopeSelection,
@@ -163,7 +180,7 @@ export async function PATCH(request: Request) {
 
   const dates = getWeeklyDates(start_date, end_date)
   const newOccurrences = dates.map(date => {
-    const existing = occurrences.find((o: { occurrence_date: string; room_name: string | null; start_time: string | null; end_time: string | null; status: string | null; reservation_code: string | null; senate_type: string | null }) => o.occurrence_date === date)
+    const existing = occurrences.find((o: OccurrenceInput) => o.occurrence_date === date)
     return {
       weekly_booking_id: weekly_id,
       occurrence_date: date,
@@ -173,6 +190,15 @@ export async function PATCH(request: Request) {
       status: existing?.status || null,
       reservation_code: existing?.reservation_code || null,
       senate_type: existing?.senate_type ?? null,
+      // Issue #55. Both inherit from the booking when null.
+      //
+      // purpose is trimmed, and an empty string collapses to null -- clearing the
+      // field in the editor means "inherit", not "this week has a blank purpose".
+      purpose: existing?.purpose?.trim() || null,
+      // `?? null`, not `|| null`: false is meaningful here. It forces an
+      // occurrence visible even when its series is hidden, and `||` would
+      // silently turn that back into inherit.
+      hidden: existing?.hidden ?? null,
     }
   })
 
@@ -206,8 +232,11 @@ export async function PATCH(request: Request) {
   const recipients = await resolveBookingRecipients(adminSupabase, scopedRow)
 
   if (recipients.length && auditLog) {
+    // `hidden != null` rather than a truthiness test: an occurrence forced
+    // visible (false) has been changed just as much as one forced hidden.
     const changedOcc = newOccurrences.find(
       o => o.room_name || o.start_time || o.end_time || o.status || o.reservation_code
+        || o.purpose || o.hidden != null
     ) ?? newOccurrences[0]
     await adminSupabase.from('user_alerts').insert(
       recipients.map(r => ({

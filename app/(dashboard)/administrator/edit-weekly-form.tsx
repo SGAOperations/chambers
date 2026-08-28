@@ -35,6 +35,10 @@ interface Occurrence {
   status: string | null
   reservation_code: string | null
   senate_type: string | null
+  /** Overrides bookings.purpose for this date; null inherits (issue #55). */
+  purpose: string | null
+  /** Overrides bookings.hidden; null inherits, false forces visible (issue #55). */
+  hidden: boolean | null
 }
 
 interface EditWeeklyFormProps {
@@ -42,6 +46,8 @@ interface EditWeeklyFormProps {
     id: string
     body_id: string
     purpose: string
+    /** Only read to label what "Default" means on each occurrence's overrides. */
+    hidden: boolean
     scope: BookingScope
     division: Division | null
     booking_bodies: { body_id: string; bodies: { name: string } | null }[] | null
@@ -133,10 +139,14 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
 
   // Still keyed on the owning body, which stays populated for every scope.
   const isSenate = bodies.find(b => b.id === scopeValue.body_id)?.name === 'Senate'
+  // What an occurrence inherits when its visibility override is left on Default.
+  const bookingHidden = booking.hidden
 
   if (!w) return null
 
-  const updateOccurrence = (id: string, field: keyof Occurrence, value: string | null) => {
+  // `boolean` in the value union for the visibility override, which is the only
+  // non-string field here.
+  const updateOccurrence = (id: string, field: keyof Occurrence, value: string | boolean | null) => {
     setOccurrences(prev => prev.map(o => o.id === id ? { ...o, [field]: value } : o))
   }
 
@@ -149,6 +159,8 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
       status: null,
       reservation_code: null,
       senate_type: null,
+      purpose: null,
+      hidden: null,
     } : o))
   }
 
@@ -248,7 +260,9 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
         <p className="text-sm font-semibold text-[#f0f6ff]">Occurrences</p>
         {getWeeklyDates(form.start_date, form.end_date).map(date => {
           const occ = occurrences.find(o => o.occurrence_date === date)
-          const hasOverride = occ && (occ.room_name || occ.start_time || occ.end_time || occ.status || occ.reservation_code)
+          // `hidden != null` because false is an override, not an absence.
+          const hasOverride = occ && (occ.room_name || occ.start_time || occ.end_time || occ.status
+            || occ.reservation_code || occ.purpose || occ.hidden != null)
           const isExpanded = expandedOcc === date
 
           return (
@@ -321,6 +335,41 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
                       onChange={e => updateOccurrence(occ.id, 'reservation_code', e.target.value || null)}
                       className={inputCls}
                     />
+                  </div>
+
+                  <div>
+                    <label className={labelCls}>Purpose Override</label>
+                    <input
+                      type="text"
+                      placeholder={`Default: ${form.purpose || 'None'}`}
+                      value={occ.purpose ?? ''}
+                      onChange={e => updateOccurrence(occ.id, 'purpose', e.target.value || null)}
+                      className={inputCls}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelCls}>Visibility Override</label>
+                    {/* A select rather than a checkbox because there are three
+                        states, not two: inherit, forced visible, forced hidden.
+                        Forced-visible is what lets a single week of a hidden
+                        series be published, and a checkbox cannot express the
+                        difference between that and inheriting a visible parent. */}
+                    <select
+                      value={occ.hidden == null ? '' : occ.hidden ? 'hidden' : 'visible'}
+                      onChange={e =>
+                        updateOccurrence(
+                          occ.id,
+                          'hidden',
+                          e.target.value === '' ? null : e.target.value === 'hidden'
+                        )
+                      }
+                      className={inputCls}
+                    >
+                      <option value="">Default: {bookingHidden ? 'Hidden' : 'Visible'}</option>
+                      <option value="visible">Visible</option>
+                      <option value="hidden">Hidden</option>
+                    </select>
                   </div>
 
                   {isSenate && (
