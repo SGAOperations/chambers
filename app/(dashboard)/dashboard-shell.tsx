@@ -62,6 +62,12 @@ export default function DashboardShell({
     () => new Set(dangerActions.map(a => a.originId)),
     [dangerActions]
   )
+  // Finer-grained than dangerOriginIds: a specific action (e.g. one of a
+  // booking's two event forms), keyed by its own PendingAction.id (issue #45).
+  const dangerActionIds = useMemo(
+    () => new Set(dangerActions.map(a => a.id)),
+    [dangerActions]
+  )
 
   // Visible elements, held as state so idle flags derive during render (no
   // setState inside the observer effect).
@@ -171,12 +177,13 @@ export default function DashboardShell({
   const paWatchValue = useMemo(
     () => ({
       isDanger: (id: string) => dangerOriginIds.has(id),
+      isActionDanger: (id: string) => dangerActionIds.has(id),
       registerOrigin,
       registerTabBadge,
       totalIsIdle,
       tabBadgeIsIdle,
     }),
-    [dangerOriginIds, registerOrigin, registerTabBadge, totalIsIdle, tabBadgeIsIdle]
+    [dangerOriginIds, dangerActionIds, registerOrigin, registerTabBadge, totalIsIdle, tabBadgeIsIdle]
   )
 
   // One call for the whole shell: pending-action counts (admins) + this user's

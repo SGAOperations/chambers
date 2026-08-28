@@ -104,10 +104,18 @@ function daysBetween(fromMs: number, dateStr: string): number {
   return Math.round((utcMidnight(dateStr) - fromMs) / 86_400_000)
 }
 
-function minDate(dates: (string | null | undefined)[]): string | null {
+export function minDate(dates: (string | null | undefined)[]): string | null {
   let best: string | null = null
   for (const d of dates) if (d && (best === null || d < best)) best = d
   return best
+}
+
+/** `dateStr` minus `days`, as YYYY-MM-DD -- used to turn a Danger Range's near
+ *  edge (the `_end` settings, currently unused by severity itself) into a
+ *  displayable due date (issue #45). */
+export function subtractDays(dateStr: string, days: number): string {
+  const d = new Date(utcMidnight(dateStr) - days * 86_400_000)
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
 }
 
 /** PostgREST types a to-one embed as a possible array; collapse it and read `name`. */
@@ -144,9 +152,9 @@ function severityForRange(
 // pre-migration database (columns absent) still works.
 // ---------------------------------------------------------------------------
 
-type SettingsRow = Record<string, number | null | undefined>
+export type SettingsRow = Record<string, number | null | undefined>
 
-function settingsFromRow(row: SettingsRow | null): PendingActionSettings {
+export function settingsFromRow(row: SettingsRow | null): PendingActionSettings {
   const d = DEFAULT_PA_SETTINGS
   const n = (key: string, fallback: number) =>
     typeof row?.[key] === 'number' ? (row[key] as number) : fallback
@@ -185,21 +193,23 @@ function settingsFromRow(row: SettingsRow | null): PendingActionSettings {
 // Embedded shapes from the PostgREST selects below.
 // ---------------------------------------------------------------------------
 
-interface BookingChildDates {
+/** `id` fields are optional so a caller that only needs dates (e.g. the events
+ *  API's due-date calc) can reuse this shape without also selecting ids. */
+export interface BookingChildDates {
   type?: string | null
   is_event?: boolean | null
   bodies?: NameRef
-  one_time_room_bookings?: { id: string; booking_date: string | null }[] | null
+  one_time_room_bookings?: { id?: string; booking_date: string | null }[] | null
   weekly_room_bookings?:
-    | { weekly_room_occurrences?: { id: string; occurrence_date: string | null }[] | null }[]
+    | { weekly_room_occurrences?: { id?: string; occurrence_date: string | null }[] | null }[]
     | null
   tabling_bookings?:
-    | { tabling_sessions?: { id: string; session_date: string | null }[] | null }[]
+    | { tabling_sessions?: { id?: string; session_date: string | null }[] | null }[]
     | null
 }
 
 /** Every session date attached to an embedded booking, flattened. */
-function sessionDatesOf(b: BookingChildDates): string[] {
+export function sessionDatesOf(b: BookingChildDates): string[] {
   const out: string[] = []
   for (const o of b.one_time_room_bookings ?? []) if (o.booking_date) out.push(o.booking_date)
   for (const w of b.weekly_room_bookings ?? [])
