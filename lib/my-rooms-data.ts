@@ -27,6 +27,19 @@ interface BookingRow {
   booking_bodies: { body_id: string; bodies: { name: string } | null }[] | null
 }
 
+/**
+ * The weekly shape, narrowed enough to reason about per-occurrence visibility.
+ *
+ * Only the fields the hidden filter touches are declared; the rest of the row is
+ * passed through untouched, which is why this widens BookingRow rather than
+ * replacing it.
+ */
+interface WeeklyBookingRow extends BookingRow {
+  weekly_room_bookings?: {
+    weekly_room_occurrences?: { hidden: boolean | null }[] | null
+  }[] | null
+}
+
 export interface MyRoomsPayload {
   oneTimeBookings: unknown[]
   weeklyBookings: unknown[]
@@ -122,7 +135,7 @@ export async function fetchMyRooms(
     .select(`
       ${SELECT_BASE},
       weekly_room_bookings(id, room_name, start_time, end_time, status, reservation_code,
-        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type)
+        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type, purpose, hidden, is_event)
       )
     `)
     .eq('type', 'Weekly Room')
@@ -173,6 +186,34 @@ export async function fetchMyRooms(
    */
   const memberCtx = { ...ctx, isAdmin: false }
 
+  /**
+   * Drops occurrences the caller should not see (issue #55).
+   *
+   * A weekly occurrence can now override its booking's `hidden`, so visibility is
+   * no longer a property of the booking alone: a visible series can hide one
+   * week, and a hidden series can expose one. `occ.hidden ?? booking.hidden` is
+   * the precedence -- NULL inherits.
+   *
+   * This runs here, server-side, and not in the client's flatten step. Filtering
+   * on the client would mean sending a hidden occurrence to a browser that is not
+   * allowed to see it and trusting the UI not to draw it, which is the shape of
+   * the leak that issue #29 already had to be fixed once.
+   */
+  const stripHiddenOccurrences = (b: BookingRow & { canManage: boolean }) => {
+    if (b.canManage) return b
+    const weekly = (b as WeeklyBookingRow).weekly_room_bookings
+    if (!weekly) return b
+    return {
+      ...b,
+      weekly_room_bookings: weekly.map(w => ({
+        ...w,
+        weekly_room_occurrences: (w.weekly_room_occurrences ?? []).filter(
+          occ => !(occ.hidden ?? b.hidden)
+        ),
+      })),
+    }
+  }
+
   const decorate = (rows: BookingRow[] | null) =>
     (rows ?? [])
       .map(b => ({
@@ -183,7 +224,20 @@ export async function fetchMyRooms(
           (b.booking_bodies ?? []).map(x => x.body_id)
         ),
       }))
-      .filter(b => !b.hidden || b.canManage)
+      .map(stripHiddenOccurrences)
+      // Visibility is no longer decided by the booking alone. A manageable
+      // booking always stays. Otherwise a weekly series survives if any of its
+      // occurrences is visible -- which is what lets a single week of a hidden
+      // series be published by setting `hidden = false` on it -- and it is
+      // dropped once stripHiddenOccurrences has emptied it. One-time and tabling
+      // bookings have no per-occurrence override, so they keep the original
+      // booking-level rule.
+      .filter(b => {
+        if (b.canManage) return true
+        const weekly = (b as WeeklyBookingRow).weekly_room_bookings
+        if (!weekly) return !b.hidden
+        return weekly.some(w => (w.weekly_room_occurrences ?? []).length > 0)
+      })
 
   return {
     oneTimeBookings: decorate(oneTimeBookings as BookingRow[] | null),

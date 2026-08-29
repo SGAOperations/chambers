@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import TimePicker from './time-picker'
 import { Skeleton } from '@/app/_components/skeleton'
 import DateField from '@/app/_components/date-field'
+import { getJsonArray } from '@/lib/fetch-json'
 
 function TableSkeleton({ cols }: { cols: number }) {
   return (
@@ -155,7 +156,7 @@ export default function SGASpacesTab() {
   const [spaces, setSpaces] = useState<Space[]>([])
 
   useEffect(() => {
-    fetch('/api/spaces').then(r => r.json()).then(setSpaces)
+    getJsonArray<Space>('/api/spaces').then(setSpaces)
   }, [])
 
   return (

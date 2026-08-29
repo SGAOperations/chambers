@@ -210,9 +210,26 @@ export default function DashboardShell({
     load()
   }, [fetchDashboard])
 
+  /**
+   * Ends the session on this device only.
+   *
+   * signOut() defaults to scope 'global', which revokes every refresh token the
+   * user holds anywhere. Signing out on a laptop therefore also killed the
+   * session on their phone, in their other tab, and the copy the Edge middleware
+   * refreshes -- and each of those then failed its next refresh with a 400 and
+   * started serving 401s. Over 24h, 9 of 28 refresh attempts were failing that
+   * way, split across the browser and the middleware.
+   *
+   * 'local' is what "Sign Out" means on a shared dashboard: this browser, not
+   * every device I own. The paths that mean "this account may not be used" --
+   * deactivation in force-sign-out.tsx and LoginCard, an expired invite --
+   * deliberately keep the global scope.
+   */
+  const signOutThisDevice = () => supabase.auth.signOut({ scope: 'local' })
+
   const handleLogout = async () => {
     localStorage.removeItem('chambers_last_active')
-    await supabase.auth.signOut()
+    await signOutThisDevice()
     router.push('/')
   }
 
@@ -227,7 +244,7 @@ export default function DashboardShell({
         clearInterval(countdownIntervalRef.current!)
         countdownIntervalRef.current = null
         localStorage.removeItem('chambers_last_active')
-        supabase.auth.signOut().then(() => router.push('/'))
+        signOutThisDevice().then(() => router.push('/'))
       }
     }, 1000)
   }
@@ -251,7 +268,7 @@ export default function DashboardShell({
     if (storedLastActive) {
       const elapsed = Date.now() - parseInt(storedLastActive, 10)
       if (elapsed >= IDLE_MS) {
-        supabase.auth.signOut().then(() => router.push('/'))
+        signOutThisDevice().then(() => router.push('/'))
         return
       }
     }
@@ -276,7 +293,7 @@ export default function DashboardShell({
           if (elapsed >= IDLE_MS) {
             if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
             if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current)
-            supabase.auth.signOut().then(() => router.push('/'))
+            signOutThisDevice().then(() => router.push('/'))
           }
         }
       }
@@ -382,7 +399,7 @@ export default function DashboardShell({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.13.4</p>
+            <p className="text-slate-600 text-xs mt-1">v1.13.5</p>
             {userName && (
               <div className="flex items-start justify-between mt-2">
                 <p className="text-slate-500 text-xs italic">{getGreeting()},<br />{userName}</p>

@@ -6,6 +6,7 @@ import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
+
 import {
   loadScopeContext,
   validateScopeSelection,
@@ -13,6 +14,27 @@ import {
   syncBookingBodies,
   type ScopedRow,
 } from '@/lib/booking-scope'
+
+/**
+ * One occurrence as the editor submits it (issue #55).
+ *
+ * Everything but the date and is_event is an override -- of the parent series,
+ * or of the booking above it for purpose and hidden -- where null means inherit.
+ * is_event is not an override: a weekly event is marked on the week it happens,
+ * so the occurrence is authoritative and has nothing to inherit from.
+ */
+interface OccurrenceInput {
+  occurrence_date: string
+  room_name: string | null
+  start_time: string | null
+  end_time: string | null
+  status: string | null
+  reservation_code: string | null
+  senate_type: string | null
+  purpose: string | null
+  hidden: boolean | null
+  is_event: boolean
+}
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -163,7 +185,7 @@ export async function PATCH(request: Request) {
 
   const dates = getWeeklyDates(start_date, end_date)
   const newOccurrences = dates.map(date => {
-    const existing = occurrences.find((o: { occurrence_date: string; room_name: string | null; start_time: string | null; end_time: string | null; status: string | null; reservation_code: string | null; senate_type: string | null }) => o.occurrence_date === date)
+    const existing = occurrences.find((o: OccurrenceInput) => o.occurrence_date === date)
     return {
       weekly_booking_id: weekly_id,
       occurrence_date: date,
@@ -173,6 +195,18 @@ export async function PATCH(request: Request) {
       status: existing?.status || null,
       reservation_code: existing?.reservation_code || null,
       senate_type: existing?.senate_type ?? null,
+      // Issue #55. Both inherit from the booking when null.
+      //
+      // purpose is trimmed, and an empty string collapses to null -- clearing the
+      // field in the editor means "inherit", not "this week has a blank purpose".
+      purpose: existing?.purpose?.trim() || null,
+      // `?? null`, not `|| null`: false is meaningful here. It forces an
+      // occurrence visible even when its series is hidden, and `||` would
+      // silently turn that back into inherit.
+      hidden: existing?.hidden ?? null,
+      // Not an override: the occurrence is where a weekly event is marked, so an
+      // absent value is simply "not an event" rather than "inherit".
+      is_event: existing?.is_event ?? false,
     }
   })
 
@@ -206,8 +240,11 @@ export async function PATCH(request: Request) {
   const recipients = await resolveBookingRecipients(adminSupabase, scopedRow)
 
   if (recipients.length && auditLog) {
+    // `hidden != null` rather than a truthiness test: an occurrence forced
+    // visible (false) has been changed just as much as one forced hidden.
     const changedOcc = newOccurrences.find(
       o => o.room_name || o.start_time || o.end_time || o.status || o.reservation_code
+        || o.purpose || o.hidden != null
     ) ?? newOccurrences[0]
     await adminSupabase.from('user_alerts').insert(
       recipients.map(r => ({

@@ -19,6 +19,9 @@ export default function ForceSignOut() {
   useEffect(() => {
     const signOut = async () => {
       localStorage.removeItem('chambers_last_active')
+      // Global scope on purpose, unlike the sign-outs in dashboard-shell. This
+      // one runs because the account was deactivated, so every session it holds
+      // anywhere should end -- not just the one in this browser.
       await createClient().auth.signOut()
       router.replace('/')
     }

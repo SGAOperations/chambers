@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { getJson } from '@/lib/fetch-json'
 import { Skeleton } from '@/app/_components/skeleton'
 
 function ArchiveTabSkeleton() {
@@ -266,8 +267,9 @@ export default function ArchiveTab() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/administrator/archive')
-      .then(r => r.json())
+    // Also fixes a hang: the old chain had no .catch, so a rejected fetch left
+    // setLoading(false) unreached and the tab stuck on its skeleton forever.
+    getJson<{ groups?: SemesterGroup[] }>('/api/administrator/archive', {})
       .then(data => {
         setGroups(data.groups || [])
         setLoading(false)
