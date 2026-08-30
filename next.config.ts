@@ -10,7 +10,7 @@ const withPWA = require('next-pwa')({
   // The default precache manifest was every build artifact in .next/static --
   // 103 entries, ~1.6 MB on the wire. The service worker installs on first visit,
   // so a user opening Chambers on a machine they had not used before downloaded
-  // the entire app (every route's chunk, including the ~150 KB Administrator
+  // the entire app (every route's chunk, including the ~150 KB Bookings
   // page) in the background while the page they actually asked for was still
   // fetching its own JS and data, on the same connection pool.
   //
@@ -43,6 +43,18 @@ const withPWA = require('next-pwa')({
 const realtimeStub = path.resolve(__dirname, 'lib/stubs/realtime-js.js');
 
 const nextConfig: NextConfig = {
+  // /administrator became /bookings when its settings half moved to /management
+  // (issue #64). Admins have had the old URL bookmarked for a year, and it is
+  // also what any link written before the rename points at, so it keeps
+  // resolving.
+  //
+  // Temporary (307) rather than permanent: a 308 is cached by the browser
+  // indefinitely and would be painful to walk back if the route is ever renamed
+  // again. Nothing here is indexed, so there is no reason to want the permanent
+  // form.
+  async redirects() {
+    return [{ source: '/administrator', destination: '/bookings', permanent: false }]
+  },
   turbopack: {
     resolveAlias: {
       '@supabase/realtime-js': './lib/stubs/realtime-js.js',

@@ -10,7 +10,7 @@ import { useIdentity } from './identity-context'
  * The check is synchronous: the server already resolved this user's identity and
  * shipped it with the document, so there is no round trip to wait on and no
  * skeleton to show. (This previously called getAuthedUser() on mount, which meant
- * a JWKS fetch against the Supabase origin before /administrator could paint.)
+ * a JWKS fetch against the Supabase origin before /bookings could paint.)
  *
  * The redirect still has to happen in an effect -- router.push() during render is
  * not allowed -- but rendering nothing while it runs is correct here: a non-admin
