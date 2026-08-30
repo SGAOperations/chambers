@@ -14,11 +14,14 @@ import { isManagementRole } from '@/lib/admin-roles'
  * /my-rooms: everyone who fails this check is still an admin, so the useful place
  * to land them is the admin page they do have.
  *
- * This governs what the dashboard *renders*. The endpoints behind these tabs
- * still authorize on their own terms -- role editing is already restricted to
- * exactly these four roles in app/api/administrator/users/route.ts, while the
- * rest accept any admin, as they did when these tabs lived under Advanced
- * Settings. Narrowing those is a separate change.
+ * This governs what the dashboard *renders*, but it is no longer the only thing
+ * standing in the way: the endpoints behind these tabs now run the same
+ * isManagementRole() check against the live admin_role and answer 403, so a
+ * Comptroller who calls them directly gets nowhere.
+ *
+ * One deliberate exception -- GET /api/administrator/bodies stays open to any
+ * admin, because the Bookings page reads it for its body picker. Only POST and
+ * PATCH on that route are narrowed.
  */
 export default function ManagementGuard({ children }: { children: React.ReactNode }) {
   const { isAdmin, adminRole } = useIdentity()

@@ -5,6 +5,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { randomBytes, createHash } from 'crypto'
 import { sendOtpInviteEmail } from '@/lib/emails/otp-invite'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { isManagementRole } from '@/lib/admin-roles'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,6 +18,11 @@ export async function POST(request: Request) {
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Management-page endpoint: being an admin is not enough (#64).
+  if (!isManagementRole(user.app_metadata?.admin_role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const rateLimitRes = await checkRateLimit(user.id)
