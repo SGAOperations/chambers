@@ -424,7 +424,7 @@ export default function DashboardShell({
             {navLink('/sga-spaces', 'SGA Spaces')}
             {(isLeadership || isAdmin) && navLink('/request', 'Request a Booking')}
             {(isAdmin || isIEMS) && navLink('/events', 'Events')}
-            {isAdmin && navLink('/administrator', 'Bookings')}
+            {isAdmin && navLink('/bookings', 'Bookings')}
             {isAdmin && isManagementRole(adminRole) && navLink('/management', 'Management')}
           </div>
 

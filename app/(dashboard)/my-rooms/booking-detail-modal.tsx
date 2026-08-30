@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import BookingModal from '../administrator/booking-modal'
+import BookingModal from '../bookings/booking-modal'
 import { type FlatBooking, statusTextColors, senateTypeBadgeColors, DEFAULT_SENATE_BADGE } from './shared'
 
 interface BookingDetailModalProps {

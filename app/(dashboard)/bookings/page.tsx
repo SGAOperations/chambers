@@ -10,15 +10,18 @@ import BookingsTab from './bookings-tab'
 import SGASpacesTab from './sga-spaces-tab'
 
 /**
- * The former Administrator page, now Bookings (issue #64).
+ * The former Administrator page, now Bookings, at /bookings (issue #64).
  *
  * Its Advanced Settings tab -- users, bodies, audit, archive, other settings --
  * has become the Management page, which is gated to high-access admins. What is
  * left here is the booking work itself, open to every admin.
+ *
+ * /administrator redirects here, so links and bookmarks that predate the rename
+ * still land in the right place -- see the redirects() in next.config.ts.
  */
 type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'SGA Spaces'
 
-export default function AdministratorPage() {
+export default function BookingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Bookings')
   // Shared with the layout's sidebar badge instead of refetching the same
   // endpoint on every Administrator page load.

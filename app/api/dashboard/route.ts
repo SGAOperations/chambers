@@ -26,7 +26,9 @@ export async function GET() {
   const isAdmin = !!user.app_metadata?.is_admin
 
   const [counts, alerts] = await Promise.all([
-    isAdmin ? fetchPendingActions(adminSupabase) : Promise.resolve<PendingActionsResult | null>(null),
+    isAdmin
+      ? fetchPendingActions(adminSupabase, { adminRole: user.app_metadata?.admin_role ?? null })
+      : Promise.resolve<PendingActionsResult | null>(null),
     fetchUserAlerts(adminSupabase, user.id),
   ])
 

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { isManagementRole } from './admin-roles'
 
 /**
  * The admin "Pending Actions" model (issue #38).
@@ -236,9 +237,25 @@ const BOOKING_CHILD_SELECT =
 // Main entry
 // ---------------------------------------------------------------------------
 
+export interface PendingActionsFetchOptions {
+  /**
+   * The caller's admin_role.
+   *
+   * Membership requests are resolved on Management > Users, which only the
+   * high-access roles can open (issue #64), so they are listed only for a role
+   * that can actually act on them -- an admin who cannot reach that tab was
+   * otherwise shown a task with nowhere to go. Omitting this reads as "not a
+   * management role", so a caller that forgets it hides the actions rather than
+   * leaking them.
+   */
+  adminRole?: string | null
+  /** Overridable clock; severity is measured in whole days from this date. */
+  now?: Date
+}
+
 export async function fetchPendingActions(
   adminSupabase: SupabaseClient,
-  now: Date = new Date()
+  { adminRole = null, now = new Date() }: PendingActionsFetchOptions = {}
 ): Promise<PendingActionsResult> {
   const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
   // The far date at which event-form actions start appearing = today + N months.
@@ -270,10 +287,12 @@ export async function fetchPendingActions(
       .from('bookings')
       .select(`id, ${BOOKING_CHILD_SELECT}, event_tracking(event_management_form, engage_form)`)
       .eq('is_event', true),
-    adminSupabase
-      .from('membership_requests')
-      .select('id, bodies(name)')
-      .eq('status', 'pending'),
+    isManagementRole(adminRole)
+      ? adminSupabase
+          .from('membership_requests')
+          .select('id, bodies(name)')
+          .eq('status', 'pending')
+      : Promise.resolve({ data: null }),
   ])
 
   const s = settingsFromRow(settingsRow as SettingsRow | null)
@@ -410,6 +429,8 @@ export async function fetchPendingActions(
   }
 
   // --- Membership requests (always regular; not date-driven) ------------
+  // `memberships` is null unless the caller can open Management > Users, so this
+  // loop simply does not run for anyone else -- see PendingActionsFetchOptions.
   for (const mr of (memberships ?? []) as unknown as { id: string; bodies: NameRef }[]) {
     actions.push({
       id: `membership:${mr.id}`,
