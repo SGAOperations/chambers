@@ -12,6 +12,7 @@ import type { OriginTab } from '@/lib/pending-actions'
 import { IdentityContext } from './identity-context'
 import type { ShellIdentity } from '@/lib/shell-identity'
 import type { AlertRow } from '@/lib/dashboard-data'
+import { isManagementRole } from '@/lib/admin-roles'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -31,7 +32,7 @@ export default function DashboardShell({
   // lib/shell-identity.ts. These used to be state filled in by a client-side
   // getClaims() + users/board_memberships round trip after hydration, which held
   // the whole content area behind AuthGuard's skeleton while it ran.
-  const { isAdmin, isIEMS, isLeadership, fullName: userName } = identity
+  const { isAdmin, isIEMS, isLeadership, adminRole, fullName: userName } = identity
   const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS)
   const [alerts, setAlerts] = useState<AlertRow[]>([])
   const [showIdleWarning, setShowIdleWarning] = useState(false)
@@ -423,7 +424,8 @@ export default function DashboardShell({
             {navLink('/sga-spaces', 'SGA Spaces')}
             {(isLeadership || isAdmin) && navLink('/request', 'Request a Booking')}
             {(isAdmin || isIEMS) && navLink('/events', 'Events')}
-            {isAdmin && navLink('/administrator', 'Administrator')}
+            {isAdmin && navLink('/administrator', 'Bookings')}
+            {isAdmin && isManagementRole(adminRole) && navLink('/management', 'Management')}
           </div>
 
           {/* Total badge + Sign out */}

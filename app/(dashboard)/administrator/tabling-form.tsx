@@ -176,7 +176,7 @@ export default function TablingForm({ bodies, semesters, onClose, onSuccess }: T
       <div>
         <label className={labelCls}>Semester *</label>
         {semesters.length === 0 ? (
-          <p className="text-sm text-[#f87171]">No semesters available. Create one in Advanced Settings.</p>
+          <p className="text-sm text-[#f87171]">No semesters available. Create one in Management → Other Settings.</p>
         ) : (
           <select
             value={semesterId}

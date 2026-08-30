@@ -5,18 +5,15 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { randomBytes, createHash } from 'crypto'
 import { sendOtpInviteEmail } from '@/lib/emails/otp-invite'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { MANAGEMENT_ROLES } from '@/lib/admin-roles'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const ROLE_EDITORS = [
-  'Executive Vice President',
-  'Vice President of Operational Affairs',
-  'Digital Innovation Manager',
-  'Information Manager',
-]
+// The same four roles that may reach the Management page at all (issue #64).
+const ROLE_EDITORS = MANAGEMENT_ROLES
 
 export async function GET() {
   const supabase = await createClient()

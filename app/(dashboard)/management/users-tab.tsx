@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
 import { createClient } from '@/lib/supabase/client'
 import { getAuthedUser } from '@/lib/auth'
+import { ADMIN_ROLES, MANAGEMENT_ROLES } from '@/lib/admin-roles'
 
 function UsersTabSkeleton() {
   return (
@@ -27,26 +28,12 @@ function UsersTabSkeleton() {
 }
 
 
-const ADMIN_ROLES = [
-  'Executive Vice President',
-  'Vice President of Operational Affairs',
-  'Comptroller',
-  'Digital Innovation Manager',
-  'Digital Innovation Project Member',
-  'Information Manager',
-]
-
 const IEMS_ROLES = [
   'Vice President of External Affairs',
   'Director of Events',
 ]
 
-const ROLE_EDITORS = [
-  'Executive Vice President',
-  'Vice President of Operational Affairs',
-  'Digital Innovation Manager',
-  'Information Manager',
-]
+const ROLE_EDITORS = MANAGEMENT_ROLES
 
 interface Membership {
   id: string

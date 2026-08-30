@@ -7,10 +7,16 @@ import { usePendingActionsWatch } from '../pending-actions-watch'
 import RequestsTab from './requests-tab'
 import CancellationsTab from './cancellations-tab'
 import BookingsTab from './bookings-tab'
-import AdvancedSettingsTab from './advanced-settings-tab'
 import SGASpacesTab from './sga-spaces-tab'
 
-type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'SGA Spaces' | 'Advanced Settings'
+/**
+ * The former Administrator page, now Bookings (issue #64).
+ *
+ * Its Advanced Settings tab -- users, bodies, audit, archive, other settings --
+ * has become the Management page, which is gated to high-access admins. What is
+ * left here is the booking work itself, open to every admin.
+ */
+type Tab = 'Requests' | 'Cancellations' | 'Bookings' | 'SGA Spaces'
 
 export default function AdministratorPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Bookings')
@@ -30,10 +36,10 @@ export default function AdministratorPage() {
   return (
     <AdminGuard>
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-[#f0f6ff]">Administrator</h1>
+        <h1 className="text-2xl font-bold text-[#f0f6ff]">Bookings</h1>
 
         <div className="flex gap-1 border-b border-[#1e5080] overflow-x-auto overflow-y-hidden">
-          {(['Bookings', 'SGA Spaces', 'Cancellations', 'Requests', 'Advanced Settings'] as Tab[]).map(tab => (
+          {(['Bookings', 'SGA Spaces', 'Cancellations', 'Requests'] as Tab[]).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -67,7 +73,6 @@ export default function AdministratorPage() {
           {activeTab === 'Cancellations' && <CancellationsTab onCountChange={refreshCounts} />}
           {activeTab === 'Bookings' && <BookingsTab />}
           {activeTab === 'SGA Spaces' && <SGASpacesTab />}
-          {activeTab === 'Advanced Settings' && <AdvancedSettingsTab />}
         </div>
       </div>
     </AdminGuard>
