@@ -126,6 +126,20 @@ function nameOf(ref: NameRef): string {
   return r?.name ?? 'Unknown'
 }
 
+/**
+ * What a pending action is *about*, for the one-line summary.
+ *
+ * The purpose is the human-written title of the thing being held -- "Fall
+ * Kickoff", "Weekly Meeting" -- and is what an admin scans the list for. The
+ * governing body used to be shown here instead, but a body runs many bookings,
+ * so repeating it told the reader nothing that separated one row from the next
+ * (issue #63). The body name stays as the fallback for a record with no purpose,
+ * and remains the whole label for membership requests, which have no title.
+ */
+function titleOf(purpose: string | null | undefined, ref: NameRef): string {
+  return purpose?.trim() || nameOf(ref)
+}
+
 function shortDate(dateStr: string | null): string {
   if (!dateStr) return 'no date'
   const [y, m, d] = dateStr.split('-').map(Number)
@@ -198,10 +212,11 @@ export function settingsFromRow(row: SettingsRow | null): PendingActionSettings 
 export interface BookingChildDates {
   type?: string | null
   is_event?: boolean | null
+  purpose?: string | null
   bodies?: NameRef
   one_time_room_bookings?: { id?: string; booking_date: string | null }[] | null
   weekly_room_bookings?:
-    | { weekly_room_occurrences?: { id?: string; occurrence_date: string | null }[] | null }[]
+    | { weekly_room_occurrences?: { id?: string; occurrence_date: string | null; purpose?: string | null }[] | null }[]
     | null
   tabling_bookings?:
     | { tabling_sessions?: { id?: string; session_date: string | null }[] | null }[]
@@ -219,6 +234,14 @@ export function sessionDatesOf(b: BookingChildDates): string[] {
   return out
 }
 
+/** The purpose override on one specific weekly occurrence, or null when it inherits (issue #55). */
+function occurrencePurposeById(b: BookingChildDates, childId: string): string | null {
+  for (const w of b.weekly_room_bookings ?? [])
+    for (const occ of w.weekly_room_occurrences ?? [])
+      if (occ.id === childId) return occ.purpose ?? null
+  return null
+}
+
 /** The date of one specific child row (used for occurrence-scoped cancellations). */
 function childDateById(b: BookingChildDates, childId: string): string | null {
   for (const o of b.one_time_room_bookings ?? []) if (o.id === childId) return o.booking_date ?? null
@@ -230,7 +253,7 @@ function childDateById(b: BookingChildDates, childId: string): string | null {
 }
 
 const BOOKING_CHILD_SELECT =
-  'type, is_event, bodies(name), one_time_room_bookings(id, booking_date), weekly_room_bookings(weekly_room_occurrences(id, occurrence_date)), tabling_bookings(tabling_sessions(id, session_date))'
+  'type, is_event, purpose, bodies(name), one_time_room_bookings(id, booking_date), weekly_room_bookings(weekly_room_occurrences(id, occurrence_date, purpose)), tabling_bookings(tabling_sessions(id, session_date))'
 
 // ---------------------------------------------------------------------------
 // Main entry
@@ -256,7 +279,7 @@ export async function fetchPendingActions(
     adminSupabase.from('app_settings').select('*').eq('id', 1).maybeSingle(),
     adminSupabase
       .from('room_requests')
-      .select('id, type, bodies(name), room_request_details(start_date), tabling_request_sessions(session_date)')
+      .select('id, type, purpose, bodies(name), room_request_details(start_date), tabling_request_sessions(session_date)')
       .eq('status', 'Pending'),
     adminSupabase
       .from('revision_requests')
@@ -283,6 +306,7 @@ export async function fetchPendingActions(
   for (const r of (requests ?? []) as unknown as {
     id: string
     type: string
+    purpose: string | null
     bodies: NameRef
     room_request_details: { start_date: string | null }[] | null
     tabling_request_sessions: { session_date: string | null }[] | null
@@ -304,7 +328,7 @@ export async function fetchPendingActions(
       id: `request:${r.id}`,
       kind: 'request',
       severity,
-      label: `${r.type} request — ${nameOf(r.bodies)} · ${shortDate(refDate)}`,
+      label: `${r.type} request — ${titleOf(r.purpose, r.bodies)} · ${shortDate(refDate)}`,
       originTab: 'Requests',
       originId: r.id,
       referenceDate: refDate,
@@ -327,7 +351,7 @@ export async function fetchPendingActions(
       id: `revision:${rv.id}`,
       kind: 'revision',
       severity,
-      label: `Revision — ${nameOf(b?.bodies ?? null)} · ${shortDate(refDate)}`,
+      label: `Revision — ${titleOf(b?.purpose, b?.bodies ?? null)} · ${shortDate(refDate)}`,
       originTab: 'Requests',
       originId: rv.id,
       referenceDate: refDate,
@@ -348,6 +372,8 @@ export async function fetchPendingActions(
         : minDate(sessionDatesOf(b))
       : null
     const isEvent = !!b?.is_event
+    const purpose =
+      (b && c.occurrence_id ? occurrencePurposeById(b, c.occurrence_id) : null) ?? b?.purpose
 
     let severity: Severity = 'regular'
     if (refDate) {
@@ -361,7 +387,7 @@ export async function fetchPendingActions(
       id: `cancellation:${c.id}`,
       kind: 'cancellation',
       severity,
-      label: `${isEvent ? 'Event ' : ''}Cancellation — ${nameOf(b?.bodies ?? null)} · ${shortDate(refDate)}`,
+      label: `${isEvent ? 'Event ' : ''}Cancellation — ${titleOf(purpose, b?.bodies ?? null)} · ${shortDate(refDate)}`,
       originTab: 'Cancellations',
       originId: c.id,
       referenceDate: refDate,
@@ -383,14 +409,14 @@ export async function fetchPendingActions(
     if (days < 0 || utcMidnight(eventDate) > triggerCutoffMs(s.eventTriggerMonths)) continue
 
     const tracking = Array.isArray(b.event_tracking) ? b.event_tracking[0] : b.event_tracking
-    const bodyName = nameOf(b.bodies ?? null)
+    const title = titleOf(b.purpose, b.bodies ?? null)
 
     if (!tracking?.event_management_form) {
       actions.push({
         id: `event-form:${b.id}:mgmt`,
         kind: 'event-form',
         severity: severityForRange(days, s.eventMgmt[0], s.warningLeadDays),
-        label: `Event Management Form — ${bodyName} · ${shortDate(eventDate)}`,
+        label: `Event Management Form — ${title} · ${shortDate(eventDate)}`,
         originTab: 'Events',
         originId: b.id,
         referenceDate: eventDate,
@@ -401,7 +427,7 @@ export async function fetchPendingActions(
         id: `event-form:${b.id}:engage`,
         kind: 'event-form',
         severity: severityForRange(days, s.eventEngage[0], s.warningLeadDays),
-        label: `Engage Form — ${bodyName} · ${shortDate(eventDate)}`,
+        label: `Engage Form — ${title} · ${shortDate(eventDate)}`,
         originTab: 'Events',
         originId: b.id,
         referenceDate: eventDate,

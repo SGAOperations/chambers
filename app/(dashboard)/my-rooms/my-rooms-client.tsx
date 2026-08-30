@@ -10,6 +10,7 @@ import { Skeleton } from '@/app/_components/skeleton'
 import {
   type FlatBooking,
   type MyRoomsResponse,
+  bookingTitle,
   flattenMyRooms,
   isWithinDays,
   statusColors,
@@ -313,12 +314,12 @@ export default function MyRoomsClient({
                             <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 min-w-0">
-                                <p className="font-semibold text-[#f0f6ff] truncate">{b.location}</p>
+                                <p className="font-semibold text-[#f0f6ff] truncate">{bookingTitle(b)}</p>
                                 {b.senateType && (
                                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
                                 )}
                               </div>
-                              <p className="text-sm text-[#6a96bb]">{formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                              <p className="text-sm text-[#6a96bb]">{b.location} · {formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                             </div>
                             <span className="hidden md:inline text-xs text-[#6a96bb] flex-shrink-0">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
                             <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
