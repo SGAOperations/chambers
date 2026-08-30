@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import TimePicker from '../administrator/time-picker'
+import TimePicker from '../bookings/time-picker'
 import DateField from '@/app/_components/date-field'
 
 interface User {

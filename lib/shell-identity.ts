@@ -25,6 +25,12 @@ export interface ShellIdentity {
   isLeadership: boolean
   isAdmin: boolean
   isIEMS: boolean
+  /**
+   * The caller's admin_role, or null. `isAdmin` only says whether there is one;
+   * the Management page needs to know *which* (issue #64), and it is already in
+   * the row this function reads.
+   */
+  adminRole: string | null
 }
 
 export type ShellIdentityResult =
@@ -87,6 +93,7 @@ export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
       // discussion -- that needs its own change.
       isAdmin: !!profile.admin_role,
       isIEMS: !!profile.iems_role,
+      adminRole: profile.admin_role ?? null,
     },
   }
 }

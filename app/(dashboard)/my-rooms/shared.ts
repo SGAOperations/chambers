@@ -85,6 +85,20 @@ export function scopeFullOf(b: ScopedBookingRow): string[] {
   ).full
 }
 
+/**
+ * The headline for a booking row: what it is, not who runs it.
+ *
+ * Rows used to lead with the owning body (calendar day list) or the room (list
+ * view), which is the least distinguishing thing about them -- a body's rows all
+ * read the same, and so do a room's. The purpose is the title someone typed for
+ * this specific booking, so it leads and the rest drops to supporting text
+ * (issue #65). Falls back to the scope label for a booking saved without one, so
+ * a row is never headed by an empty string.
+ */
+export function bookingTitle(b: FlatBooking): string {
+  return b.purpose?.trim() || b.scopeLabel
+}
+
 export const SENATE_TYPES = ['Full Body', 'Weekly', 'Office Hours'] as const
 
 export const statusColors: Record<string, string> = {
