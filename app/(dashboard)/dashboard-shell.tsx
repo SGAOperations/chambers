@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { signOutThisDevice as endLocalSession } from '@/lib/sign-out'
 import SettingsModal, { type Settings as SettingsData } from './settings-modal'
 import { CountsContext, EMPTY_COUNTS, paBadgeClass, type Counts } from './counts-context'
 import PendingActionsPopover from './pending-actions-popover'
@@ -248,8 +249,12 @@ export default function DashboardShell({
    * every device I own. The paths that mean "this account may not be used" --
    * deactivation in force-sign-out.tsx and LoginCard, an expired invite --
    * deliberately keep the global scope.
+   *
+   * The call itself now lives in lib/sign-out.ts, because a bare signOut() left
+   * the session in place whenever it ran without a network -- which is when the
+   * idle timer below fires most often. See the note there.
    */
-  const signOutThisDevice = () => supabase.auth.signOut({ scope: 'local' })
+  const signOutThisDevice = () => endLocalSession(supabase)
 
   const handleLogout = async () => {
     localStorage.removeItem('chambers_last_active')
