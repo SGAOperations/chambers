@@ -85,7 +85,7 @@ export async function POST(request: Request) {
   if (rateLimitRes) return rateLimitRes
 
   const body = await request.json()
-  const { type, body_id, purpose, notes, details, sessions, scope, division, body_ids } = body
+  const { type, body_id, purpose, notes, details, sessions, scope, division, body_ids, capacity } = body
 
   // Verifies Leadership on the originating body, and -- for a divisional request -- that the user
   // actually leads that division. Any leadership may request a multi-body booking with any
@@ -101,6 +101,26 @@ export async function POST(request: Request) {
     ctx, { scope, body_id, division, body_ids }, validBodyIds
   )
   if (!selection.ok) return NextResponse.json({ error: selection.error }, { status: 403 })
+
+  // Expected attendance. Validated here and not only in the browser: the form is
+  // the only caller today, but this is what actually writes the column, and a
+  // room request without a headcount cannot be actioned (issue #76).
+  //
+  // Required for rooms, refused for tabling -- a table has no capacity to fit,
+  // and accepting one would put a number in the column that means nothing.
+  const needsCapacity = type === 'One-Time Room' || type === 'Weekly Room'
+  let capacityValue: number | null = null
+
+  if (needsCapacity) {
+    const n = typeof capacity === 'number' ? capacity : Number(capacity)
+    if (!Number.isInteger(n) || n < 1 || n > 10000) {
+      return NextResponse.json(
+        { error: 'Expected attendance is required, as a whole number of people.' },
+        { status: 400 }
+      )
+    }
+    capacityValue = n
+  }
 
   // Fetch advance notice settings and validate dates
   const { data: settings } = await adminSupabase
@@ -161,6 +181,7 @@ export async function POST(request: Request) {
       scope: selection.value.scope,
       division: selection.value.division,
       purpose,
+      capacity: capacityValue,
       notes: notes || null,
       requested_by: user.id,
       status: 'Pending',
