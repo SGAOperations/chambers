@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { signOutThisDevice as endLocalSession } from '@/lib/sign-out'
 import SettingsModal, { type Settings as SettingsData } from './settings-modal'
 import { CountsContext, EMPTY_COUNTS, paBadgeClass, type Counts } from './counts-context'
 import PendingActionsPopover from './pending-actions-popover'
@@ -21,6 +22,29 @@ function getGreeting() {
   return 'Good Evening'
 }
 
+/**
+ * How long a session survives without user activity before it is ended.
+ *
+ * Was 44 minutes, which was shorter than the working day it has to sit inside.
+ * People plan a Senate session, go to the Senate session, and come back to a
+ * login page -- and because Chambers is a PWA served from the service worker's
+ * cache, they came back to a login page that could not always reach the network
+ * either. That combination is issue #71.
+ *
+ * The exposure this trades away is smaller than it looks. Signing out here is
+ * scoped 'local' (see signOutThisDevice), so this is about an unattended browser
+ * on a shared machine, not about revoking access. The paths that mean "this
+ * account may not be used" -- deactivation, an expired invite, an admin revoking
+ * sessions -- are all server-side and unaffected by this number.
+ *
+ * Held at module scope because the value was previously written out twice, in
+ * handleStayLoggedIn and in the effect below, and the two had to agree.
+ */
+const IDLE_MS = 12 * 60 * 60 * 1000
+
+/** Seconds the "Session Expiring" dialog counts down before signing out. */
+const IDLE_WARNING_SECONDS = 60
+
 export default function DashboardShell({
   identity,
   children,
@@ -36,7 +60,7 @@ export default function DashboardShell({
   const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS)
   const [alerts, setAlerts] = useState<AlertRow[]>([])
   const [showIdleWarning, setShowIdleWarning] = useState(false)
-  const [idleCountdown, setIdleCountdown] = useState(60)
+  const [idleCountdown, setIdleCountdown] = useState(IDLE_WARNING_SECONDS)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
   const [settingsCache, setSettingsCache] = useState<SettingsData | null>(null)
@@ -225,8 +249,12 @@ export default function DashboardShell({
    * every device I own. The paths that mean "this account may not be used" --
    * deactivation in force-sign-out.tsx and LoginCard, an expired invite --
    * deliberately keep the global scope.
+   *
+   * The call itself now lives in lib/sign-out.ts, because a bare signOut() left
+   * the session in place whenever it ran without a network -- which is when the
+   * idle timer below fires most often. See the note there.
    */
-  const signOutThisDevice = () => supabase.auth.signOut({ scope: 'local' })
+  const signOutThisDevice = () => endLocalSession(supabase)
 
   const handleLogout = async () => {
     localStorage.removeItem('chambers_last_active')
@@ -236,7 +264,7 @@ export default function DashboardShell({
 
   const startWarning = () => {
     setShowIdleWarning(true)
-    let remaining = 60
+    let remaining = IDLE_WARNING_SECONDS
     setIdleCountdown(remaining)
     countdownIntervalRef.current = setInterval(() => {
       remaining -= 1
@@ -257,14 +285,12 @@ export default function DashboardShell({
       countdownIntervalRef.current = null
     }
     setShowIdleWarning(false)
-    setIdleCountdown(60)
-    idleTimerRef.current = setTimeout(startWarning, 44 * 60 * 1000)
+    setIdleCountdown(IDLE_WARNING_SECONDS)
+    idleTimerRef.current = setTimeout(startWarning, IDLE_MS)
     localStorage.setItem('chambers_last_active', Date.now().toString())
   }
 
   useEffect(() => {
-    const IDLE_MS = 44 * 60 * 1000
-
     const storedLastActive = localStorage.getItem('chambers_last_active')
     if (storedLastActive) {
       const elapsed = Date.now() - parseInt(storedLastActive, 10)
@@ -280,7 +306,7 @@ export default function DashboardShell({
         clearInterval(countdownIntervalRef.current)
         countdownIntervalRef.current = null
         setShowIdleWarning(false)
-        setIdleCountdown(60)
+        setIdleCountdown(IDLE_WARNING_SECONDS)
       }
       idleTimerRef.current = setTimeout(startWarning, IDLE_MS)
       localStorage.setItem('chambers_last_active', Date.now().toString())
@@ -400,7 +426,7 @@ export default function DashboardShell({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.13.6</p>
+            <p className="text-slate-600 text-xs mt-1">v1.13.7</p>
             {userName && (
               <div className="flex items-start justify-between mt-2">
                 <p className="text-slate-500 text-xs italic">{getGreeting()},<br />{userName}</p>

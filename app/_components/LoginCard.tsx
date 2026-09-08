@@ -6,6 +6,14 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getAuthedUser } from '@/lib/auth'
+import { useOnlineStatus } from '@/lib/use-online-status'
+import {
+  OFFLINE_MESSAGE,
+  isNetworkError,
+  isOffline,
+  networkErrorMessage,
+  withNetworkRetry,
+} from '@/lib/network-error'
 
 export default function LoginCard() {
   const [email, setEmail] = useState('')
@@ -15,44 +23,93 @@ export default function LoginCard() {
   const [showForgot, setShowForgot] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
   const [resetSent, setResetSent] = useState(false)
+  const [resetError, setResetError] = useState('')
   const [resetLoading, setResetLoading] = useState(false)
+  // Distinguishes "still waiting on the server" from "the first attempt did not
+  // get out and we are trying again", so the button can say which (issue #71).
+  const [retrying, setRetrying] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const isOnline = useOnlineStatus()
 
   useEffect(() => {
     const checkAuth = async () => {
       const user = await getAuthedUser(supabase)
-      if (user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('has_completed_onboarding')
-          .eq('id', user.id)
-          .single()
-        router.push(profile?.has_completed_onboarding ? '/my-rooms' : '/onboarding')
-      }
+      if (!user) return
+
+      const { data: profile, error } = await supabase
+        .from('users')
+        .select('has_completed_onboarding')
+        .eq('id', user.id)
+        .single()
+
+      // A failed read is not an answer. `profile?.has_completed_onboarding`
+      // being undefined used to route an already-onboarded user to /onboarding
+      // whenever this query hiccuped -- the same flaky network behind issue #71
+      // was enough to do it. Staying put is the harmless outcome: the user
+      // signs in and is routed by handleLogin, which asks again.
+      if (error || !profile) return
+
+      router.push(profile.has_completed_onboarding ? '/my-rooms' : '/onboarding')
     }
     checkAuth()
   }, [])
 
   const handleLogin = async () => {
+    // Nothing can leave the machine, and the service worker has already served
+    // a login page convincing enough to hide that. Say so, rather than spending
+    // a round trip to arrive at "Failed to fetch" (issue #71).
+    if (isOffline()) {
+      setError(OFFLINE_MESSAGE)
+      return
+    }
+
     setLoading(true)
+    setRetrying(false)
     setError('')
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await withNetworkRetry(
+      () => supabase.auth.signInWithPassword({ email, password }),
+      () => setRetrying(true)
+    )
+    setRetrying(false)
 
     if (error) {
-      setError(error.message)
+      // error.message here is whatever the browser calls a dead socket --
+      // "Failed to fetch" in Chrome. Never show that: it reads as a bug in
+      // Chambers rather than as "your connection dropped". A real rejection
+      // from the server (wrong password, rate limit) is still shown verbatim.
+      setError(isNetworkError(error) ? networkErrorMessage() : error.message)
       setLoading(false)
       return
     }
 
-    const { data: profile } = await supabase
-      .from('users')
-      .select('is_active, has_completed_onboarding, otp_expires_at')
-      .eq('id', data.user.id)
-      .single()
+    const { data: profile, error: profileError } = await withNetworkRetry(
+      async () =>
+        await supabase
+          .from('users')
+          .select('is_active, has_completed_onboarding, otp_expires_at')
+          .eq('id', data.user.id)
+          .single()
+    )
 
-    if (!profile?.is_active) {
+    // Not being able to read the account is not the same as the account being
+    // disabled, and this used to conflate them: a null `profile` fell into the
+    // branch below, so one dropped request told the user their account had been
+    // deactivated and globally revoked every session they held. The sign-in
+    // itself succeeded, so the session is deliberately left alone -- retrying
+    // re-runs this read rather than starting over.
+    if (profileError || !profile) {
+      setError(
+        isNetworkError(profileError)
+          ? networkErrorMessage()
+          : 'We could not load your account. Please try again.'
+      )
+      setLoading(false)
+      return
+    }
+
+    if (!profile.is_active) {
       // Global scope kept deliberately here and below: these mean the account
       // may not be used at all, so every session it holds should end. An
       // ordinary sign-out (dashboard-shell) is scoped 'local' instead.
@@ -62,14 +119,20 @@ export default function LoginCard() {
       return
     }
 
-    if (!profile?.has_completed_onboarding) {
-      if (profile?.otp_expires_at && new Date(profile.otp_expires_at) < new Date()) {
+    if (!profile.has_completed_onboarding) {
+      if (profile.otp_expires_at && new Date(profile.otp_expires_at) < new Date()) {
         await supabase.auth.signOut()
         setError('Your invitation has expired. Please contact an administrator for a new invite.')
         setLoading(false)
         return
       }
-      await fetch('/api/onboarding/invalidate-otp', { method: 'POST' })
+      // Best effort. An unhandled rejection here rejected handleLogin and left
+      // the button stuck, disabled, reading "Signing in...". The endpoint only
+      // nulls otp_hash/otp_expires_at, so it is safe to reach again later, and
+      // the user is authenticated either way.
+      try {
+        await fetch('/api/onboarding/invalidate-otp', { method: 'POST' })
+      } catch {}
       localStorage.removeItem('chambers_last_active')
       router.push('/onboarding')
       return
@@ -80,17 +143,38 @@ export default function LoginCard() {
   }
 
   const handleResetPassword = async () => {
+    if (isOffline()) {
+      setResetError(OFFLINE_MESSAGE)
+      return
+    }
+
     setResetLoading(true)
-    await supabase.auth.resetPasswordForEmail(resetEmail, {
-      redirectTo: window.location.origin + '/reset-password',
-    })
-    setResetSent(true)
+    setResetError('')
+
+    const { error } = await withNetworkRetry(() =>
+      supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: window.location.origin + '/reset-password',
+      })
+    )
     setResetLoading(false)
+
+    // Only a network failure is surfaced. Everything else still reports the
+    // same "if an account exists" line as before -- naming which addresses
+    // failed would confirm which ones are real. Claiming an email was sent when
+    // the request never left the browser is a different matter, and is what
+    // this stops.
+    if (isNetworkError(error)) {
+      setResetError(networkErrorMessage())
+      return
+    }
+
+    setResetSent(true)
   }
 
   const closeForgot = () => {
     setShowForgot(false)
     setResetSent(false)
+    setResetError('')
     setResetEmail('')
   }
 
@@ -104,6 +188,24 @@ export default function LoginCard() {
           </div>
           <p className="text-[#93b8d8] text-sm">Northeastern Student Government Association</p>
         </div>
+
+        {/*
+          Chambers is a PWA, so this page is served from the service worker's
+          cache and looks completely live when it is not. Without this banner an
+          offline visitor gets a normal-looking form and an unexplained failure
+          on submit -- which is how issue #71 was experienced.
+        */}
+        {!isOnline && (
+          <div
+            role="status"
+            className="mb-6 rounded-lg border border-[#c8102e]/40 bg-[#c8102e]/10 px-3 py-2.5"
+          >
+            <p className="text-xs text-[#f0f6ff] leading-relaxed">
+              You&apos;re offline. This is a saved copy of the page — signing in won&apos;t
+              work until your connection is back.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-4">
           <div>
@@ -145,10 +247,10 @@ export default function LoginCard() {
           {error && <p className="text-[#c8102e] text-sm">{error}</p>}
           <button
             onClick={handleLogin}
-            disabled={loading}
+            disabled={loading || !isOnline}
             className="w-full bg-[#c8102e] hover:bg-[#a00d24] hover:scale-105 text-white py-2.5 rounded-lg font-medium text-sm transition-all disabled:opacity-50 mt-2"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {!isOnline ? 'Offline' : loading ? (retrying ? 'Reconnecting…' : 'Signing in...') : 'Sign In'}
           </button>
         </div>
 
@@ -192,12 +294,13 @@ export default function LoginCard() {
                     className="w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
                   />
                 </div>
+                {resetError && <p className="text-[#c8102e] text-sm">{resetError}</p>}
                 <button
                   onClick={handleResetPassword}
-                  disabled={resetLoading}
+                  disabled={resetLoading || !isOnline}
                   className="w-full bg-[#c8102e] hover:bg-[#a00d24] hover:scale-105 text-white py-2.5 rounded-lg font-medium text-sm transition-all disabled:opacity-50"
                 >
-                  {resetLoading ? 'Sending…' : 'Send Reset Link'}
+                  {!isOnline ? 'Offline' : resetLoading ? 'Sending…' : 'Send Reset Link'}
                 </button>
               </>
             )}
