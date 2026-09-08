@@ -115,6 +115,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   const { isDanger, registerOrigin } = usePendingActionsWatch()
   const [confirmingDenial, setConfirmingDenial] = useState<string | null>(null)
   const [denyingRequest, setDenyingRequest] = useState<string | null>(null)
+  const [denyingRevision, setDenyingRevision] = useState<string | null>(null)
   const [fulfillingRequest, setFulfillingRequest] = useState<{
   id: string
   type: string
@@ -192,6 +193,25 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
                 )}
                 <p><span className="font-medium text-[#f0f6ff]">More info:</span> {rv.more_info}</p>
                 <p><span className="font-medium text-[#f0f6ff]">Submitted:</span> {new Date(rv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+              </div>
+
+              {/*
+                The only action a revision request had was the implicit one --
+                edit the booking, and the three booking routes mark it Done. When
+                the change could not be made there was nothing to do, so the row
+                sat here as a danger pending action forever (issue #77).
+
+                Granting still happens by editing the booking, which is why there
+                is no "Approve" here to pair with this: it would have nothing to
+                do that opening the booking does not already do.
+              */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setDenyingRevision(rv.id)}
+                  className="px-3 py-1.5 text-sm border border-[#1e5080] text-[#f87171] rounded-lg hover:bg-[#3d0f0f] hover:border-[#f87171] transition-colors"
+                >
+                  Deny
+                </button>
               </div>
             </div>
           ))}
@@ -338,6 +358,16 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
           requestId={denyingRequest}
           onClose={() => { setDenyingRequest(null); setConfirmingDenial(null) }}
           onDenied={() => { setDenyingRequest(null); setConfirmingDenial(null); fetchRequests(); onCountChange() }}
+        />
+      )}
+      {denyingRevision && (
+        <DenyModal
+          kind="revision"
+          requestId={denyingRevision}
+          onClose={() => setDenyingRevision(null)}
+          // fetchRequests drops the row (the GET only returns Pending) and
+          // onCountChange clears the pending action it was driving.
+          onDenied={() => { setDenyingRevision(null); fetchRequests(); onCountChange() }}
         />
       )}
     </div>

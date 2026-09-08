@@ -117,6 +117,16 @@ export default function NotificationBell() {
                           <> <span className="text-[#93b8d8]">Reason: {alert.denial_reason}</span></>
                         )}
                       </>
+                    ) : alert.booking_type === 'Revision Denied' ? (
+                      // Linked to the booking rather than a room request, so it
+                      // names the booking's body and not room_requests (issue #77).
+                      <>
+                        Your revision request
+                        {alert.bookings?.bodies?.name ? ` for ${alert.bookings.bodies.name}` : ''} was denied.
+                        {alert.denial_reason && (
+                          <> <span className="text-[#93b8d8]">Reason: {alert.denial_reason}</span></>
+                        )}
+                      </>
                     ) : (
                       <>
                         {alert.bookings?.bodies?.name && (
