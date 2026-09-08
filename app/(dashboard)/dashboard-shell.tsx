@@ -31,16 +31,25 @@ function getGreeting() {
  * cache, they came back to a login page that could not always reach the network
  * either. That combination is issue #71.
  *
- * The exposure this trades away is smaller than it looks. Signing out here is
- * scoped 'local' (see signOutThisDevice), so this is about an unattended browser
- * on a shared machine, not about revoking access. The paths that mean "this
- * account may not be used" -- deactivation, an expired invite, an admin revoking
- * sessions -- are all server-side and unaffected by this number.
+ * Two days is a deliberate choice to make this a convenience rather than a
+ * control, and it is worth being honest about what it gives up: someone who
+ * signs in on a library machine on Friday afternoon is still signed in on
+ * Sunday. What keeps that survivable is that this sign-out is scoped 'local'
+ * (see signOutThisDevice) -- it ends the session in this browser, and it is not
+ * what stands between a revoked account and its data. Deactivation, expired
+ * invites and admin session revocation are all enforced server-side, against
+ * users.sessions_revoked_at and the live role checks in lib/auth.ts, and none of
+ * them care about this number. If that ever stops being true, this constant
+ * becomes a security boundary and should come back down.
+ *
+ * Kept well inside setTimeout's ~24.8-day ceiling. A delay past 2^31-1 ms
+ * silently overflows and fires immediately, so a much larger value here would
+ * sign everyone out at once rather than never.
  *
  * Held at module scope because the value was previously written out twice, in
  * handleStayLoggedIn and in the effect below, and the two had to agree.
  */
-const IDLE_MS = 12 * 60 * 60 * 1000
+const IDLE_MS = 48 * 60 * 60 * 1000
 
 /** Seconds the "Session Expiring" dialog counts down before signing out. */
 const IDLE_WARNING_SECONDS = 60
