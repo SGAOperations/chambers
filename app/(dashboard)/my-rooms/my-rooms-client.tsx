@@ -7,6 +7,7 @@ import BookingDetailModal from './booking-detail-modal'
 import NotificationBell from './notification-bell'
 import CalendarView from './calendar-view'
 import { Skeleton } from '@/app/_components/skeleton'
+import { wantsSenateSession } from '@/lib/senate-types'
 import {
   type FlatBooking,
   type MyRoomsResponse,
@@ -136,8 +137,10 @@ export default function MyRoomsClient({
     return () => window.removeEventListener('chambers:senate-prefs-updated', fetchBookings)
   }, [fetchBookings])
 
+  // The same rule the update emails and dashboard alerts now apply, so what this
+  // page hides and what Chambers stops sending you cannot drift apart (#92, #93).
   const passesSenateFilter = (b: FlatBooking) =>
-    b.bodyName !== 'Senate' || !b.senateType || (senateTypePreferences[b.senateType] ?? true)
+    wantsSenateSession(senateTypePreferences, b.bodyName, b.senateType)
 
   const filteredUpcoming = all.filter(b => isWithinDays(b.date, filter, today) && passesSenateFilter(b))
 

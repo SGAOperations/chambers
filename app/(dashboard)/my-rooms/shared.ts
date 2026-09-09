@@ -99,8 +99,6 @@ export function bookingTitle(b: FlatBooking): string {
   return b.purpose?.trim() || b.scopeLabel
 }
 
-export const SENATE_TYPES = ['Full Body', 'Weekly', 'Office Hours'] as const
-
 export const statusColors: Record<string, string> = {
   'Reserved': 'bg-[#0f3d20] border-[#22c55e]',
   'Alternate Room': 'bg-[#0e2f4f] border-[#4285f4]',

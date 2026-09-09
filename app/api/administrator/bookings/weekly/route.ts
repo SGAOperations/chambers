@@ -304,16 +304,12 @@ export async function PATCH(request: Request) {
     .single()
   const bodyName = bodyData?.name ?? 'Unknown'
 
-  // The audience is the whole scope, not just the owning body -- see resolveBookingRecipients for
-  // the divisional/multi fan-out policy.
   const scopedRow: ScopedRow = {
     id: booking_id,
     body_id: selection.value.body_id,
     scope: selection.value.scope,
     division: selection.value.division,
   }
-  const recipients = await resolveBookingRecipients(adminSupabase, scopedRow)
-
   // Which weeks this edit actually moved, in date order.
   //
   // This used to be "the first week carrying any override", which is a different
@@ -328,6 +324,36 @@ export async function PATCH(request: Request) {
   const movedOccurrences = newOccurrences.filter(o =>
     occurrenceMoved(prevByDate.get(o.occurrence_date), o)
   )
+
+  // Series-level fields. Compared against what was on the row before this
+  // request rather than against the payload, so an edit that resubmits a field
+  // unchanged does not report it as a change.
+  //
+  // Computed here rather than in the email block below because the audience
+  // depends on it: whether this edit is about particular sessions or about the
+  // whole series decides which Senate session types it is about.
+  const seriesChanges = collectChanges(
+    changed('Purpose', prevBooking?.purpose, purpose),
+    changed('Room', prevWeekly?.room_name, room_name),
+    changed('Start date', prevWeekly?.start_date, start_date, formatDate),
+    changed('End date', prevWeekly?.end_date, end_date, formatDate),
+    changed('Start time', prevWeekly?.start_time, start_time, formatTime),
+    changed('End time', prevWeekly?.end_time, end_time, formatTime),
+    changed('Status', prevWeekly?.status, status),
+    changed('Reservation code', prevWeekly?.reservation_code, reservation_code || null),
+  )
+
+  // The sessions this notification is about: the weeks that moved, or -- when
+  // the series itself moved -- all of them. Senate members who have deselected
+  // every one of these session types drop out of the audience (issues #92, #93).
+  const notifiedSenateTypes = (seriesChanges.length === 0 ? movedOccurrences : newOccurrences)
+    .map(o => o.senate_type)
+
+  // The audience is the whole scope, not just the owning body -- see resolveBookingRecipients for
+  // the divisional/multi fan-out policy.
+  const recipients = await resolveBookingRecipients(adminSupabase, scopedRow, {
+    senateTypes: notifiedSenateTypes,
+  })
 
   // The alert points at the earliest week that moved, falling back to the start
   // of the series when the edit was series-wide.
@@ -352,20 +378,6 @@ export async function PATCH(request: Request) {
     (async () => {
       try {
         const emails = recipients.map(r => r.email)
-
-        // Series-level fields. Compared against what was on the row before this
-        // request rather than against the payload, so an edit that resubmits a
-        // field unchanged does not report it as a change.
-        const seriesChanges = collectChanges(
-          changed('Purpose', prevBooking?.purpose, purpose),
-          changed('Room', prevWeekly?.room_name, room_name),
-          changed('Start date', prevWeekly?.start_date, start_date, formatDate),
-          changed('End date', prevWeekly?.end_date, end_date, formatDate),
-          changed('Start time', prevWeekly?.start_time, start_time, formatTime),
-          changed('End time', prevWeekly?.end_time, end_time, formatTime),
-          changed('Status', prevWeekly?.status, status),
-          changed('Reservation code', prevWeekly?.reservation_code, reservation_code || null),
-        )
 
         // When the series itself did not move, the edit was to the weeks that
         // moved -- so the email describes those weeks. If the series moved too,
