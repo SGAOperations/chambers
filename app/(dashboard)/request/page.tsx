@@ -23,6 +23,8 @@ interface MyRequest {
   id: string
   type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
   purpose: string
+  /** Null on tabling, and on room requests made before issue #76. */
+  capacity: number | null
   status: 'Pending' | 'Fulfilled' | 'Denied'
   notes: string | null
   created_at: string
@@ -198,6 +200,9 @@ export default function RequestPage() {
 
   const [form, setForm] = useState({
     purpose: '',
+    // Kept as a string because that is what the input gives back, and '' has to
+    // stay distinguishable from 0 for the validation below.
+    capacity: '',
     notes: '',
     room_name: '',
     start_date: '',
@@ -208,6 +213,9 @@ export default function RequestPage() {
 
   const [sessions, setSessions] = useState<TablingSession[]>([emptySession()])
   const [oneTimeSessions, setOneTimeSessions] = useState<OneTimeSession[]>([emptyOneTimeSession()])
+
+  /** Tabling books a table, not a room, so there is no capacity to fit. */
+  const needsCapacity = type === 'One-Time Room' || type === 'Weekly Room'
 
   useEffect(() => {
     const fetchBodies = async () => {
@@ -255,6 +263,17 @@ export default function RequestPage() {
     if (!scopeValue.body_id || !form.purpose) {
       setError('Please fill out all required fields.')
       return
+    }
+
+    // Rooms are assigned by how many people are coming, so a room request
+    // without a headcount cannot be actioned (issue #76). Tabling has no room to
+    // size, so it is not asked.
+    if (needsCapacity) {
+      const n = Number(form.capacity)
+      if (!form.capacity.trim() || !Number.isInteger(n) || n < 1 || n > 10000) {
+        setError('Please enter the expected attendance as a whole number of people.')
+        return
+      }
     }
 
     if (scopeValue.scope === 'divisional' && !scopeValue.division) {
@@ -323,6 +342,9 @@ export default function RequestPage() {
       ...scopeValue,
       purpose: form.purpose,
       notes: form.notes,
+      // Null rather than 0 for tabling: the column means "not asked for" when
+      // empty, and 0 would read as a booking for nobody.
+      capacity: needsCapacity ? Number(form.capacity) : null,
     }
 
     if (type === 'One-Time Room') {
@@ -359,7 +381,7 @@ export default function RequestPage() {
   }
 
   const resetForm = () => {
-    setForm({ purpose: '', notes: '', room_name: '', start_date: '', end_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME })
+    setForm({ purpose: '', capacity: '', notes: '', room_name: '', start_date: '', end_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME })
     setScopeValue({ scope: 'single', body_id: '', division: null, body_ids: [] })
     setSessions([emptySession()])
     setOneTimeSessions([emptyOneTimeSession()])
@@ -496,6 +518,14 @@ export default function RequestPage() {
                           <span className="text-xs font-medium text-[#93b8d8]">Type</span>
                           <p className="text-sm text-[#f0f6ff]">{req.type === 'One-Time Room' ? 'One-Time/Multiple Room' : req.type}</p>
                         </div>
+                        {req.type !== 'Tabling' && req.capacity != null && (
+                          <div>
+                            <span className="text-xs font-medium text-[#93b8d8]">Expected Attendance</span>
+                            <p className="text-sm text-[#f0f6ff]">
+                              {req.capacity} {req.capacity === 1 ? 'person' : 'people'}
+                            </p>
+                          </div>
+                        )}
                         <div>
                           <span className="text-xs font-medium text-[#93b8d8]">Submitted</span>
                           <p className="text-sm text-[#f0f6ff]">
@@ -574,9 +604,35 @@ export default function RequestPage() {
               />
             )}
 
-            <div>
-              <label className={labelCls}>Purpose *</label>
-              <input type="text" placeholder="e.g. Focus Group" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} className={inputCls} />
+            <div className={needsCapacity ? 'grid grid-cols-1 sm:grid-cols-3 gap-3' : ''}>
+              <div className={needsCapacity ? 'sm:col-span-2' : ''}>
+                <label className={labelCls}>Purpose *</label>
+                <input type="text" placeholder="e.g. Focus Group" value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })} className={inputCls} />
+              </div>
+
+              {/*
+                CSC sizes the room by headcount, so this is required to make the
+                booking -- but the request had nowhere to say it, and admins were
+                asking after the fact or guessing from the purpose (issue #76).
+
+                inputMode numeric rather than type="number": the spinner arrows
+                are meaningless for a headcount, and a number input silently
+                yields '' for anything unparseable, which would turn a typo into
+                "not specified" instead of an error.
+              */}
+              {needsCapacity && (
+                <div>
+                  <label className={labelCls}>Expected Attendance *</label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="e.g. 25"
+                    value={form.capacity}
+                    onChange={e => setForm({ ...form, capacity: e.target.value.replace(/[^0-9]/g, '') })}
+                    className={inputCls}
+                  />
+                </div>
+              )}
             </div>
 
             {/* One-Time Room fields */}

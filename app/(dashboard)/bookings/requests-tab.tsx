@@ -62,6 +62,8 @@ interface RoomRequest {
   body_id: string
   type: 'One-Time Room' | 'Weekly Room' | 'Tabling'
   purpose: string
+  /** Null on tabling, and on room requests made before issue #76. */
+  capacity: number | null
   status: RequestStatus
   notes: string | null
   created_at: string
@@ -268,6 +270,21 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
           <div className="text-sm text-[#93b8d8] space-y-1">
             <p><span className="font-medium text-[#f0f6ff]">Requested by:</span> {r.users?.full_name || 'Unknown'}</p>
             <p><span className="font-medium text-[#f0f6ff]">Purpose:</span> {r.purpose}</p>
+            {/*
+              Rendered for room requests only, and "Not specified" rather than a
+              number for the ones submitted before the field existed -- inventing
+              a headcount for those would be worse than admitting there isn't one
+              (issue #76). Tabling has no room to size, so the line is omitted
+              entirely rather than shown empty.
+            */}
+            {r.type !== 'Tabling' && (
+              <p>
+                <span className="font-medium text-[#f0f6ff]">Expected attendance:</span>{' '}
+                {r.capacity != null
+                  ? `${r.capacity} ${r.capacity === 1 ? 'person' : 'people'}`
+                  : <span className="text-[#6a96bb] italic">Not specified</span>}
+              </p>
+            )}
 
             {/* One-Time & Weekly details */}
             {r.room_request_details && r.room_request_details.length > 0 && (
