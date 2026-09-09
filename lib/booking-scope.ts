@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { hasLiveAdmin, type AuthedUser } from './auth'
+import { wantsAnySenateSession } from './senate-types'
 
 /**
  * Multi-body bookings (issue #19).
@@ -339,11 +340,18 @@ export interface Recipient {
   fullName: string
 }
 
+interface RecipientUser {
+  email: string
+  full_name: string
+  is_active: boolean
+  senate_type_preferences: Record<string, boolean> | null
+}
+
 interface RecipientRow {
   user_id: string
   body_id: string
   role: string
-  users: { email: string; full_name: string; is_active: boolean } | { email: string; full_name: string; is_active: boolean }[] | null
+  users: RecipientUser | RecipientUser[] | null
 }
 
 /**
@@ -367,11 +375,17 @@ interface RecipientRow {
  *
  * `leadershipOnly` narrows to Leadership across the whole audience regardless of scope -- used for
  * the missed-reservation email, which only ever went to leadership.
+ *
+ * `senateTypes` are the session types this notification is about. Pass them and members of the
+ * Senate who have deselected every one of those types in Settings drop out of the audience --
+ * which is what that preference was always supposed to mean, rather than only hiding the rows on
+ * the My Rooms page (issues #92, #93). Omit it for a notification that is not about particular
+ * sessions; nobody is filtered then.
  */
 export async function resolveBookingRecipients(
   adminSupabase: SupabaseClient,
   row: ScopedRow,
-  opts: { leadershipOnly?: boolean } = {}
+  opts: { leadershipOnly?: boolean; senateTypes?: (string | null | undefined)[] } = {}
 ): Promise<Recipient[]> {
   const bodyIds = await resolveBookingBodyIds(adminSupabase, row)
   if (bodyIds.length === 0) return []
@@ -379,10 +393,15 @@ export async function resolveBookingRecipients(
   const [{ data }, { data: bookingRow }] = await Promise.all([
     adminSupabase
       .from('board_memberships')
-      .select('user_id, body_id, role, users(email, full_name, is_active)')
+      .select('user_id, body_id, role, users(email, full_name, is_active, senate_type_preferences)')
       .in('body_id', bodyIds),
-    adminSupabase.from('bookings').select('hidden').eq('id', row.id).maybeSingle(),
+    // bodies(name) is read for the Senate session-type filter below, which keys on the owning
+    // body being the one literally named "Senate" -- the same thing the My Rooms filter keys on.
+    adminSupabase.from('bookings').select('hidden, bodies(name)').eq('id', row.id).maybeSingle(),
   ])
+
+  const ownerBody = Array.isArray(bookingRow?.bodies) ? bookingRow?.bodies[0] : bookingRow?.bodies
+  const ownerBodyName = (ownerBody as { name: string } | null | undefined)?.name ?? null
 
   // A hidden booking notifies only the people who can manage it, which is exactly the set
   // canManageScoped() admits: Leadership anywhere in the booking's audience.
@@ -396,6 +415,17 @@ export async function resolveBookingRecipients(
     if (!user?.is_active || !user.email) continue
 
     if (leadershipOnly && m.role !== 'Leadership') continue
+
+    // Applies to Leadership too. Someone who has said they do not follow Office Hours does not
+    // start wanting those emails because they lead the body -- the preference is about what they
+    // read, not about what they are responsible for, and Leadership can still see every session
+    // on the booking itself.
+    if (
+      opts.senateTypes &&
+      !wantsAnySenateSession(user.senate_type_preferences, ownerBodyName, opts.senateTypes)
+    ) {
+      continue
+    }
 
     // Divisional: peer bodies contribute only their leadership.
     if (

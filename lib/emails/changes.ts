@@ -76,8 +76,15 @@ export function collectChanges(...items: (BookingChange | null)[]): BookingChang
  * is filed under), and inventing a "What changed" section that lists nothing
  * would be worse than leaving it out. The email then reads as it did before, as
  * a statement of where the booking now stands.
+ *
+ * `heading: false` drops the "What changed" label, for a caller that already
+ * has a heading of its own above the rows -- the per-session blocks of a
+ * multi-session update email, where repeating it under every date would shout.
  */
-export function renderChanges(changes: BookingChange[]): { text: string; html: string } | null {
+export function renderChanges(
+  changes: BookingChange[],
+  { heading = true }: { heading?: boolean } = {}
+): { text: string; html: string } | null {
   if (!changes.length) return null
 
   const text = changes
@@ -85,7 +92,7 @@ export function renderChanges(changes: BookingChange[]): { text: string; html: s
     .join('\n')
 
   const html = `
-    <p style="margin:0 0 8px;font-weight:bold;">What changed</p>
+    ${heading ? '<p style="margin:0 0 8px;font-weight:bold;">What changed</p>' : ''}
     <table cellpadding="0" cellspacing="0" style="margin:0 0 16px;border-collapse:collapse;width:100%;">
       ${changes.map(c => `
         <tr>

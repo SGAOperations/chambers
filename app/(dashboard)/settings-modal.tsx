@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { getJson } from '@/lib/fetch-json'
 import { Skeleton } from '@/app/_components/skeleton'
 import { getPrefsForRole, EMAIL_PREF_LABELS, EmailPrefKey } from '@/lib/email-preferences'
+import { SENATE_TYPES } from '@/lib/senate-types'
 
 interface Membership {
   id: string
@@ -34,7 +35,7 @@ export interface Settings {
   available_bodies: AvailableBody[]
 }
 
-export const SENATE_TYPES = ['Full Body', 'Weekly', 'Office Hours'] as const
+export { SENATE_TYPES } from '@/lib/senate-types'
 
 interface SettingsModalProps {
   onClose: () => void
@@ -273,7 +274,12 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
         {/* Senate Session Types */}
         {!loading && isSenateMember && (
           <div className="space-y-3">
-            <p className="text-xs font-medium text-[#93b8d8]">Senate Session Types Shown in My Rooms</p>
+            <div>
+              <p className="text-xs font-medium text-[#93b8d8]">Senate Session Types You Follow</p>
+              <p className="text-xs text-[#6a96bb] mt-1">
+                Deselected types are hidden from My Rooms, and Chambers stops emailing and alerting you about them.
+              </p>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {SENATE_TYPES.map(type => (
                 <label key={type} className="flex items-center gap-3 cursor-pointer">

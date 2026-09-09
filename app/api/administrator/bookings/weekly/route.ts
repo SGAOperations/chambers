@@ -5,6 +5,7 @@ import { sendMissedReservationEmail, formatDateLong } from '@/lib/emails/missed-
 import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { sendBookingCreatedEmail } from '@/lib/emails/booking-created'
 import { changed, collectChanges, formatDate, formatTime } from '@/lib/emails/changes'
+import { occurrenceMoved } from '@/lib/weekly-occurrences'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
@@ -42,6 +43,20 @@ const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
+
+/** One stored occurrence as read back before the regeneration below. */
+interface PrevOccurrenceRow {
+  occurrence_date: string
+  room_name: string | null
+  start_time: string | null
+  end_time: string | null
+  status: string | null
+  reservation_code: string | null
+  purpose: string | null
+  senate_type: string | null
+  hidden: boolean | null
+  is_event: boolean | null
+}
 
 function getWeeklyDates(startDate: string, endDate: string): string[] {
   const dates: string[] = []
@@ -204,7 +219,9 @@ export async function PATCH(request: Request) {
       .single(),
     adminSupabase
       .from('weekly_room_occurrences')
-      .select('occurrence_date, room_name, start_time, end_time, status, reservation_code, purpose')
+      .select(
+        'occurrence_date, room_name, start_time, end_time, status, reservation_code, purpose, senate_type, hidden, is_event'
+      )
       .eq('weekly_booking_id', weekly_id),
   ])
 
@@ -287,28 +304,60 @@ export async function PATCH(request: Request) {
     .single()
   const bodyName = bodyData?.name ?? 'Unknown'
 
-  // The audience is the whole scope, not just the owning body -- see resolveBookingRecipients for
-  // the divisional/multi fan-out policy.
   const scopedRow: ScopedRow = {
     id: booking_id,
     body_id: selection.value.body_id,
     scope: selection.value.scope,
     division: selection.value.division,
   }
-  const recipients = await resolveBookingRecipients(adminSupabase, scopedRow)
-
-  // `hidden != null` rather than a truthiness test: an occurrence forced
-  // visible (false) has been changed just as much as one forced hidden.
+  // Which weeks this edit actually moved, in date order.
   //
-  // Hoisted out of the alerts block below because the email needs it too: an
-  // edit to a single week used to be described using the series' start date, so
-  // someone told "your booking changed" was pointed at a date months earlier
-  // than the one that had actually moved (issue #79).
-  const overriddenOcc = newOccurrences.find(
-    o => o.room_name || o.start_time || o.end_time || o.status || o.reservation_code
-      || o.purpose || o.hidden != null
+  // This used to be "the first week carrying any override", which is a different
+  // question and usually a different week: an override set on week 1 months ago
+  // is still an override today, so every later edit to the series was reported
+  // against week 1 -- with an empty change list, because week 1 had not in fact
+  // moved (issue #91). Comparing each week against what was stored for it is the
+  // only way to name the week the administrator touched.
+  const prevByDate = new Map(
+    ((prevOccurrences ?? []) as PrevOccurrenceRow[]).map(o => [o.occurrence_date, o])
   )
-  const changedOcc = overriddenOcc ?? newOccurrences[0]
+  const movedOccurrences = newOccurrences.filter(o =>
+    occurrenceMoved(prevByDate.get(o.occurrence_date), o)
+  )
+
+  // Series-level fields. Compared against what was on the row before this
+  // request rather than against the payload, so an edit that resubmits a field
+  // unchanged does not report it as a change.
+  //
+  // Computed here rather than in the email block below because the audience
+  // depends on it: whether this edit is about particular sessions or about the
+  // whole series decides which Senate session types it is about.
+  const seriesChanges = collectChanges(
+    changed('Purpose', prevBooking?.purpose, purpose),
+    changed('Room', prevWeekly?.room_name, room_name),
+    changed('Start date', prevWeekly?.start_date, start_date, formatDate),
+    changed('End date', prevWeekly?.end_date, end_date, formatDate),
+    changed('Start time', prevWeekly?.start_time, start_time, formatTime),
+    changed('End time', prevWeekly?.end_time, end_time, formatTime),
+    changed('Status', prevWeekly?.status, status),
+    changed('Reservation code', prevWeekly?.reservation_code, reservation_code || null),
+  )
+
+  // The sessions this notification is about: the weeks that moved, or -- when
+  // the series itself moved -- all of them. Senate members who have deselected
+  // every one of these session types drop out of the audience (issues #92, #93).
+  const notifiedSenateTypes = (seriesChanges.length === 0 ? movedOccurrences : newOccurrences)
+    .map(o => o.senate_type)
+
+  // The audience is the whole scope, not just the owning body -- see resolveBookingRecipients for
+  // the divisional/multi fan-out policy.
+  const recipients = await resolveBookingRecipients(adminSupabase, scopedRow, {
+    senateTypes: notifiedSenateTypes,
+  })
+
+  // The alert points at the earliest week that moved, falling back to the start
+  // of the series when the edit was series-wide.
+  const alertOcc = movedOccurrences[0] ?? newOccurrences[0]
 
   if (recipients.length && auditLog) {
     await adminSupabase.from('user_alerts').insert(
@@ -317,8 +366,8 @@ export async function PATCH(request: Request) {
         audit_log_id: auditLog.id,
         booking_id,
         booking_type: 'Weekly Room',
-        booking_date: changedOcc?.occurrence_date ?? start_date,
-        start_time: changedOcc?.start_time ?? start_time,
+        booking_date: alertOcc?.occurrence_date ?? start_date,
+        start_time: alertOcc?.start_time ?? start_time,
       }))
     )
   }
@@ -330,60 +379,38 @@ export async function PATCH(request: Request) {
       try {
         const emails = recipients.map(r => r.email)
 
-        // Series-level fields. Compared against what was on the row before this
-        // request rather than against the payload, so an edit that resubmits a
-        // field unchanged does not report it as a change.
-        const seriesChanges = collectChanges(
-          changed('Purpose', prevBooking?.purpose, purpose),
-          changed('Room', prevWeekly?.room_name, room_name),
-          changed('Start date', prevWeekly?.start_date, start_date, formatDate),
-          changed('End date', prevWeekly?.end_date, end_date, formatDate),
-          changed('Start time', prevWeekly?.start_time, start_time, formatTime),
-          changed('End time', prevWeekly?.end_time, end_time, formatTime),
-          changed('Status', prevWeekly?.status, status),
-          changed('Reservation code', prevWeekly?.reservation_code, reservation_code || null),
-        )
+        // When the series itself did not move, the edit was to the weeks that
+        // moved -- so the email describes those weeks. If the series moved too,
+        // the series is the story and a per-week heading would understate it.
+        const targetOccs = seriesChanges.length === 0 ? movedOccurrences : []
 
-        // When exactly one week carries overrides and the series itself did not
-        // move, the edit was to that week -- so the email describes that week.
-        // If the series moved too, the series is the story and a per-week
-        // heading would understate it.
-        const targetOcc = overriddenOcc && seriesChanges.length === 0 ? overriddenOcc : null
-
-        if (targetOcc) {
-          const prev = (prevOccurrences ?? []).find(
-            (o: { occurrence_date: string }) => o.occurrence_date === targetOcc.occurrence_date
-          )
+        const sessions = targetOccs.map(occ => {
+          const prev = prevByDate.get(occ.occurrence_date)
           // An occurrence field that is null inherits from the series, so the
           // comparison is between effective values -- otherwise clearing an
           // override would read as a change to nothing.
-          const occChanges = collectChanges(
-            changed('Room', prev?.room_name ?? prevWeekly?.room_name, targetOcc.room_name ?? room_name),
-            changed('Start time', prev?.start_time ?? prevWeekly?.start_time, targetOcc.start_time ?? start_time, formatTime),
-            changed('End time', prev?.end_time ?? prevWeekly?.end_time, targetOcc.end_time ?? end_time, formatTime),
-            changed('Status', prev?.status ?? prevWeekly?.status, targetOcc.status ?? status),
-            changed('Purpose', prev?.purpose ?? prevBooking?.purpose, targetOcc.purpose ?? purpose),
-            changed('Reservation code', prev?.reservation_code ?? prevWeekly?.reservation_code, targetOcc.reservation_code ?? (reservation_code || null)),
+          const changes = collectChanges(
+            changed('Room', prev?.room_name ?? prevWeekly?.room_name, occ.room_name ?? room_name),
+            changed('Start time', prev?.start_time ?? prevWeekly?.start_time, occ.start_time ?? start_time, formatTime),
+            changed('End time', prev?.end_time ?? prevWeekly?.end_time, occ.end_time ?? end_time, formatTime),
+            changed('Status', prev?.status ?? prevWeekly?.status, occ.status ?? status),
+            changed('Purpose', prev?.purpose ?? prevBooking?.purpose, occ.purpose ?? purpose),
+            changed('Reservation code', prev?.reservation_code ?? prevWeekly?.reservation_code, occ.reservation_code ?? (reservation_code || null)),
           )
 
-          const index = newOccurrences.findIndex(o => o.occurrence_date === targetOcc.occurrence_date)
+          const index = newOccurrences.findIndex(o => o.occurrence_date === occ.occurrence_date)
 
-          await sendBookingUpdatedEmail({
-            bodyName,
-            purpose: targetOcc.purpose ?? purpose,
-            roomOrTable: targetOcc.room_name || room_name || 'N/A',
-            date: targetOcc.occurrence_date,
-            startTime: targetOcc.start_time || start_time,
-            endTime: targetOcc.end_time || end_time,
-            status: targetOcc.status || status,
-            changes: occChanges,
-            occurrence: {
-              position: index >= 0 ? `week ${index + 1} of ${newOccurrences.length}` : null,
-            },
-            recipients: emails,
-          })
-          return
-        }
+          return {
+            date: occ.occurrence_date,
+            startTime: occ.start_time || start_time,
+            endTime: occ.end_time || end_time,
+            roomOrTable: occ.room_name || room_name || 'N/A',
+            status: occ.status || status,
+            purpose: occ.purpose ?? purpose,
+            position: index >= 0 ? `week ${index + 1} of ${newOccurrences.length}` : null,
+            changes,
+          }
+        })
 
         await sendBookingUpdatedEmail({
           bodyName,
@@ -394,6 +421,7 @@ export async function PATCH(request: Request) {
           endTime: end_time,
           status,
           changes: seriesChanges,
+          sessions,
           recipients: emails,
         })
       } catch (e) {
