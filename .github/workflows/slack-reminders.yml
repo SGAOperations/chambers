@@ -1,0 +1,36 @@
+name: slack-reminders
+
+# Hits /api/cron/slack-reminders on production, which posts tomorrow's committee
+# meetings to each committee's Slack channel (issue #95).
+#
+# A GitHub Action rather than a Vercel cron, for the same reason keep-warm.yml is
+# one: Hobby plans cap Vercel crons at once per day, and this needs to retry.
+#
+# The schedule fires five times because GitHub schedules lag and are occasionally
+# skipped altogether, and a reminder that silently never arrives is the failure
+# this feature is most likely to have. The endpoint is idempotent -- it posts
+# nothing before 9am Eastern, and records each reminder it sends so a later run
+# the same morning finds the work already done -- so the extra firings cost a
+# no-op request each.
+#
+# 13:00-17:00 UTC is 9am-1pm Eastern in EDT, 8am-noon in EST. The endpoint's own
+# 9am-Eastern gate is what makes that offset harmless: under EST the 13:00 run
+# declines to post and the 14:00 one does it.
+#
+# Needs the CRON_SECRET repo secret to match the CRON_SECRET env var on Vercel.
+# Unlike /api/cron/warm, this endpoint refuses to run at all without it.
+
+on:
+  schedule:
+    - cron: '0 13,14,15,16,17 * * *'
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post tomorrow's committee meetings
+        run: |
+          curl -fsS -m 60 --retry 2 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://chambers.northeasternsga.com/api/cron/slack-reminders
