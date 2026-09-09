@@ -1,10 +1,10 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { bostonWallClockNow } from '@/lib/boston-time'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { advanceNoticeError } from '@/lib/spaces-advance-notice'
 import { waitUntil } from '@vercel/functions'
 
 const DEFAULT_WEEKLY_HOURS = 18
@@ -102,19 +102,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     adminSupabase.from('app_settings').select('min_hours_advance_spaces').eq('id', 1).single(),
   ])
 
-  // Advance notice check — only enforce if start_time changed and limit > 0
+  // Advance notice applies to the time this edit newly claims, not to whether the
+  // start moved (issue #94). Shortening a booking, pushing its start later or
+  // renaming it releases time or leaves it alone, and needs no notice; only
+  // adding time inside the window is refused.
   const minHours: number = settings?.min_hours_advance_spaces ?? 24
-  const startTimeChanged = start_time !== existing.start_time
-  if (minHours > 0 && startTimeChanged) {
-    // Boston wall-clock now, for the reason given in the POST route: start_time
-    // is wall-clock digits labelled Z, and Date.now() is a real instant.
-    const earliestAllowed = new Date(bostonWallClockNow().getTime() + minHours * 60 * 60 * 1000)
-    if (new Date(start_time) < earliestAllowed) {
-      return NextResponse.json({
-        error: `Bookings must be made at least ${minHours} hour${minHours === 1 ? '' : 's'} in advance.`,
-      }, { status: 400 })
-    }
-  }
+  const noticeError = advanceNoticeError(
+    { start: start_time, end: end_time },
+    { start: existing.start_time, end: existing.end_time },
+    minHours
+  )
+  if (noticeError) return NextResponse.json({ error: noticeError }, { status: 400 })
 
   if (overlapping && overlapping.length > 0) {
     return NextResponse.json({ error: 'This time slot overlaps with an existing booking for this space.' }, { status: 400 })
