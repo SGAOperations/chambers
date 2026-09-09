@@ -1,6 +1,12 @@
 export const sanitize = (s: string) => s.replace(/[\r\n\t]/g, ' ').trim()
 
-const LOGO_URL = 'https://chambers.northeasternsga.com/sga-logo.png'
+// opsemaillogo.png, not sga-logo.png. There has never been an sga-logo.png:
+// 390acfc added public/opsemaillogo.png and wrote this URL in the same commit,
+// and the two simply did not match, so the footer logo in every transactional
+// email has 404'd since. next.config.ts keeps opsemaillogo.png out of the
+// service worker's precache on the grounds that it is "only ever referenced from
+// transactional email HTML" -- which is what it was for, and now is.
+const LOGO_URL = 'https://chambers.northeasternsga.com/opsemaillogo.png'
 const OPS_EMAIL_HREF = 'mailto:sgaOperations@northeastern.edu'
 const OPS_EMAIL_TEXT = 'sgaOperations@northeastern.edu'
 
