@@ -192,30 +192,73 @@ export default function MyRoomsClient({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredUpcoming.map(b => {
-              const cardContent = (
-                <>
+              // Only sessions explicitly labelled Full Body or Weekly are taken
+              // in Attendance Manager. Office Hours -- the third senate type --
+              // is not, and neither is anything outside Senate, so neither gets
+              // the link (issue #78).
+              const hasAttendance = b.senateType === 'Full Body' || b.senateType === 'Weekly'
+
+              return (
+                <div
+                  key={b.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDetailBooking(b)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setDetailBooking(b)
+                    }
+                  }}
+                  aria-label={`${bookingTitle(b)}, ${formatDate(b.date)}`}
+                  className={`rounded-xl p-5 shadow-sm border cursor-pointer transition hover:ring-2 hover:ring-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${statusColors[b.status] || 'bg-[#184073] border-[#1e5080]'}`}
+                >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6a96bb]">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
                     <span className={`text-xs font-semibold ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
                   </div>
-                  <p className="font-semibold text-[#f0f6ff]">{b.scopeLabel}</p>
-                  <p className="text-sm text-[#93b8d8] mt-0.5">{b.location}</p>
+
+                  {/*
+                    The purpose leads, via the same bookingTitle() the calendar
+                    day list and the list view already use (issue #65). The card
+                    was headed by the scope label, which is the least
+                    distinguishing thing on it -- every card for a given body read
+                    identically. The scope label keeps its information by joining
+                    the location line rather than taking a row of its own, so the
+                    card is the same height it was (issue #78).
+                  */}
+                  <p className="font-semibold text-[#f0f6ff] truncate" title={bookingTitle(b)}>{bookingTitle(b)}</p>
+                  <p className="text-sm text-[#93b8d8] mt-0.5 truncate" title={`${b.scopeLabel} · ${b.location}`}>
+                    {b.scopeLabel} <span className="text-[#4a7ba7]">·</span> {b.location}
+                  </p>
                   <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                     {b.senateType && (
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
                     )}
                   </div>
-                </>
-              )
-              return b.bodyName === 'Senate' ? (
-                <a key={b.id} href="https://attendance.northeasternsga.com" target="_blank" rel="noopener noreferrer" className={`block rounded-xl p-5 shadow-sm border cursor-pointer hover:bg-transparent transition-colors ${statusColors[b.status] || 'bg-[#184073] border-[#1e5080]'}`}>
-                  {cardContent}
-                </a>
-              ) : (
-                <div key={b.id} className={`rounded-xl p-5 shadow-sm border ${statusColors[b.status] || 'bg-[#184073] border-[#1e5080]'}`}>
-                  {cardContent}
+
+                  {/*
+                    Was the whole card: every Senate booking was an anchor to
+                    Attendance Manager, so there was no way to open its details,
+                    and Office Hours -- which AM does not track -- linked there
+                    too. Now it is one line of text on a card that behaves like
+                    every other card, and the click has to be kept off the parent
+                    so the modal does not open behind the new tab.
+                  */}
+                  {hasAttendance && (
+                    <a
+                      href="https://attendance.northeasternsga.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      onKeyDown={e => e.stopPropagation()}
+                      className="inline-block mt-2 text-sm text-[#93b8d8] hover:text-[#f0f6ff] transition-colors"
+                    >
+                      Go to <span className="font-semibold underline underline-offset-2">Attendance Manager</span>
+                    </a>
+                  )}
                 </div>
               )
             })}
