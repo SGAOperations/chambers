@@ -8,12 +8,22 @@ import { formatDate, formatTime } from './changes'
  * Date, time and reservation code are what the request is actually made of --
  * the code is what CSC keys on. Room and body ride along as context so a person
  * reading the mail can sanity-check a code before acting on it.
+ *
+ * reservationCode is not nullable. A reservation with no code on file cannot be
+ * cancelled by this route at all -- see collectPending, which sets those aside
+ * rather than listing them.
  */
 export interface CancellationLine {
+  /** The dated row to mark Cancelled once CSC has been asked. */
+  id: string
+  /** Which table `id` belongs to. */
+  source: 'one_time' | 'occurrence' | 'tabling_session'
+  /** The parent bookings.id, for the audit log entry. */
+  bookingId: string
   date: string
   startTime: string
   endTime: string
-  reservationCode: string | null
+  reservationCode: string
   roomOrTable: string
   bodyName: string
   bookingType: 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -26,11 +36,10 @@ interface CscCancellationRequestParams {
   /** Describes the filter that produced this list, for the body of the mail. */
   scopeNote: string
   to: string
+  /** Operational Affairs, copied on every request so the division has the record. */
+  cc?: string
   replyTo?: string
 }
-
-/** Shown in place of a code that was never recorded, so a row is never blank. */
-const NO_CODE = '— no code on file —'
 
 /**
  * Asks CSC to cancel a batch of reservations.
@@ -41,7 +50,7 @@ const NO_CODE = '— no code on file —'
  * been cancelled: CSC releases the room, and Chambers finds out afterwards.
  */
 export async function sendCscCancellationRequest(params: CscCancellationRequestParams) {
-  const { lines, requestedBy, scopeNote, to, replyTo } = params
+  const { lines, requestedBy, scopeNote, to, cc, replyTo } = params
   if (!lines.length) return
 
   const sRequestedBy = sanitize(requestedBy)
@@ -53,7 +62,7 @@ export async function sendCscCancellationRequest(params: CscCancellationRequestP
     .map(l => [
       `  ${formatDate(l.date)}`,
       `  ${formatTime(l.startTime)} to ${formatTime(l.endTime)}`,
-      `  Reservation code: ${l.reservationCode ? sanitize(l.reservationCode) : NO_CODE}`,
+      `  Reservation code: ${sanitize(l.reservationCode)}`,
       `  Room/Table: ${sanitize(l.roomOrTable)}  (${sanitize(l.bodyName)}, ${l.bookingType})`,
       '',
     ].join('\n'))
@@ -64,11 +73,7 @@ export async function sendCscCancellationRequest(params: CscCancellationRequestP
       <tr>
         <td style="padding:8px 10px;border-bottom:1px solid #e0e0e0;vertical-align:top;">${formatDate(l.date)}</td>
         <td style="padding:8px 10px;border-bottom:1px solid #e0e0e0;vertical-align:top;">${formatTime(l.startTime)} – ${formatTime(l.endTime)}</td>
-        <td style="padding:8px 10px;border-bottom:1px solid #e0e0e0;vertical-align:top;font-family:Consolas,Menlo,monospace;word-break:break-all;">${
-          l.reservationCode
-            ? `<strong>${sanitize(l.reservationCode)}</strong>`
-            : `<span style="color:#a00;font-family:Arial,Helvetica,sans-serif;">${NO_CODE}</span>`
-        }</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e0e0e0;vertical-align:top;font-family:Consolas,Menlo,monospace;word-break:break-all;"><strong>${sanitize(l.reservationCode)}</strong></td>
         <td style="padding:8px 10px;border-bottom:1px solid #e0e0e0;vertical-align:top;color:#555;">${sanitize(l.roomOrTable)}<br><span style="font-size:12px;">${sanitize(l.bodyName)}</span></td>
       </tr>`)
     .join('')
@@ -76,6 +81,7 @@ export async function sendCscCancellationRequest(params: CscCancellationRequestP
   await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL!,
     to,
+    ...(cc ? { cc } : {}),
     // So a reply lands with the Operational Affairs inbox rather than the
     // no-reply sender the rest of the system uses.
     ...(replyTo ? { replyTo } : {}),

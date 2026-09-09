@@ -7,7 +7,15 @@ interface CancellationLine {
   date: string
   startTime: string
   endTime: string
-  reservationCode: string | null
+  reservationCode: string
+  roomOrTable: string
+  bodyName: string
+  bookingType: 'One-Time Room' | 'Weekly Room' | 'Tabling'
+}
+
+/** Pending, but with no reservation code, so it can neither be sent nor cancelled. */
+interface SkippedReservation {
+  date: string
   roomOrTable: string
   bodyName: string
   bookingType: 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -48,7 +56,9 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [lines, setLines] = useState<CancellationLine[]>([])
+  const [skipped, setSkipped] = useState<SkippedReservation[]>([])
   const [recipient, setRecipient] = useState('')
+  const [cc, setCc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
@@ -65,10 +75,13 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not load the preview.')
       const data = await res.json()
       setLines(data.lines ?? [])
+      setSkipped(data.skipped ?? [])
       setRecipient(data.recipient ?? '')
+      setCc(data.cc ?? null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load the preview.')
       setLines([])
+      setSkipped([])
     }
     setLoading(false)
   }, [type, from, to])
@@ -101,12 +114,18 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
       <BookingModal title="Cancellation Request Sent" onClose={onClose}>
         <div className="space-y-4">
           <p className="text-sm text-[#f0f6ff]">
-            Sent {sentCount} reservation{sentCount === 1 ? '' : 's'} to <span className="font-medium">{recipient}</span>.
+            Sent {sentCount} reservation{sentCount === 1 ? '' : 's'} to <span className="font-medium">{recipient}</span>
+            {cc && <>, copying <span className="font-medium">{cc}</span></>}.
           </p>
           <p className="text-sm text-[#93b8d8]">
-            Nothing in Chambers has changed status. CSC releases the rooms, and these bookings stay
-            Pending Cancellation until that is confirmed and you mark the request done.
+            Those {sentCount === 1 ? 'booking is' : 'bookings are'} now marked <span className="text-[#f0f6ff]">Cancelled</span> in Chambers.
           </p>
+          {skipped.length > 0 && (
+            <p className="text-sm text-[#fb923c]">
+              {skipped.length} reservation{skipped.length === 1 ? '' : 's'} had no reservation code and
+              {skipped.length === 1 ? ' was' : ' were'} left alone — neither sent nor cancelled. Add the code, or cancel with CSC by hand.
+            </p>
+          )}
           <button onClick={onClose} className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors">
             Close
           </button>
@@ -119,8 +138,9 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
     <BookingModal title="Auto-Cancel — Request CSC Cancellation" onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm text-[#93b8d8]">
-          Collects every booking marked <span className="text-[#fb923c] font-medium">Pending Cancellation</span> and
-          emails CSC a single request listing the date, time and reservation code of each.
+          Collects every booking marked <span className="text-[#fb923c] font-medium">Pending Cancellation</span> that
+          has a reservation code, emails CSC a single request listing the date, time and code of each,
+          then marks them <span className="text-[#f0f6ff]">Cancelled</span>.
         </p>
 
         <div>
@@ -174,11 +194,7 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
                   </div>
                   <div className="flex items-baseline justify-between gap-2 mt-0.5">
                     <span className="text-xs text-[#6a96bb]">{l.bodyName} · {l.roomOrTable}</span>
-                    {l.reservationCode
-                      ? <span className="text-xs font-mono text-[#93b8d8] flex-shrink-0">{l.reservationCode}</span>
-                      /* Sent anyway -- CSC can still find it by date and room, and
-                         hiding it would quietly drop a cancellation. */
-                      : <span className="text-xs text-[#f87171] flex-shrink-0">no code</span>}
+                    <span className="text-xs font-mono text-[#93b8d8] flex-shrink-0">{l.reservationCode}</span>
                   </div>
                 </div>
               ))}
@@ -186,15 +202,43 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
           )}
 
           {!loading && lines.length === 0 && (
-            <p className="text-sm text-[#6a96bb]">Nothing is marked Pending Cancellation for these filters.</p>
+            <p className="text-sm text-[#6a96bb]">
+              {skipped.length > 0
+                ? 'Nothing with a reservation code is marked Pending Cancellation for these filters.'
+                : 'Nothing is marked Pending Cancellation for these filters.'}
+            </p>
           )}
         </div>
 
         {error && <p className="text-[#c8102e] text-sm">{error}</p>}
 
-        {lines.some(l => !l.reservationCode) && !loading && (
-          <p className="text-xs text-[#fb923c]">
-            Some reservations have no code on file. They will still be listed, by date and room, and flagged for CSC.
+        {/*
+          Shown, not hidden. These are pending cancellations that this tool
+          cannot action -- without a code CSC has nothing to look up, and
+          cancelling them in Chambers anyway would put the two systems out of
+          step. An admin needs to know they are still outstanding.
+        */}
+        {skipped.length > 0 && !loading && (
+          <div className="border border-[#fb923c]/40 bg-[#3d2200]/40 rounded-lg px-3 py-2.5">
+            <p className="text-xs text-[#fb923c] font-medium mb-1">
+              {skipped.length} skipped — no reservation code
+            </p>
+            <p className="text-xs text-[#93b8d8] mb-1.5">
+              Not sent and not cancelled. Add the code to the booking, or handle these with CSC directly.
+            </p>
+            <ul className="text-xs text-[#6a96bb] space-y-0.5">
+              {skipped.slice(0, 5).map((sk, i) => (
+                <li key={i}>{formatDate(sk.date)} · {sk.bodyName} · {sk.roomOrTable}</li>
+              ))}
+              {skipped.length > 5 && <li>…and {skipped.length - 5} more</li>}
+            </ul>
+          </div>
+        )}
+
+        {!loading && lines.length > 0 && (
+          <p className="text-xs text-[#6a96bb]">
+            Goes to <span className="text-[#93b8d8]">{recipient || 'CSC'}</span>
+            {cc && <>, copying <span className="text-[#93b8d8]">{cc}</span></>}.
           </p>
         )}
 
@@ -204,7 +248,7 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
             disabled={sending || loading || lines.length === 0}
             className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
           >
-            {sending ? 'Sending…' : `Send request to ${recipient || 'CSC'}`}
+            {sending ? 'Sending…' : `Send & mark cancelled (${lines.length})`}
           </button>
           <button
             onClick={onClose}

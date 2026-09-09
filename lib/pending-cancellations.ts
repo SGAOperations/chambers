@@ -71,27 +71,82 @@ function bodyNameOf(booking: BookingRef | BookingRef[] | null): string {
  * room_name, times and reservation_code inherit the same way, so each is resolved
  * against the series before it goes anywhere near the email.
  */
+/**
+ * A reservation that is pending cancellation but has no reservation code.
+ *
+ * Kept apart from `lines` rather than dropped silently. CSC identifies a booking
+ * by its code, so there is nothing to ask them to release -- and because
+ * Auto-Cancel marks what it sends as Cancelled, listing one of these would mean
+ * cancelling a booking in Chambers on the strength of a request CSC could not
+ * act on. They are surfaced in the preview so an admin knows to chase them by
+ * hand.
+ */
+/**
+ * Whether CSC could act on this reservation.
+ *
+ * The code is the only handle CSC has on a booking, so one without it can be
+ * neither requested nor -- since Auto-Cancel marks what it sends -- cancelled in
+ * Chambers. Whitespace counts as absent: a code column holding " " is a blank
+ * someone tabbed through, not an identifier.
+ *
+ * Exported so the rule is testable on its own. Live data has a code on every
+ * pending row today, which makes this the branch that would otherwise ship
+ * unexercised.
+ */
+export function hasUsableCode(code: string | null | undefined): boolean {
+  return typeof code === 'string' && code.trim().length > 0
+}
+
+export interface SkippedReservation {
+  date: string
+  roomOrTable: string
+  bodyName: string
+  bookingType: 'One-Time Room' | 'Weekly Room' | 'Tabling'
+}
+
+export interface PendingCancellations {
+  lines: CancellationLine[]
+  skipped: SkippedReservation[]
+}
+
 export async function collectPending(
   type: BookingTypeFilter,
   from: string | null,
   to: string | null
-): Promise<CancellationLine[]> {
+): Promise<PendingCancellations> {
   const lines: CancellationLine[] = []
+  const skipped: SkippedReservation[] = []
+
+  /** Routes a row to `lines` or `skipped` on whether CSC could act on it. */
+  const add = (
+    code: string | null,
+    line: Omit<CancellationLine, 'reservationCode'>,
+  ) => {
+    if (hasUsableCode(code)) lines.push({ ...line, reservationCode: code!.trim() })
+    else skipped.push({
+      date: line.date,
+      roomOrTable: line.roomOrTable,
+      bodyName: line.bodyName,
+      bookingType: line.bookingType,
+    })
+  }
   const inRange = (d: string) => (!from || d >= from) && (!to || d <= to)
 
   if (type === 'all' || type === 'One-Time Room') {
     const { data } = await adminSupabase
       .from('one_time_room_bookings')
-      .select('room_name, booking_date, start_time, end_time, reservation_code, bookings(id, type, purpose, bodies(name))')
+      .select('id, booking_id, room_name, booking_date, start_time, end_time, reservation_code, bookings(id, type, purpose, bodies(name))')
       .eq('status', PENDING)
 
     for (const r of (data ?? []) as unknown as (Record<string, string> & { bookings: BookingRef | null })[]) {
       if (!inRange(r.booking_date)) continue
-      lines.push({
+      add(r.reservation_code, {
+        id: r.id,
+        source: 'one_time',
+        bookingId: r.booking_id,
         date: r.booking_date,
         startTime: r.start_time,
         endTime: r.end_time,
-        reservationCode: r.reservation_code || null,
         roomOrTable: r.room_name || 'Not recorded',
         bodyName: bodyNameOf(r.bookings),
         bookingType: 'One-Time Room',
@@ -102,21 +157,23 @@ export async function collectPending(
   if (type === 'all' || type === 'Tabling') {
     const { data } = await adminSupabase
       .from('tabling_sessions')
-      .select('location, session_date, start_time, end_time, reservation_code, tabling_bookings(reservation_code, bookings(id, type, purpose, bodies(name)))')
+      .select('id, location, session_date, start_time, end_time, reservation_code, tabling_bookings(id, booking_id, reservation_code, bookings(id, type, purpose, bodies(name)))')
       .eq('status', PENDING)
 
     for (const r of (data ?? []) as unknown as (Record<string, string> & {
-      tabling_bookings: { reservation_code: string | null; bookings: BookingRef | null } | null
+      tabling_bookings: { id: string; booking_id: string; reservation_code: string | null; bookings: BookingRef | null } | null
     })[]) {
       if (!inRange(r.session_date)) continue
       const parent = Array.isArray(r.tabling_bookings) ? r.tabling_bookings[0] : r.tabling_bookings
-      lines.push({
+      // The session's own code wins; the booking's is the fallback, matching
+      // how the tabling editor treats it.
+      add(r.reservation_code || parent?.reservation_code || null, {
+        id: r.id,
+        source: 'tabling_session',
+        bookingId: parent?.booking_id ?? '',
         date: r.session_date,
         startTime: r.start_time,
         endTime: r.end_time,
-        // The session's own code wins; the booking's is the fallback, matching
-        // how the tabling editor treats it.
-        reservationCode: r.reservation_code || parent?.reservation_code || null,
         roomOrTable: r.location || 'Not recorded',
         bodyName: bodyNameOf(parent?.bookings ?? null),
         bookingType: 'Tabling',
@@ -128,12 +185,13 @@ export async function collectPending(
     const { data } = await adminSupabase
       .from('weekly_room_occurrences')
       .select(`
-        occurrence_date, room_name, start_time, end_time, status, reservation_code,
-        weekly_room_bookings(room_name, start_time, end_time, status, reservation_code,
+        id, occurrence_date, room_name, start_time, end_time, status, reservation_code,
+        weekly_room_bookings(id, booking_id, room_name, start_time, end_time, status, reservation_code,
           bookings(id, type, purpose, bodies(name)))
       `)
 
     for (const r of (data ?? []) as unknown as {
+      id: string
       occurrence_date: string
       room_name: string | null
       start_time: string | null
@@ -141,6 +199,8 @@ export async function collectPending(
       status: string | null
       reservation_code: string | null
       weekly_room_bookings: {
+        id: string
+        booking_id: string
         room_name: string | null
         start_time: string | null
         end_time: string | null
@@ -154,11 +214,13 @@ export async function collectPending(
       if (eff.status !== PENDING) continue
       if (!inRange(r.occurrence_date)) continue
 
-      lines.push({
+      add(eff.reservationCode, {
+        id: r.id,
+        source: 'occurrence',
+        bookingId: series?.booking_id ?? '',
         date: r.occurrence_date,
         startTime: eff.startTime,
         endTime: eff.endTime,
-        reservationCode: eff.reservationCode,
         roomOrTable: eff.roomOrTable,
         bodyName: bodyNameOf(series?.bookings ?? null),
         bookingType: 'Weekly Room',
@@ -167,7 +229,11 @@ export async function collectPending(
   }
 
   // Chronological: CSC works through a list of dates, not a list of bodies.
-  return lines.sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)))
+  const byDate = (a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date)
+  return {
+    lines: lines.sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : byDate(a, b))),
+    skipped: skipped.sort(byDate),
+  }
 }
 
 export function parseFilters(url: URL) {
