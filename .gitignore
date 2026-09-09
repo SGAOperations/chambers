@@ -32,6 +32,11 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...except the template, which holds names and comments but no values. It is
+# the only list of what Chambers actually reads, and while it was ignored the
+# correct spellings existed nowhere but the source -- which is how CSC_EMAIL got
+# misnamed in Vercel, silently fell back to the real address, and mailed CSC.
+!.env.example
 
 # vercel
 .vercel
