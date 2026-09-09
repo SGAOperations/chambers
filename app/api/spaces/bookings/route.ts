@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { bostonWallClockNow } from '@/lib/boston-time'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingConfirmedEmail } from '@/lib/emails/space-booking-confirmed'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
@@ -159,8 +160,13 @@ export async function POST(request: Request) {
   ])
 
   // Advance notice check (skipped when limit is 0)
+  //
+  // Measured from Boston wall-clock now, not Date.now(): start_time carries
+  // wall-clock digits with a Z on the end, so comparing it against a real
+  // instant made every booking look an offset earlier than it was, and the
+  // requirement reject bookings that were comfortably far enough out (issue #87).
   const minHours: number = settings?.min_hours_advance_spaces ?? 24
-  const earliestAllowed = new Date(Date.now() + minHours * 60 * 60 * 1000)
+  const earliestAllowed = new Date(bostonWallClockNow().getTime() + minHours * 60 * 60 * 1000)
   if (minHours > 0 && new Date(start_time) < earliestAllowed) {
     return NextResponse.json({
       error: `Bookings must be made at least ${minHours} hour${minHours === 1 ? '' : 's'} in advance.`,

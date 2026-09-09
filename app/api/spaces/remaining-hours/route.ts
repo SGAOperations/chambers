@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { bostonWallClockNow } from '@/lib/boston-time'
 import { getAuthedUser } from '@/lib/auth'
 
 const adminSupabase = createAdminClient(
@@ -10,8 +11,16 @@ const adminSupabase = createAdminClient(
 
 const DEFAULT_WEEKLY_HOURS = 18
 
+/**
+ * The Sun-Sat window to count this user's hours against.
+ *
+ * Boston wall-clock now, matching the domain space_bookings are stored in. Real
+ * UTC put the boundary in the wrong place for the last four hours of a Saturday
+ * -- UTC is already Sunday by 8 PM EDT, so bookings were counted against next
+ * week and the remaining-hours figure jumped. Same root cause as issue #87.
+ */
 function getWeekBounds(): { weekStart: string; weekEnd: string } {
-  const now = new Date()
+  const now = bostonWallClockNow()
   const day = now.getUTCDay()
   const sun = new Date(now)
   sun.setUTCDate(now.getUTCDate() - day)
