@@ -32,18 +32,36 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-[#f0f6ff] font-medium text-base">v1.14.0</h2>
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.15.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
-              We don't exactly know yet! If there's anything you'd like to see, send a Slack DM to the Vice President of Operational Affairs ({vpName}) and the Digital Innovation Manager ({dimName}).
+              We don&apos;t exactly know yet! If there&apos;s anything you&apos;d like to see, send a Slack DM to the Vice President of Operational Affairs ({vpName}) and the Digital Innovation Manager ({dimName}).
             </p>
           </section>
-        </div> 
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.14.0 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Your booking cards in My Rooms now lead with what the booking is <em>for</em> rather than which body it belongs to, and clicking one opens its full details. Full Body and Weekly Senate sessions carry a link straight to Attendance Manager.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Emails do more. You now get one when a booking is created, not only when it changes, and an update email says exactly what moved rather than just restating where the booking now is. If a single week of a weekly booking is edited, the email is about that week instead of the whole series.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Room requests now ask how many people you expect, so Operational Affairs can book a room that actually fits without having to come back and ask. The SGA Spaces calendar fills the page rather than sitting in a small scrolling box.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              For administrators: revision requests can now be denied with a reason, instead of sitting on the list forever when the change cannot be made. Auto-Cancel, on the Cancellations tab, sends CSC a single request covering whichever pending cancellations you select, and marks each one with the outcome its request asked for.
+            </p>
+          </section>
+        </div>
 
         <div className="space-y-6">
           <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.0.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
-              Operational Affairs is working to standardize account management across SGA custom projects (Chambers, SenatePath, Attendance Manager, Aplio, and more). Once centralized accounts have been successfully tested on our products, they'll be implemented fully as v2.0.0.
+              Operational Affairs is working to standardize account management across SGA custom projects (Chambers, SenatePath, Attendance Manager, Aplio, and more). Once centralized accounts have been successfully tested on our products, they&apos;ll be implemented fully as v2.0.0.
             </p>
           </section>
         </div>       
