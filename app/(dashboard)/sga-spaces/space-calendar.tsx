@@ -302,8 +302,19 @@ export default function SpaceCalendar({
   const totalHeight = TOTAL_SLOTS * SLOT_HEIGHT
 
   return (
-    <div className="rounded-xl border border-[#1e5080] overflow-hidden bg-[#0a1628] select-none isolate">
-      <div ref={scrollRef} className="overflow-y-auto" style={{ maxHeight: '648px' }}>
+    /*
+      Fills whatever height the page gives it rather than the 648px it used to be
+      pinned to (issue #70). A week is 96 quarter-hour slots -- 1344px of grid --
+      so the box was always scrolling internally, and on a normal laptop it did
+      that while leaving the bottom half of the page empty.
+
+      h-full takes the height the parent hands down; min-h-0 is what actually
+      lets it shrink, since a flex item defaults to min-height:auto and would
+      otherwise refuse to go below its 1344px content and push the box off the
+      bottom of the screen instead.
+    */
+    <div className="rounded-xl border border-[#1e5080] overflow-hidden bg-[#0a1628] select-none isolate flex flex-col h-full min-h-0">
+      <div ref={scrollRef} className="overflow-y-auto flex-1 min-h-0">
         {/* Sticky day header */}
         <div ref={headerRef} className="flex border-b border-[#1e5080] sticky top-0 z-[60] bg-[#0a1628]">
           <div className="w-14 flex-shrink-0 border-r border-[#1e5080]" />
