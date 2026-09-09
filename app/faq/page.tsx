@@ -41,6 +41,21 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.14.1 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Update emails about a weekly booking now describe the week that actually changed. They had been pointing at whichever week carried the oldest override, which was usually not the week anyone had touched &mdash; so the email named a date months off and listed no changes at all. If one save moves several weeks, the email now covers each of them rather than only the first.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Senate session types you deselect in Settings now stop the emails and the alerts too, not just the rows in My Rooms. If you follow Full Body but not Office Hours, you will still hear about a change that moved both.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              An SGA Space booking inside the advance notice window can be edited again. You can shorten it, start it later, rename it or cancel it outright at any point &mdash; only adding time to a booking still needs notice, and extending one that ends outside the window is fine. Previously such a booking could not be opened at all.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v1.14.0 &mdash; released</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               Your booking cards in My Rooms now lead with what the booking is <em>for</em> rather than which body it belongs to, and clicking one opens its full details. Full Body and Weekly Senate sessions carry a link straight to Attendance Manager.
