@@ -3,6 +3,8 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { sendMissedReservationEmail, formatDateLong } from '@/lib/emails/missed-reservation'
 import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
+import { sendBookingCreatedEmail } from '@/lib/emails/booking-created'
+import { changed, collectChanges, formatDate, formatTime } from '@/lib/emails/changes'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
@@ -106,6 +108,45 @@ export async function POST(request: Request) {
 
   if (sessionError) return NextResponse.json({ error: sessionError.message }, { status: 500 })
 
+  // Chambers emailed on update and on a missed reservation but never on
+  // creation, so the first email a body received about a booking was one saying
+  // it had changed (issue #79). waitUntil for the same reason as the update
+  // email: the rows are already written.
+  waitUntil(
+    (async () => {
+      try {
+        const scopedRow: ScopedRow = {
+          id: booking.id,
+          body_id: selection.value.body_id,
+          scope: selection.value.scope,
+          division: selection.value.division,
+        }
+        const recipients = await resolveBookingRecipients(adminSupabase, scopedRow)
+        if (!recipients.length) return
+
+        const { data: bodyData } = await adminSupabase
+          .from('bodies').select('name').eq('id', selection.value.body_id).single()
+
+        await sendBookingCreatedEmail({
+          bodyName: bodyData?.name ?? 'Unknown',
+          bookingType: 'Tabling',
+          purpose,
+          roomOrTable: sessionRows[0]?.location || 'N/A',
+          status: sessionRows[0]?.status ?? 'Reserved',
+          sessions: sessionRows.map((r: { session_date: string; start_time: string; end_time: string; location: string }) => ({
+            date: r.session_date,
+            startTime: r.start_time,
+            endTime: r.end_time,
+            roomOrTable: r.location,
+          })),
+          recipients: recipients.map(r => r.email),
+        })
+      } catch (e) {
+        console.error('Booking created email failed:', e)
+      }
+    })()
+  )
+
   return NextResponse.json({ success: true })
 }
 
@@ -134,6 +175,17 @@ export async function PATCH(request: Request) {
   const ctx = await loadScopeContext(supabase, user)
   const selection = validateScopeSelection(ctx, { scope, body_id, division, body_ids })
   if (!selection.ok) return NextResponse.json({ error: selection.error }, { status: 400 })
+
+  // Read before writing so the email can say what moved (issue #79).
+  const [{ data: prevBooking }, { data: prevTabling }, { data: prevSessions }] = await Promise.all([
+    adminSupabase.from('bookings').select('purpose').eq('id', booking_id).single(),
+    adminSupabase.from('tabling_bookings').select('reservation_code').eq('id', tabling_id).single(),
+    adminSupabase
+      .from('tabling_sessions')
+      .select('location, session_date, start_time, end_time, status')
+      .eq('tabling_booking_id', tabling_id)
+      .order('session_date', { ascending: true }),
+  ])
 
   // Update parent booking
   const { error: bookingError } = await adminSupabase
@@ -227,13 +279,26 @@ export async function PATCH(request: Request) {
     (async () => {
       try {
         const emails = recipients.map(r => r.email)
+        const prevFirst = (prevSessions ?? [])[0]
+        const changes = collectChanges(
+          changed('Purpose', prevBooking?.purpose, purpose),
+          changed('Reservation code', prevTabling?.reservation_code, reservation_code || null),
+          changed('Sessions', `${(prevSessions ?? []).length}`, `${sessions.length}`),
+          changed('Table', prevFirst?.location, sessions[0]?.location),
+          changed('Date', prevFirst?.session_date, sessions[0]?.session_date, formatDate),
+          changed('Start time', prevFirst?.start_time, sessions[0]?.start_time, formatTime),
+          changed('End time', prevFirst?.end_time, sessions[0]?.end_time, formatTime),
+        )
+
         await sendBookingUpdatedEmail({
           bodyName,
+          purpose,
           roomOrTable: sessions[0]?.location || 'N/A',
           date: sessions[0]?.session_date ?? '',
           startTime: sessions[0]?.start_time ?? '',
           endTime: sessions[0]?.end_time ?? '',
           status: statusSummary,
+          changes,
           recipients: emails,
         })
       } catch (e) {
