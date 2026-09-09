@@ -13,6 +13,10 @@ interface CancellationLine {
   roomOrTable: string
   bodyName: string
   bookingType: 'One-Time Room' | 'Weekly Room' | 'Tabling'
+  /** What this booking becomes in Chambers once CSC has been asked. */
+  resultingStatus: 'Cancelled' | 'Virtual'
+  /** False when no cancellation request said which, and this fell back to Cancelled. */
+  outcomeFromRequest: boolean
 }
 
 /** Pending, but with no reservation code, so it can neither be sent nor cancelled. */
@@ -51,6 +55,7 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [sentCount, setSentCount] = useState<number | null>(null)
+  const [sentSplit, setSentSplit] = useState<{ cancelled: number; virtual: number } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -87,6 +92,13 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
 
   const allSelected = lines.length > 0 && selected.size === lines.length
 
+  // "mark cancelled" is a lie once a Virtual is in the selection -- that meeting
+  // is not cancelled, it is moving online.
+  const selectionHasVirtual = lines.some(l => selected.has(l.key) && l.resultingStatus === 'Virtual')
+  const sendLabel = selectionHasVirtual
+    ? `Send & apply statuses (${selected.size})`
+    : `Send & mark cancelled (${selected.size})`
+
   const send = async () => {
     setSending(true)
     setError('')
@@ -98,6 +110,7 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
     const data = await res.json().catch(() => ({}))
     if (res.ok) {
       setSentCount(data.sent ?? selected.size)
+      if (typeof data.cancelled === 'number') setSentSplit({ cancelled: data.cancelled, virtual: data.virtual ?? 0 })
     } else {
       setError(data.error || 'The request could not be sent.')
       // Whatever went wrong, the list on screen may no longer be the truth.
@@ -115,7 +128,14 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
             {cc && <>, copying <span className="font-medium">{cc}</span></>}.
           </p>
           <p className="text-sm text-[#93b8d8]">
-            Those {sentCount === 1 ? 'booking is' : 'bookings are'} now marked <span className="text-[#f0f6ff]">Cancelled</span> in Chambers.
+            {sentSplit && sentSplit.virtual > 0 ? (
+              <>
+                {sentSplit.cancelled > 0 && <>{sentSplit.cancelled} now marked <span className="text-[#f0f6ff]">Cancelled</span>, and </>}
+                {sentSplit.virtual} marked <span className="text-[#f0f6ff]">Virtual</span> — those meetings still happen, without the room.
+              </>
+            ) : (
+              <>Those {sentCount === 1 ? 'booking is' : 'bookings are'} now marked <span className="text-[#f0f6ff]">Cancelled</span> in Chambers.</>
+            )}{' '}
             Anything you left unticked is untouched and still pending.
           </p>
           <button onClick={onClose} className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors">
@@ -132,7 +152,8 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
         <p className="text-sm text-[#93b8d8]">
           Every booking marked <span className="text-[#fb923c] font-medium">Pending Cancellation</span> is listed below.
           Tick the ones to include; CSC gets a single request with the date, time and reservation code of each,
-          and those bookings are then marked <span className="text-[#f0f6ff]">Cancelled</span>.
+          and each booking then takes the status its cancellation asked for —
+          <span className="text-[#f0f6ff]"> Cancelled</span>, or <span className="text-[#f0f6ff]">Virtual</span> if the meeting is moving online.
         </p>
 
         <div className="border-t border-[#1e5080] pt-3">
@@ -179,6 +200,25 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
                       <span className="flex items-baseline justify-between gap-2 mt-0.5">
                         <span className="text-xs text-[#6a96bb] truncate">{l.bodyName} · {l.roomOrTable}</span>
                         <span className="text-xs font-mono text-[#93b8d8] flex-shrink-0">{l.reservationCode}</span>
+                      </span>
+                      {/*
+                        Shown per row because the two outcomes are not
+                        interchangeable -- Virtual means the meeting still
+                        happens -- and because a row with no cancellation request
+                        behind it is taking a default rather than a stated
+                        intent, which is worth seeing before approving it.
+                      */}
+                      <span className="flex items-center gap-1.5 mt-1">
+                        <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                          l.resultingStatus === 'Virtual'
+                            ? 'bg-[#0e2f4f] text-[#4285f4]'
+                            : 'bg-[#3d0f0f] text-[#f87171]'
+                        }`}>
+                          → {l.resultingStatus}
+                        </span>
+                        {!l.outcomeFromRequest && (
+                          <span className="text-[10px] text-[#6a96bb]">no request on file — defaulting</span>
+                        )}
                       </span>
                     </span>
                   </label>
@@ -234,7 +274,7 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
             disabled={sending || loading || selected.size === 0}
             className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
           >
-            {sending ? 'Sending…' : `Send & mark cancelled (${selected.size})`}
+            {sending ? 'Sending…' : sendLabel}
           </button>
           <button
             onClick={onClose}

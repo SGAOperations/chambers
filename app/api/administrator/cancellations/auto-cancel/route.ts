@@ -3,7 +3,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
-import { sendCscCancellationRequest } from '@/lib/emails/csc-cancellation-request'
+import { sendCscCancellationRequest, type CancellationLine } from '@/lib/emails/csc-cancellation-request'
 import { collectPending, lineKey } from '@/lib/pending-cancellations'
 
 const adminSupabase = createAdminClient(
@@ -50,8 +50,13 @@ export async function GET() {
 }
 
 /**
- * Sends the request to CSC for the reservations the admin selected, and marks
- * those as Cancelled.
+ * Sends the request to CSC for the reservations the admin selected, and applies
+ * the status each one is due.
+ *
+ * Not always 'Cancelled'. A cancellation request records whether the meeting is
+ * off or moving online, and Auto-Cancel applies the one that was actually asked
+ * for -- 'Virtual' means the meeting still happens without the room. CSC's side
+ * is identical either way: the reservation is released.
  *
  * The selection is a choice among what the server finds, never the source of
  * truth. Every submitted key is matched back against a freshly collected set: a
@@ -133,27 +138,34 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'The email could not be sent. No bookings were changed.' }, { status: 502 })
   }
 
-  // Grouped by table so this is three statements rather than one per
-  // reservation. An occurrence whose status was inherited gets 'Cancelled'
-  // written onto the occurrence itself, which is correct: only the dates that
-  // were actually sent stop being pending, and the rest of the series is
-  // untouched.
-  const byTable: Record<string, string[]> = { one_time: [], occurrence: [], tabling_session: [] }
-  for (const l of selected) byTable[l.source].push(l.id)
+  // Grouped by table *and* by the status each row is due, so a batch containing
+  // both kinds writes each its own value. Marking everything 'Cancelled' would
+  // be wrong for a booking whose request said it was going virtual: that meeting
+  // still happens, it just does not need the room.
+  //
+  // An occurrence whose status was inherited gets its value written onto the
+  // occurrence itself, which is correct -- only the dates actually sent stop
+  // being pending, and the rest of the series is untouched.
+  const TABLE_OF: Record<CancellationLine['source'], string> = {
+    one_time: 'one_time_room_bookings',
+    occurrence: 'weekly_room_occurrences',
+    tabling_session: 'tabling_sessions',
+  }
 
-  const targets: [string, string[]][] = [
-    ['one_time_room_bookings', byTable.one_time],
-    ['weekly_room_occurrences', byTable.occurrence],
-    ['tabling_sessions', byTable.tabling_session],
-  ]
+  const batches = new Map<string, { table: string; status: string; ids: string[] }>()
+  for (const l of selected) {
+    const table = TABLE_OF[l.source]
+    const bucket = `${table}:${l.resultingStatus}`
+    if (!batches.has(bucket)) batches.set(bucket, { table, status: l.resultingStatus, ids: [] })
+    batches.get(bucket)!.ids.push(l.id)
+  }
 
   const failures: string[] = []
-  for (const [table, ids] of targets) {
-    if (!ids.length) continue
-    const { error } = await adminSupabase.from(table).update({ status: 'Cancelled' }).in('id', ids)
+  for (const { table, status, ids } of batches.values()) {
+    const { error } = await adminSupabase.from(table).update({ status }).in('id', ids)
     if (error) {
-      console.error(`Auto-Cancel could not mark ${table}:`, error)
-      failures.push(table)
+      console.error(`Auto-Cancel could not mark ${table} as ${status}:`, error)
+      failures.push(`${table} (${status})`)
     }
   }
 
@@ -161,17 +173,24 @@ export async function POST(request: Request) {
   // beside every other status change rather than appearing to have happened by
   // itself. Best effort: the email is out and the statuses are moved, and
   // failing the request over a missing log would invite a resend.
-  const bookingIds = [...new Set(selected.map(l => l.bookingId).filter(Boolean))]
-  if (bookingIds.length) {
-    const { error } = await adminSupabase.from('audit_logs').insert(
-      bookingIds.map(id => ({ booking_id: id, admin_id: user.id, new_status: 'Cancelled' }))
-    )
+  // Keyed on booking *and* status: one booking can contribute both a cancelled
+  // week and a virtual one in the same batch, and a single row saying 'Cancelled'
+  // would misreport the other.
+  const auditRows = [...new Map(
+    selected
+      .filter(l => l.bookingId)
+      .map(l => [`${l.bookingId}:${l.resultingStatus}`, { booking_id: l.bookingId, admin_id: user.id, new_status: l.resultingStatus }])
+  ).values()]
+  if (auditRows.length) {
+    const { error } = await adminSupabase.from('audit_logs').insert(auditRows)
     if (error) console.error('Auto-Cancel audit log failed:', error)
   }
 
   return NextResponse.json({
     success: true,
     sent: selected.length,
+    cancelled: selected.filter(l => l.resultingStatus === 'Cancelled').length,
+    virtual: selected.filter(l => l.resultingStatus === 'Virtual').length,
     recipient: CSC_EMAIL,
     // The mail is already gone, so a failure here is reported rather than thrown:
     // the admin needs to know the request went but the statuses did not move.

@@ -114,6 +114,34 @@ export function lineKey(l: { source: CancellationLine['source']; id: string }): 
   return `${l.source}:${l.id}`
 }
 
+/**
+ * The status a pending reservation should take once CSC has been asked.
+ *
+ * A cancellation request carries a cancellation_type: 'Cancellation' when the
+ * meeting is off, 'Virtual' when it is moving online. Those are different
+ * afterwards -- a virtual meeting still happens, it just does not need the room
+ * -- so Auto-Cancel has to apply the one the requester actually asked for rather
+ * than marking everything Cancelled.
+ *
+ * Falls back to 'Cancelled' when nothing says otherwise, which is the common
+ * case: a booking can be set to Pending Cancellation directly by an admin, with
+ * no request behind it at all. 'Cancelled' is the plain reading of that, and
+ * going virtual is a specific thing a requester asks for -- defaulting the other
+ * way would quietly leave rooms marked as still-meeting.
+ */
+export interface CancellationOutcome {
+  status: 'Cancelled' | 'Virtual'
+  fromRequest: boolean
+}
+
+const DEFAULT_OUTCOME: CancellationOutcome = { status: 'Cancelled', fromRequest: false }
+
+export function outcomeOf(cancellationType: string | null | undefined): CancellationOutcome {
+  if (cancellationType === 'Virtual') return { status: 'Virtual', fromRequest: true }
+  if (cancellationType === 'Cancellation') return { status: 'Cancelled', fromRequest: true }
+  return DEFAULT_OUTCOME
+}
+
 export interface PendingCancellations {
   lines: CancellationLine[]
   skipped: SkippedReservation[]
@@ -123,12 +151,54 @@ export async function collectPending(): Promise<PendingCancellations> {
   const lines: CancellationLine[] = []
   const skipped: SkippedReservation[] = []
 
+  // Read once and index, rather than a lookup per reservation. Ordered so the
+  // preferred row is the one that survives into each map: a still-Pending
+  // request beats a resolved one, and the most recent beats an older one.
+  const { data: requests } = await adminSupabase
+    .from('cancellation_requests')
+    .select('booking_id, occurrence_id, scope, status, cancellation_type, created_at')
+    .order('created_at', { ascending: false })
+
+  const byOccurrence = new Map<string, string>()
+  const bySeriesBooking = new Map<string, string>()
+  const byBooking = new Map<string, string>()
+
+  for (const pass of ['Pending', 'other'] as const) {
+    for (const r of (requests ?? []) as {
+      booking_id: string | null
+      occurrence_id: string | null
+      scope: string
+      status: string | null
+      cancellation_type: string
+    }[]) {
+      const isPending = r.status === 'Pending'
+      if (pass === 'Pending' ? !isPending : isPending) continue
+      // setDefault semantics: the first pass wins, so a Pending request is never
+      // overwritten by a resolved one.
+      if (r.occurrence_id && !byOccurrence.has(r.occurrence_id)) {
+        byOccurrence.set(r.occurrence_id, r.cancellation_type)
+      }
+      if (r.booking_id) {
+        if (r.scope === 'series' && !bySeriesBooking.has(r.booking_id)) {
+          bySeriesBooking.set(r.booking_id, r.cancellation_type)
+        }
+        if (!byBooking.has(r.booking_id)) byBooking.set(r.booking_id, r.cancellation_type)
+      }
+    }
+  }
+
   /** Routes a row to `lines` or `skipped` on whether CSC could act on it. */
   const add = (
     code: string | null,
-    line: Omit<CancellationLine, 'reservationCode'>,
+    line: Omit<CancellationLine, 'reservationCode' | 'resultingStatus' | 'outcomeFromRequest'>,
+    outcome: CancellationOutcome,
   ) => {
-    if (hasUsableCode(code)) lines.push({ ...line, reservationCode: code!.trim() })
+    if (hasUsableCode(code)) lines.push({
+      ...line,
+      reservationCode: code!.trim(),
+      resultingStatus: outcome.status,
+      outcomeFromRequest: outcome.fromRequest,
+    })
     else skipped.push({
       date: line.date,
       roomOrTable: line.roomOrTable,
@@ -154,7 +224,7 @@ export async function collectPending(): Promise<PendingCancellations> {
         roomOrTable: r.room_name || 'Not recorded',
         bodyName: bodyNameOf(r.bookings),
         bookingType: 'One-Time Room',
-      })
+      }, outcomeOf(byBooking.get(r.booking_id)))
     }
   }
 
@@ -180,7 +250,7 @@ export async function collectPending(): Promise<PendingCancellations> {
         roomOrTable: r.location || 'Not recorded',
         bodyName: bodyNameOf(parent?.bookings ?? null),
         bookingType: 'Tabling',
-      })
+      }, outcomeOf(parent?.booking_id ? byBooking.get(parent.booking_id) : null))
     }
   }
 
@@ -226,7 +296,11 @@ export async function collectPending(): Promise<PendingCancellations> {
         roomOrTable: eff.roomOrTable,
         bodyName: bodyNameOf(series?.bookings ?? null),
         bookingType: 'Weekly Room',
-      })
+      }, outcomeOf(
+        // A request naming this exact week wins over one covering the series.
+        byOccurrence.get(r.id)
+          ?? (series?.booking_id ? bySeriesBooking.get(series.booking_id) : undefined)
+      ))
     }
   }
 

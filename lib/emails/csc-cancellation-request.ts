@@ -20,6 +20,21 @@ export interface CancellationLine {
   source: 'one_time' | 'occurrence' | 'tabling_session'
   /** The parent bookings.id, for the audit log entry. */
   bookingId: string
+  /**
+   * What this booking becomes in Chambers once CSC has been asked.
+   *
+   * A cancellation request records whether the meeting is cancelled outright or
+   * moving online, and the two are not the same afterwards -- 'Virtual' means it
+   * still happens, without the room. CSC's side of it is identical either way:
+   * the reservation is released.
+   */
+  resultingStatus: 'Cancelled' | 'Virtual'
+  /**
+   * False when no cancellation request says which, and the outcome fell back to
+   * 'Cancelled'. Surfaced so an admin can see they are approving a default
+   * rather than a stated intent.
+   */
+  outcomeFromRequest: boolean
   date: string
   startTime: string
   endTime: string
