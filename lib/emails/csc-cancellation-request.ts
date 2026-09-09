@@ -103,17 +103,17 @@ export async function sendCscCancellationRequest(params: CscCancellationRequestP
     subject: `Reservation Cancellation Request — Northeastern SGA (${count} ${plural})`,
     text: `Hello,
 
-Northeastern's Student Government Association would like to cancel the ${count} ${plural} listed below. Each was marked for cancellation in Chambers, SGA's room management system.
+SGA would like to cancel the ${count} ${plural} listed below:
 
 ${sScopeNote}
 
 ${textRows}
-Requested by ${sRequestedBy}, Northeastern SGA Operational Affairs.
+Requested by ${sRequestedBy}.
 
-If any of these cannot be released, or a reservation code does not match your records, please reply to this message and we will follow up.
+If any of these cannot be cancelled, or if any information presented does not match your records, please reply all to this message.
 
 Thank you,
-Northeastern SGA — Operational Affairs`,
+SGA Operational Affairs Team`,
     html: buildEmailHtml(`
       <p style="margin:0 0 16px;">Hello,</p>
       <p style="margin:0 0 16px;">Northeastern's Student Government Association would like to cancel the <strong>${count} ${plural}</strong> listed below. Each was marked for cancellation in Chambers, SGA's room management system.</p>
