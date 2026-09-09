@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { sendCscCancellationRequest } from '@/lib/emails/csc-cancellation-request'
-import { collectPending, parseFilters, describeScope } from '@/lib/pending-cancellations'
+import { collectPending, lineKey } from '@/lib/pending-cancellations'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,10 +21,14 @@ const adminSupabase = createAdminClient(
 const CSC_EMAIL = process.env.CSC_EMAIL || 'cscreservations@northeastern.edu'
 
 /**
- * Preview. Returns exactly what a POST would send, so the admin confirms against
- * the list that will actually go out rather than a description of it.
+ * Everything currently marked for cancellation, for the admin to choose from.
+ *
+ * Returns the whole set rather than a filtered slice. Auto-Cancel used to take a
+ * booking type and a date range and act on whatever matched, which made the
+ * filter -- something you set to look around with -- decide what got cancelled.
+ * The admin now picks rows explicitly, and this is the list they pick from.
  */
-export async function GET(request: Request) {
+export async function GET() {
   const supabase = await createClient()
 
   const user = await getAuthedUserWithLiveRoles(supabase)
@@ -35,35 +39,36 @@ export async function GET(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { type, from, to } = parseFilters(new URL(request.url))
-  const { lines, skipped } = await collectPending(type, from, to)
+  const { lines, skipped } = await collectPending()
 
   return NextResponse.json({
-    lines,
+    lines: lines.map(l => ({ ...l, key: lineKey(l) })),
     skipped,
     recipient: CSC_EMAIL,
     cc: process.env.OPS_EMAIL || null,
-    scopeNote: describeScope(type, from, to),
   })
 }
 
 /**
- * Sends the request to CSC and marks what was sent as Cancelled.
+ * Sends the request to CSC for the reservations the admin selected, and marks
+ * those as Cancelled.
  *
- * Order matters: the email goes first, and the statuses move only once it has
+ * The selection is a choice among what the server finds, never the source of
+ * truth. Every submitted key is matched back against a freshly collected set: a
+ * client cannot introduce a date, a code or a booking that is not currently
+ * pending with a code on file, and the list that goes to CSC is built from the
+ * server's own rows rather than from anything posted.
+ *
+ * Order matters. The email goes first, and the statuses move only once it has
  * actually been accepted. Marking first and failing to send would leave a
  * booking cancelled in Chambers that CSC still holds a room for -- the one
  * outcome worth designing against, since nobody would be looking for it.
  *
- * A reservation with no code on file is never cancelled here. CSC identifies a
+ * A reservation with no code on file can never be selected: CSC identifies a
  * booking by its code, so there is nothing to ask them to release, and
- * cancelling it in Chambers on the strength of a request they could not act on
- * would put the two systems out of step. Those are set aside for an admin to
+ * cancelling it here on the strength of a request they could not act on would
+ * put the two systems out of step. Those are surfaced separately for an admin to
  * chase by hand -- see collectPending.
- *
- * The list is recomputed here rather than taken from the request body. A client
- * could otherwise post any set of dates and codes it liked to an external
- * address, and the preview could in any case be minutes stale.
  */
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -77,27 +82,32 @@ export async function POST(request: Request) {
   if (rateLimitRes) return rateLimitRes
 
   const body = await request.json().catch(() => ({}))
-  const url = new URL(request.url)
-  for (const k of ['type', 'from', 'to']) {
-    if (typeof body?.[k] === 'string') url.searchParams.set(k, body[k])
-  }
-  const { type, from, to } = parseFilters(url)
+  const requested: string[] = Array.isArray(body?.keys)
+    ? body.keys.filter((k: unknown): k is string => typeof k === 'string')
+    : []
 
-  const { lines } = await collectPending(type, from, to)
-  if (!lines.length) {
+  if (!requested.length) {
     return NextResponse.json(
-      { error: 'Nothing with a reservation code is marked Pending Cancellation for those filters.' },
+      { error: 'Select at least one reservation to cancel.' },
       { status: 400 }
     )
   }
 
-  // The admin confirmed a specific number of reservations. If the set has moved
-  // since -- someone edited a booking in another tab -- stop rather than mail CSC
-  // a list nobody approved.
-  if (typeof body?.expectedCount === 'number' && body.expectedCount !== lines.length) {
+  const { lines } = await collectPending()
+  const available = new Map(lines.map(l => [lineKey(l), l]))
+
+  const selected = requested.map(k => available.get(k)).filter(l => l !== undefined)
+  const missing = requested.filter(k => !available.has(k))
+
+  // Something the admin ticked is no longer pending, or lost its reservation
+  // code, while the modal was open. Refusing the whole request is deliberate:
+  // quietly sending the remainder would cancel a different set from the one they
+  // reviewed, and they would have no way to tell.
+  if (missing.length) {
     return NextResponse.json(
       {
-        error: `The list changed while you were reviewing it: ${body.expectedCount} reservation${body.expectedCount === 1 ? '' : 's'} became ${lines.length}. Reload the preview and check it before sending.`,
+        error: `${missing.length} of the ${requested.length} selected reservation${requested.length === 1 ? '' : 's'} ${missing.length === 1 ? 'is' : 'are'} no longer pending cancellation. Nothing was sent. Reload the list and choose again.`,
+        stale: missing,
       },
       { status: 409 }
     )
@@ -108,9 +118,9 @@ export async function POST(request: Request) {
 
   try {
     await sendCscCancellationRequest({
-      lines,
+      lines: selected,
       requestedBy: profile?.full_name || user.email || 'Chambers administrator',
-      scopeNote: describeScope(type, from, to),
+      scopeNote: `${selected.length} reservation${selected.length === 1 ? '' : 's'}, selected individually in Chambers.`,
       to: CSC_EMAIL,
       cc: process.env.OPS_EMAIL || undefined,
       replyTo: process.env.OPS_EMAIL || undefined,
@@ -129,7 +139,7 @@ export async function POST(request: Request) {
   // were actually sent stop being pending, and the rest of the series is
   // untouched.
   const byTable: Record<string, string[]> = { one_time: [], occurrence: [], tabling_session: [] }
-  for (const l of lines) byTable[l.source].push(l.id)
+  for (const l of selected) byTable[l.source].push(l.id)
 
   const targets: [string, string[]][] = [
     ['one_time_room_bookings', byTable.one_time],
@@ -151,7 +161,7 @@ export async function POST(request: Request) {
   // beside every other status change rather than appearing to have happened by
   // itself. Best effort: the email is out and the statuses are moved, and
   // failing the request over a missing log would invite a resend.
-  const bookingIds = [...new Set(lines.map(l => l.bookingId).filter(Boolean))]
+  const bookingIds = [...new Set(selected.map(l => l.bookingId).filter(Boolean))]
   if (bookingIds.length) {
     const { error } = await adminSupabase.from('audit_logs').insert(
       bookingIds.map(id => ({ booking_id: id, admin_id: user.id, new_status: 'Cancelled' }))
@@ -161,7 +171,7 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     success: true,
-    sent: lines.length,
+    sent: selected.length,
     recipient: CSC_EMAIL,
     // The mail is already gone, so a failure here is reported rather than thrown:
     // the admin needs to know the request went but the statuses did not move.

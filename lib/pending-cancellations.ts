@@ -43,8 +43,6 @@ export function resolveOccurrence(
 
 const PENDING = 'Pending Cancellation'
 
-export type BookingTypeFilter = 'all' | 'One-Time Room' | 'Weekly Room' | 'Tabling'
-
 interface BodyRef { name: string }
 interface BookingRef { id: string; type: string; purpose: string; bodies: BodyRef | BodyRef[] | null }
 
@@ -104,16 +102,24 @@ export interface SkippedReservation {
   bookingType: 'One-Time Room' | 'Weekly Room' | 'Tabling'
 }
 
+/**
+ * How the browser names a reservation when it selects one.
+ *
+ * Scoped by table because the id alone says nothing about which of the three it
+ * belongs to, and a selection that resolved against the wrong table would cancel
+ * the wrong booking. Everything the POST accepts is matched back against a
+ * freshly collected set, so an unknown key is refused rather than acted on.
+ */
+export function lineKey(l: { source: CancellationLine['source']; id: string }): string {
+  return `${l.source}:${l.id}`
+}
+
 export interface PendingCancellations {
   lines: CancellationLine[]
   skipped: SkippedReservation[]
 }
 
-export async function collectPending(
-  type: BookingTypeFilter,
-  from: string | null,
-  to: string | null
-): Promise<PendingCancellations> {
+export async function collectPending(): Promise<PendingCancellations> {
   const lines: CancellationLine[] = []
   const skipped: SkippedReservation[] = []
 
@@ -130,16 +136,14 @@ export async function collectPending(
       bookingType: line.bookingType,
     })
   }
-  const inRange = (d: string) => (!from || d >= from) && (!to || d <= to)
 
-  if (type === 'all' || type === 'One-Time Room') {
+  {
     const { data } = await adminSupabase
       .from('one_time_room_bookings')
       .select('id, booking_id, room_name, booking_date, start_time, end_time, reservation_code, bookings(id, type, purpose, bodies(name))')
       .eq('status', PENDING)
 
     for (const r of (data ?? []) as unknown as (Record<string, string> & { bookings: BookingRef | null })[]) {
-      if (!inRange(r.booking_date)) continue
       add(r.reservation_code, {
         id: r.id,
         source: 'one_time',
@@ -154,7 +158,7 @@ export async function collectPending(
     }
   }
 
-  if (type === 'all' || type === 'Tabling') {
+  {
     const { data } = await adminSupabase
       .from('tabling_sessions')
       .select('id, location, session_date, start_time, end_time, reservation_code, tabling_bookings(id, booking_id, reservation_code, bookings(id, type, purpose, bodies(name)))')
@@ -163,7 +167,6 @@ export async function collectPending(
     for (const r of (data ?? []) as unknown as (Record<string, string> & {
       tabling_bookings: { id: string; booking_id: string; reservation_code: string | null; bookings: BookingRef | null } | null
     })[]) {
-      if (!inRange(r.session_date)) continue
       const parent = Array.isArray(r.tabling_bookings) ? r.tabling_bookings[0] : r.tabling_bookings
       // The session's own code wins; the booking's is the fallback, matching
       // how the tabling editor treats it.
@@ -181,7 +184,7 @@ export async function collectPending(
     }
   }
 
-  if (type === 'all' || type === 'Weekly Room') {
+  {
     const { data } = await adminSupabase
       .from('weekly_room_occurrences')
       .select(`
@@ -212,7 +215,6 @@ export async function collectPending(
       const series = Array.isArray(r.weekly_room_bookings) ? r.weekly_room_bookings[0] : r.weekly_room_bookings
       const eff = resolveOccurrence(r, series)
       if (eff.status !== PENDING) continue
-      if (!inRange(r.occurrence_date)) continue
 
       add(eff.reservationCode, {
         id: r.id,
@@ -234,27 +236,5 @@ export async function collectPending(
     lines: lines.sort((a, b) => (a.date === b.date ? a.startTime.localeCompare(b.startTime) : byDate(a, b))),
     skipped: skipped.sort(byDate),
   }
-}
-
-export function parseFilters(url: URL) {
-  const rawType = url.searchParams.get('type') ?? 'all'
-  const type: BookingTypeFilter =
-    rawType === 'One-Time Room' || rawType === 'Weekly Room' || rawType === 'Tabling' ? rawType : 'all'
-  const iso = /^\d{4}-\d{2}-\d{2}$/
-  const fromRaw = url.searchParams.get('from')
-  const toRaw = url.searchParams.get('to')
-  return {
-    type,
-    from: fromRaw && iso.test(fromRaw) ? fromRaw : null,
-    to: toRaw && iso.test(toRaw) ? toRaw : null,
-  }
-}
-
-export function describeScope(type: BookingTypeFilter, from: string | null, to: string | null): string {
-  const what = type === 'all' ? 'All booking types' : type
-  if (from && to) return `${what}, for dates between ${from} and ${to}.`
-  if (from) return `${what}, for dates from ${from} onward.`
-  if (to) return `${what}, for dates up to ${to}.`
-  return `${what}, with no date limit.`
 }
 
