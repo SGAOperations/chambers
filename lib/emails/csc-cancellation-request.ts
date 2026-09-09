@@ -116,7 +116,7 @@ Thank you,
 SGA Operational Affairs Team`,
     html: buildEmailHtml(`
       <p style="margin:0 0 16px;">Hello,</p>
-      <p style="margin:0 0 16px;">Northeastern's Student Government Association would like to cancel the <strong>${count} ${plural}</strong> listed below. Each was marked for cancellation in Chambers, SGA's room management system.</p>
+      <p style="margin:0 0 16px;">SGA would like to cancel the <strong>${count} ${plural}</strong> listed below:</p>
       <p style="margin:0 0 16px;color:#555;">${sScopeNote}</p>
       <table cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin:0 0 20px;font-size:13px;">
         <tr style="background:#f4f4f4;">
@@ -127,8 +127,9 @@ SGA Operational Affairs Team`,
         </tr>
         ${htmlRows}
       </table>
-      <p style="margin:0 0 16px;">Requested by <strong>${sRequestedBy}</strong>, Northeastern SGA Operational Affairs.</p>
-      <p style="margin:0;color:#555;">If any of these cannot be released, or a reservation code does not match your records, please reply to this message and we will follow up.</p>
+      <p style="margin:0 0 16px;">Requested by <strong>${sRequestedBy}</strong>.</p>
+      <p style="margin:0 0 16px;color:#555;">If any of these cannot be cancelled, or if any information presented does not match your records, please reply all to this message.</p>
+      <p style="margin:0;">Thank you,<br>SGA Operational Affairs Team</p>
     `),
   })
 }
