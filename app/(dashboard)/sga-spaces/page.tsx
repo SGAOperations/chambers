@@ -49,29 +49,31 @@ interface EditBooking {
 // Skeleton shown on initial page load before spaces are fetched
 function SGASpacesSkeleton() {
   return (
-    <div className="space-y-5 animate-pulse">
+    <div className="flex flex-col gap-5 h-full min-h-0 animate-pulse">
       {/* Header row */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-3 flex-shrink-0">
         <h1 className="text-2xl font-bold text-[#f0f6ff]">SGA Spaces</h1>
         <Skeleton className="h-9 w-48 border border-[#1e5080]" />
       </div>
 
       {/* Space switcher tabs */}
-      <div className="flex gap-1 border-b border-[#1e5080] pb-px">
+      <div className="flex gap-1 border-b border-[#1e5080] pb-px flex-shrink-0">
         <Skeleton className="h-9 w-28 rounded-b-none" />
         <Skeleton className="h-9 w-24 rounded-b-none" />
         <Skeleton className="h-9 w-32 rounded-b-none" />
       </div>
 
       {/* Week nav */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-shrink-0">
         <Skeleton className="h-7 w-7 rounded-lg" />
         <Skeleton className="h-4 w-36" />
         <Skeleton className="h-7 w-7 rounded-lg" />
       </div>
 
       {/* Calendar skeleton */}
-      <CalendarSkeleton />
+      <div className="flex-1 min-h-[420px]">
+        <CalendarSkeleton />
+      </div>
     </div>
   )
 }
@@ -89,9 +91,9 @@ function CalendarSkeleton() {
   ]
 
   return (
-    <div className="rounded-xl border border-[#1e5080] overflow-hidden bg-[#0a1628]">
+    <div className="rounded-xl border border-[#1e5080] overflow-hidden bg-[#0a1628] flex flex-col h-full min-h-0">
       {/* Day headers */}
-      <div className="flex border-b border-[#1e5080]">
+      <div className="flex border-b border-[#1e5080] flex-shrink-0">
         <div className="w-14 flex-shrink-0 border-r border-[#1e5080]" />
         {DAYS.map((name, i) => (
           <div key={i} className="flex-1 min-w-0 text-center py-2 border-r border-[#1e5080] last:border-r-0">
@@ -102,7 +104,7 @@ function CalendarSkeleton() {
       </div>
 
       {/* Grid body */}
-      <div style={{ height: 400, overflow: 'hidden' }} className="relative flex">
+      <div className="relative flex flex-1 min-h-0 overflow-hidden">
         {/* Time label column */}
         <div className="w-14 flex-shrink-0 border-r border-[#1e5080] relative">
           {[2, 16, 30, 44, 58, 72, 86].map(top => (
@@ -329,8 +331,17 @@ export default function SGASpacesPage() {
 
   return (
     <>
-      <div className="space-y-5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+      {/*
+        h-full so the calendar below can fill to the bottom of the page rather
+        than stopping at a fixed height (issue #70). <main> in dashboard-shell is
+        a flex-1 child of a `flex h-screen` row, so its content box is a definite
+        height and h-full here resolves against it.
+
+        gap-5 rather than space-y-5: the calendar is a flex child now, and
+        space-y's margins are harder to reason about against flex-1 sizing.
+      */}
+      <div className="flex flex-col gap-5 h-full min-h-0">
+        <div className="flex items-center justify-between flex-wrap gap-3 flex-shrink-0">
           <h1 className="text-2xl font-bold text-[#f0f6ff]">SGA Spaces</h1>
           {canBook && (remainingHours !== null ? (
             <div className="flex items-center gap-3 flex-wrap justify-end">
@@ -352,7 +363,7 @@ export default function SGASpacesPage() {
         </div>
 
         {/* Space switcher */}
-        <div className="flex gap-1 border-b border-[#1e5080]">
+        <div className="flex gap-1 border-b border-[#1e5080] flex-shrink-0">
           {spaces.map(space => (
             <button
               key={space.id}
@@ -370,7 +381,7 @@ export default function SGASpacesPage() {
         </div>
 
         {/* Week navigation */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-shrink-0">
           <button
             onClick={retreatWeek}
             disabled={isTodayWeek}
@@ -395,7 +406,15 @@ export default function SGASpacesPage() {
 
         {/* Calendar — skeleton during refresh, real calendar once loaded */}
         {selectedSpaceId && (
-          calendarLoading ? (
+          /*
+            Grows to fill, but never below 420px: on a phone, or a short laptop
+            in a split screen, "fill the page" would otherwise mean a calendar a
+            couple of hours tall. Below that floor the flex column overflows and
+            <main>'s own overflow-y-auto takes over, which is what the page did
+            everywhere before this change.
+          */
+          <div className="flex-1 min-h-[420px]">
+          {calendarLoading ? (
             <CalendarSkeleton />
           ) : (
             <SpaceCalendar
@@ -408,7 +427,8 @@ export default function SGASpacesPage() {
               onSlotClick={canBook ? (start, end) => setModalSlot({ start, end }) : () => {}}
               onBookingClick={handleBookingClick}
             />
-          )
+          )}
+          </div>
         )}
 
         {/* Create booking modal */}

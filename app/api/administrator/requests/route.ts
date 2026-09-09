@@ -23,7 +23,7 @@ export async function GET() {
   const { data: requests } = await supabase
     .from('room_requests')
     .select(`
-      id, type, purpose, status, notes, created_at, body_id, scope, division,
+      id, type, purpose, capacity, status, notes, created_at, body_id, scope, division,
       bodies(name),
       users(full_name),
       room_request_details(room_name, start_date, start_time, end_time, end_date),

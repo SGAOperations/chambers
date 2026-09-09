@@ -3,6 +3,8 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { sendMissedReservationEmail, formatDateLong } from '@/lib/emails/missed-reservation'
 import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
+import { sendBookingCreatedEmail } from '@/lib/emails/booking-created'
+import { changed, collectChanges, formatDate, formatTime } from '@/lib/emails/changes'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
@@ -130,6 +132,45 @@ export async function POST(request: Request) {
 
   if (occurrenceError) return NextResponse.json({ error: occurrenceError.message }, { status: 500 })
 
+  // Chambers emailed on update and on a missed reservation but never on
+  // creation, so the first email a body got about a booking was one saying it
+  // had changed -- referring to details they had never been sent (issue #79).
+  //
+  // waitUntil, like the update email: the booking is already written, and the
+  // admin should not wait on a Resend round trip to find that out.
+  waitUntil(
+    (async () => {
+      try {
+        const scopedRow: ScopedRow = {
+          id: booking.id,
+          body_id: selection.value.body_id,
+          scope: selection.value.scope,
+          division: selection.value.division,
+        }
+        const recipients = await resolveBookingRecipients(adminSupabase, scopedRow)
+        if (!recipients.length) return
+
+        const { data: bodyData } = await adminSupabase
+          .from('bodies').select('name').eq('id', selection.value.body_id).single()
+
+        await sendBookingCreatedEmail({
+          bodyName: bodyData?.name ?? 'Unknown',
+          bookingType: 'Weekly Room',
+          purpose,
+          roomOrTable: room_name || 'N/A',
+          status,
+          dateRange: { start: start_date, end: end_date },
+          // Freshly generated, so every occurrence carries the series' room and
+          // time -- there are no per-week overrides to report yet.
+          sessions: dates.map(d => ({ date: d, startTime: start_time, endTime: end_time })),
+          recipients: recipients.map(r => r.email),
+        })
+      } catch (e) {
+        console.error('Booking created email failed:', e)
+      }
+    })()
+  )
+
   return NextResponse.json({ success: true })
 }
 
@@ -149,6 +190,23 @@ export async function PATCH(request: Request) {
   const ctx = await loadScopeContext(supabase, user)
   const selection = validateScopeSelection(ctx, { scope, body_id, division, body_ids })
   if (!selection.ok) return NextResponse.json({ error: selection.error }, { status: 400 })
+
+  // Read before writing, so the email can say what moved rather than only where
+  // the booking now stands (issue #79). Both reads are needed up front: the
+  // occurrence rows are deleted and regenerated further down, so after that
+  // point the previous per-week values are gone.
+  const [{ data: prevBooking }, { data: prevWeekly }, { data: prevOccurrences }] = await Promise.all([
+    adminSupabase.from('bookings').select('purpose').eq('id', booking_id).single(),
+    adminSupabase
+      .from('weekly_room_bookings')
+      .select('room_name, start_date, end_date, start_time, end_time, status, reservation_code')
+      .eq('id', weekly_id)
+      .single(),
+    adminSupabase
+      .from('weekly_room_occurrences')
+      .select('occurrence_date, room_name, start_time, end_time, status, reservation_code, purpose')
+      .eq('weekly_booking_id', weekly_id),
+  ])
 
   // Update parent booking
   const { error: bookingError } = await adminSupabase
@@ -239,13 +297,20 @@ export async function PATCH(request: Request) {
   }
   const recipients = await resolveBookingRecipients(adminSupabase, scopedRow)
 
+  // `hidden != null` rather than a truthiness test: an occurrence forced
+  // visible (false) has been changed just as much as one forced hidden.
+  //
+  // Hoisted out of the alerts block below because the email needs it too: an
+  // edit to a single week used to be described using the series' start date, so
+  // someone told "your booking changed" was pointed at a date months earlier
+  // than the one that had actually moved (issue #79).
+  const overriddenOcc = newOccurrences.find(
+    o => o.room_name || o.start_time || o.end_time || o.status || o.reservation_code
+      || o.purpose || o.hidden != null
+  )
+  const changedOcc = overriddenOcc ?? newOccurrences[0]
+
   if (recipients.length && auditLog) {
-    // `hidden != null` rather than a truthiness test: an occurrence forced
-    // visible (false) has been changed just as much as one forced hidden.
-    const changedOcc = newOccurrences.find(
-      o => o.room_name || o.start_time || o.end_time || o.status || o.reservation_code
-        || o.purpose || o.hidden != null
-    ) ?? newOccurrences[0]
     await adminSupabase.from('user_alerts').insert(
       recipients.map(r => ({
         user_id: r.userId,
@@ -264,13 +329,71 @@ export async function PATCH(request: Request) {
     (async () => {
       try {
         const emails = recipients.map(r => r.email)
+
+        // Series-level fields. Compared against what was on the row before this
+        // request rather than against the payload, so an edit that resubmits a
+        // field unchanged does not report it as a change.
+        const seriesChanges = collectChanges(
+          changed('Purpose', prevBooking?.purpose, purpose),
+          changed('Room', prevWeekly?.room_name, room_name),
+          changed('Start date', prevWeekly?.start_date, start_date, formatDate),
+          changed('End date', prevWeekly?.end_date, end_date, formatDate),
+          changed('Start time', prevWeekly?.start_time, start_time, formatTime),
+          changed('End time', prevWeekly?.end_time, end_time, formatTime),
+          changed('Status', prevWeekly?.status, status),
+          changed('Reservation code', prevWeekly?.reservation_code, reservation_code || null),
+        )
+
+        // When exactly one week carries overrides and the series itself did not
+        // move, the edit was to that week -- so the email describes that week.
+        // If the series moved too, the series is the story and a per-week
+        // heading would understate it.
+        const targetOcc = overriddenOcc && seriesChanges.length === 0 ? overriddenOcc : null
+
+        if (targetOcc) {
+          const prev = (prevOccurrences ?? []).find(
+            (o: { occurrence_date: string }) => o.occurrence_date === targetOcc.occurrence_date
+          )
+          // An occurrence field that is null inherits from the series, so the
+          // comparison is between effective values -- otherwise clearing an
+          // override would read as a change to nothing.
+          const occChanges = collectChanges(
+            changed('Room', prev?.room_name ?? prevWeekly?.room_name, targetOcc.room_name ?? room_name),
+            changed('Start time', prev?.start_time ?? prevWeekly?.start_time, targetOcc.start_time ?? start_time, formatTime),
+            changed('End time', prev?.end_time ?? prevWeekly?.end_time, targetOcc.end_time ?? end_time, formatTime),
+            changed('Status', prev?.status ?? prevWeekly?.status, targetOcc.status ?? status),
+            changed('Purpose', prev?.purpose ?? prevBooking?.purpose, targetOcc.purpose ?? purpose),
+            changed('Reservation code', prev?.reservation_code ?? prevWeekly?.reservation_code, targetOcc.reservation_code ?? (reservation_code || null)),
+          )
+
+          const index = newOccurrences.findIndex(o => o.occurrence_date === targetOcc.occurrence_date)
+
+          await sendBookingUpdatedEmail({
+            bodyName,
+            purpose: targetOcc.purpose ?? purpose,
+            roomOrTable: targetOcc.room_name || room_name || 'N/A',
+            date: targetOcc.occurrence_date,
+            startTime: targetOcc.start_time || start_time,
+            endTime: targetOcc.end_time || end_time,
+            status: targetOcc.status || status,
+            changes: occChanges,
+            occurrence: {
+              position: index >= 0 ? `week ${index + 1} of ${newOccurrences.length}` : null,
+            },
+            recipients: emails,
+          })
+          return
+        }
+
         await sendBookingUpdatedEmail({
           bodyName,
+          purpose,
           roomOrTable: room_name || 'N/A',
           date: start_date,
           startTime: start_time,
           endTime: end_time,
           status,
+          changes: seriesChanges,
           recipients: emails,
         })
       } catch (e) {
