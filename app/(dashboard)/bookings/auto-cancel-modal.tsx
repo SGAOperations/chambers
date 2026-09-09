@@ -50,12 +50,15 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
   const [skipped, setSkipped] = useState<SkippedReservation[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [recipient, setRecipient] = useState('')
+  const [recipientIsReal, setRecipientIsReal] = useState(false)
+  const [blocked, setBlocked] = useState<string | null>(null)
   const [cc, setCc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [sentCount, setSentCount] = useState<number | null>(null)
   const [sentSplit, setSentSplit] = useState<{ cancelled: number; virtual: number } | null>(null)
+  const [requestsClosed, setRequestsClosed] = useState(0)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -67,6 +70,8 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
       setLines(data.lines ?? [])
       setSkipped(data.skipped ?? [])
       setRecipient(data.recipient ?? '')
+      setRecipientIsReal(!!data.recipientIsReal)
+      setBlocked(data.blocked ?? null)
       setCc(data.cc ?? null)
       // Any previous ticks are dropped on a reload. The list may have moved, and
       // carrying a selection across it would mean approving rows never seen.
@@ -111,6 +116,7 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
     if (res.ok) {
       setSentCount(data.sent ?? selected.size)
       if (typeof data.cancelled === 'number') setSentSplit({ cancelled: data.cancelled, virtual: data.virtual ?? 0 })
+      setRequestsClosed(data.requestsClosed ?? 0)
     } else {
       setError(data.error || 'The request could not be sent.')
       // Whatever went wrong, the list on screen may no longer be the truth.
@@ -138,6 +144,11 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
             )}{' '}
             Anything you left unticked is untouched and still pending.
           </p>
+          {requestsClosed > 0 && (
+            <p className="text-sm text-[#93b8d8]">
+              {requestsClosed} cancellation request{requestsClosed === 1 ? '' : 's'} closed — no need to mark {requestsClosed === 1 ? 'it' : 'them'} done.
+            </p>
+          )}
           <button onClick={onClose} className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors">
             Close
           </button>
@@ -261,17 +272,36 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
 
         {error && <p className="text-[#c8102e] text-sm">{error}</p>}
 
-        {!loading && selected.size > 0 && (
-          <p className="text-xs text-[#6a96bb]">
-            Goes to <span className="text-[#93b8d8]">{recipient || 'CSC'}</span>
-            {cc && <>, copying <span className="text-[#93b8d8]">{cc}</span></>}.
-          </p>
+        {/*
+          Loud, and above the button rather than beside it. This used to be a
+          grey footnote; a test run went to the real CSC inbox with the address
+          on screen the whole time, which is the outcome a footnote earns.
+        */}
+        {!loading && blocked && (
+          <div className="border border-[#fb923c]/50 bg-[#3d2200]/50 rounded-lg px-3 py-2.5">
+            <p className="text-xs text-[#fb923c] font-semibold mb-1">Sending is disabled here</p>
+            <p className="text-xs text-[#93b8d8]">{blocked}</p>
+          </div>
+        )}
+
+        {!loading && !blocked && selected.size > 0 && (
+          <div className={`rounded-lg px-3 py-2.5 border ${
+            recipientIsReal
+              ? 'border-[#c8102e]/60 bg-[#3d0f0f]/50'
+              : 'border-[#1e5080] bg-[#0f2a4a]'
+          }`}>
+            <p className="text-xs text-[#93b8d8]">
+              {recipientIsReal ? 'This goes to CSC for real:' : 'Redirected — this is not CSC:'}
+            </p>
+            <p className="text-sm text-[#f0f6ff] font-medium break-all mt-0.5">{recipient}</p>
+            {cc && <p className="text-xs text-[#6a96bb] mt-0.5">copying {cc}</p>}
+          </div>
         )}
 
         <div className="flex gap-2 pt-1">
           <button
             onClick={send}
-            disabled={sending || loading || selected.size === 0}
+            disabled={sending || loading || selected.size === 0 || !!blocked}
             className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
           >
             {sending ? 'Sending…' : sendLabel}

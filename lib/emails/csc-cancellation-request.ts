@@ -35,6 +35,12 @@ export interface CancellationLine {
    * rather than a stated intent.
    */
   outcomeFromRequest: boolean
+  /**
+   * The cancellation_requests row this reservation came from, so sending can
+   * close it. Null when the status was set directly by an admin with no request
+   * behind it -- there is nothing to mark done in that case.
+   */
+  cancellationRequestId: string | null
   date: string
   startTime: string
   endTime: string

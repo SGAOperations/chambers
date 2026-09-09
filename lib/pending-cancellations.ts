@@ -134,12 +134,47 @@ export interface CancellationOutcome {
   fromRequest: boolean
 }
 
+/** A cancellation request, as indexed for lookup. */
+interface RequestRef {
+  id: string
+  type: string
+}
+
 const DEFAULT_OUTCOME: CancellationOutcome = { status: 'Cancelled', fromRequest: false }
 
 export function outcomeOf(cancellationType: string | null | undefined): CancellationOutcome {
   if (cancellationType === 'Virtual') return { status: 'Virtual', fromRequest: true }
   if (cancellationType === 'Cancellation') return { status: 'Cancelled', fromRequest: true }
   return DEFAULT_OUTCOME
+}
+
+/**
+ * The cancellation requests a send has finished off.
+ *
+ * A request is only done when every pending reservation it covers went out.
+ * Occurrence-scoped requests cover exactly one row, so selecting one closes it;
+ * a series-scoped request covers the whole run, and sending three weeks of a
+ * five-week cancellation does not finish it. Closing it anyway would drop the
+ * remaining two off the Cancellations tab with nothing done about them.
+ *
+ * Pure, and exported, because there are no series-scoped requests in the data
+ * today -- this is the branch that would otherwise ship unexercised.
+ */
+export function requestsFullyCovered(
+  allPending: { cancellationRequestId: string | null; source: CancellationLine['source']; id: string }[],
+  selectedKeys: Set<string>
+): string[] {
+  const coverage = new Map<string, { total: number; sent: number }>()
+  for (const l of allPending) {
+    if (!l.cancellationRequestId) continue
+    const c = coverage.get(l.cancellationRequestId) ?? { total: 0, sent: 0 }
+    c.total += 1
+    if (selectedKeys.has(lineKey(l))) c.sent += 1
+    coverage.set(l.cancellationRequestId, c)
+  }
+  return [...coverage.entries()]
+    .filter(([, c]) => c.sent > 0 && c.sent === c.total)
+    .map(([id]) => id)
 }
 
 export interface PendingCancellations {
@@ -156,33 +191,37 @@ export async function collectPending(): Promise<PendingCancellations> {
   // request beats a resolved one, and the most recent beats an older one.
   const { data: requests } = await adminSupabase
     .from('cancellation_requests')
-    .select('booking_id, occurrence_id, scope, status, cancellation_type, created_at')
+    .select('id, booking_id, occurrence_id, scope, status, cancellation_type, created_at')
     .order('created_at', { ascending: false })
 
-  const byOccurrence = new Map<string, string>()
-  const bySeriesBooking = new Map<string, string>()
-  const byBooking = new Map<string, string>()
+  // The id travels with the type: sending closes the request it acted on, so
+  // knowing *which* row said 'Virtual' matters as much as the value.
+  const byOccurrence = new Map<string, RequestRef>()
+  const bySeriesBooking = new Map<string, RequestRef>()
+  const byBooking = new Map<string, RequestRef>()
 
   for (const pass of ['Pending', 'other'] as const) {
     for (const r of (requests ?? []) as {
+      id: string
       booking_id: string | null
       occurrence_id: string | null
       scope: string
       status: string | null
       cancellation_type: string
     }[]) {
+      const ref: RequestRef = { id: r.id, type: r.cancellation_type }
       const isPending = r.status === 'Pending'
       if (pass === 'Pending' ? !isPending : isPending) continue
       // setDefault semantics: the first pass wins, so a Pending request is never
       // overwritten by a resolved one.
       if (r.occurrence_id && !byOccurrence.has(r.occurrence_id)) {
-        byOccurrence.set(r.occurrence_id, r.cancellation_type)
+        byOccurrence.set(r.occurrence_id, ref)
       }
       if (r.booking_id) {
         if (r.scope === 'series' && !bySeriesBooking.has(r.booking_id)) {
-          bySeriesBooking.set(r.booking_id, r.cancellation_type)
+          bySeriesBooking.set(r.booking_id, ref)
         }
-        if (!byBooking.has(r.booking_id)) byBooking.set(r.booking_id, r.cancellation_type)
+        if (!byBooking.has(r.booking_id)) byBooking.set(r.booking_id, ref)
       }
     }
   }
@@ -190,14 +229,16 @@ export async function collectPending(): Promise<PendingCancellations> {
   /** Routes a row to `lines` or `skipped` on whether CSC could act on it. */
   const add = (
     code: string | null,
-    line: Omit<CancellationLine, 'reservationCode' | 'resultingStatus' | 'outcomeFromRequest'>,
-    outcome: CancellationOutcome,
+    line: Omit<CancellationLine, 'reservationCode' | 'resultingStatus' | 'outcomeFromRequest' | 'cancellationRequestId'>,
+    request: RequestRef | undefined,
   ) => {
+    const outcome = outcomeOf(request?.type)
     if (hasUsableCode(code)) lines.push({
       ...line,
       reservationCode: code!.trim(),
       resultingStatus: outcome.status,
       outcomeFromRequest: outcome.fromRequest,
+      cancellationRequestId: request?.id ?? null,
     })
     else skipped.push({
       date: line.date,
@@ -224,7 +265,7 @@ export async function collectPending(): Promise<PendingCancellations> {
         roomOrTable: r.room_name || 'Not recorded',
         bodyName: bodyNameOf(r.bookings),
         bookingType: 'One-Time Room',
-      }, outcomeOf(byBooking.get(r.booking_id)))
+      }, byBooking.get(r.booking_id))
     }
   }
 
@@ -250,7 +291,7 @@ export async function collectPending(): Promise<PendingCancellations> {
         roomOrTable: r.location || 'Not recorded',
         bodyName: bodyNameOf(parent?.bookings ?? null),
         bookingType: 'Tabling',
-      }, outcomeOf(parent?.booking_id ? byBooking.get(parent.booking_id) : null))
+      }, parent?.booking_id ? byBooking.get(parent.booking_id) : undefined)
     }
   }
 
@@ -296,11 +337,11 @@ export async function collectPending(): Promise<PendingCancellations> {
         roomOrTable: eff.roomOrTable,
         bodyName: bodyNameOf(series?.bookings ?? null),
         bookingType: 'Weekly Room',
-      }, outcomeOf(
+      },
         // A request naming this exact week wins over one covering the series.
         byOccurrence.get(r.id)
           ?? (series?.booking_id ? bySeriesBooking.get(series.booking_id) : undefined)
-      ))
+      )
     }
   }
 
