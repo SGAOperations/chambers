@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
 import { usePendingActionsWatch } from '../pending-actions-watch'
+import AutoCancelModal from './auto-cancel-modal'
 
 function CancellationsTabSkeleton() {
   return (
@@ -64,6 +65,7 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
   const [cancellations, setCancellations] = useState<CancellationRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
+  const [showAutoCancel, setShowAutoCancel] = useState(false)
   const { isDanger, registerOrigin } = usePendingActionsWatch()
 
   const fetchCancellations = async () => {
@@ -89,14 +91,34 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
     setUpdating(null)
   }
 
+  const header = (
+    <div className="flex items-center justify-between flex-wrap gap-3">
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-[#6a96bb]">Cancellation Requests</h3>
+      <button
+        onClick={() => setShowAutoCancel(true)}
+        className="px-3 py-1.5 text-sm bg-[#0f2a4a] border border-[#1e5080] text-[#f0f6ff] rounded-lg font-medium hover:border-[#93b8d8] transition-colors"
+      >
+        Auto-Cancel
+      </button>
+    </div>
+  )
+
   if (loading) return <CancellationsTabSkeleton />
 
+  // Deliberately still rendered when there are no cancellation *requests*: a
+  // booking can be set to Pending Cancellation directly by an admin without one,
+  // and those are exactly what Auto-Cancel is for.
   if (cancellations.length === 0) return (
-    <p className="text-[#6a96bb] text-sm">No cancellation requests found.</p>
+    <div className="space-y-4">
+      {header}
+      <p className="text-[#6a96bb] text-sm">No cancellation requests found.</p>
+      {showAutoCancel && <AutoCancelModal onClose={() => setShowAutoCancel(false)} />}
+    </div>
   )
 
   return (
     <div className="space-y-4">
+      {header}
       {cancellations.map(c => (
         <div
           key={c.id}
@@ -143,6 +165,7 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
           )}
         </div>
       ))}
+      {showAutoCancel && <AutoCancelModal onClose={() => setShowAutoCancel(false)} />}
     </div>
   )
 }
