@@ -1,5 +1,6 @@
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { bostonWallClockNow } from '@/lib/boston-time'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,10 +22,17 @@ export async function GET(
 
   // Use the client-supplied local date (YYYY-MM-DD) so "today" matches the
   // display's clock rather than the server's UTC clock.
+  //
+  // The fallback is Boston wall clock, not the server's UTC date. Bookings are
+  // stored as wall-clock digits labelled Z, so a UTC "today" is already tomorrow
+  // after 8 PM EDT and the kiosk would ask for the wrong day's bookings. The
+  // display page always sends the parameter, so this is unreachable from it --
+  // but it is the same trap as issue #87 and worth not leaving armed for the
+  // next caller.
   const dateParam = searchParams.get('date')
   const [year, month, day] = dateParam
     ? dateParam.split('-').map(Number)
-    : (() => { const n = new Date(); return [n.getUTCFullYear(), n.getUTCMonth() + 1, n.getUTCDate()] })()
+    : (() => { const n = bostonWallClockNow(); return [n.getUTCFullYear(), n.getUTCMonth() + 1, n.getUTCDate()] })()
   const todayStart = new Date(Date.UTC(year, month - 1, day))
   const todayEnd = new Date(Date.UTC(year, month - 1, day + 1))
 
