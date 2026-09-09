@@ -14,5 +14,12 @@
  * Lives in lib/ rather than beside todayInAppZone() because the Slack reminder
  * job needs it too (issue #95), and a route reaching into app/(dashboard)/ for a
  * constant is the wrong direction of travel.
+ *
+ * Not to be confused with lib/boston-time.ts, which names the same zone for a
+ * different job. This one is about DATE columns -- which calendar day a booking
+ * falls on. That one is about SGA Spaces timestamps, which store Boston
+ * wall-clock digits with a Z on the end and therefore need a "now" in the same
+ * shape to compare against (issue #87). A booking date has no time of day to get
+ * wrong; a space booking is nothing but one.
  */
 export const APP_TIME_ZONE = 'America/New_York'
