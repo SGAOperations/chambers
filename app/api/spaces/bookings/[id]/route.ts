@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { bostonWallClockNow } from '@/lib/boston-time'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
@@ -105,7 +106,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const minHours: number = settings?.min_hours_advance_spaces ?? 24
   const startTimeChanged = start_time !== existing.start_time
   if (minHours > 0 && startTimeChanged) {
-    const earliestAllowed = new Date(Date.now() + minHours * 60 * 60 * 1000)
+    // Boston wall-clock now, for the reason given in the POST route: start_time
+    // is wall-clock digits labelled Z, and Date.now() is a real instant.
+    const earliestAllowed = new Date(bostonWallClockNow().getTime() + minHours * 60 * 60 * 1000)
     if (new Date(start_time) < earliestAllowed) {
       return NextResponse.json({
         error: `Bookings must be made at least ${minHours} hour${minHours === 1 ? '' : 's'} in advance.`,
