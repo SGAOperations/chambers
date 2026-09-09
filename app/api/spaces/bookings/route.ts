@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { bostonWallClockNow } from '@/lib/boston-time'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+import { advanceNoticeError } from '@/lib/spaces-advance-notice'
 import { sendSpaceBookingConfirmedEmail } from '@/lib/emails/space-booking-confirmed'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
@@ -159,19 +159,12 @@ export async function POST(request: Request) {
     adminSupabase.from('app_settings').select('min_hours_advance_spaces').eq('id', 1).single(),
   ])
 
-  // Advance notice check (skipped when limit is 0)
-  //
-  // Measured from Boston wall-clock now, not Date.now(): start_time carries
-  // wall-clock digits with a Z on the end, so comparing it against a real
-  // instant made every booking look an offset earlier than it was, and the
-  // requirement reject bookings that were comfortably far enough out (issue #87).
+  // Advance notice check (skipped when limit is 0). A creation claims its whole
+  // interval, so the shared rule reduces to the same test it always ran here --
+  // it is shared with the PATCH route, where the interesting case lives (#94).
   const minHours: number = settings?.min_hours_advance_spaces ?? 24
-  const earliestAllowed = new Date(bostonWallClockNow().getTime() + minHours * 60 * 60 * 1000)
-  if (minHours > 0 && new Date(start_time) < earliestAllowed) {
-    return NextResponse.json({
-      error: `Bookings must be made at least ${minHours} hour${minHours === 1 ? '' : 's'} in advance.`,
-    }, { status: 400 })
-  }
+  const noticeError = advanceNoticeError({ start: start_time, end: end_time }, null, minHours)
+  if (noticeError) return NextResponse.json({ error: noticeError }, { status: 400 })
 
   if (overlapping && overlapping.length > 0) {
     return NextResponse.json({ error: 'This time slot overlaps with an existing booking for this space.' }, { status: 400 })

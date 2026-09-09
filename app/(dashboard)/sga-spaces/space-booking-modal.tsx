@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import TimePicker from '../bookings/time-picker'
 import DateField from '@/app/_components/date-field'
+import { advanceNoticeError } from '@/lib/spaces-advance-notice'
 
 interface User {
   id: string
@@ -29,6 +30,8 @@ interface SpaceBookingModalProps {
   initialAttendees?: User[]
   onCancelBooking?: () => Promise<void>
   spaces?: Space[]
+  /** Hours of notice required before newly claimed time. 0 disables the rule. */
+  minHoursAdvance?: number
 }
 
 function isoToDateAndTime(iso: string): { date: string; time: string } {
@@ -61,6 +64,7 @@ export default function SpaceBookingModal({
   initialAttendees = [],
   onCancelBooking,
   spaces,
+  minHoursAdvance = 0,
 }: SpaceBookingModalProps) {
   const isEditing = !!editBookingId
 
@@ -131,6 +135,18 @@ export default function SpaceBookingModal({
       setCancelConfirm(false)
     }
   }
+
+  // The same rule the server applies, run as the form changes so an edit that
+  // would be refused says so before it is submitted (issue #94). Only for edits:
+  // a new booking cannot be drawn inside the notice window in the first place,
+  // and warning about the slot you have not finished picking would be noise.
+  const noticeWarning = isEditing && date
+    ? advanceNoticeError(
+        { start: dateAndTimeToIso(date, startTime), end: endTimeToIso(date, endTime) },
+        { start: initialStart, end: initialEnd },
+        minHoursAdvance
+      )
+    : null
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -303,6 +319,14 @@ export default function SpaceBookingModal({
             )}
           </div>
 
+          {/* Advance notice — a warning, not an error: the booking as it stands is
+              fine, it is the pending change that would be refused. */}
+          {noticeWarning && !error && (
+            <div className="bg-[#f97316]/10 border border-[#f97316]/30 rounded-lg px-3 py-2.5 text-sm text-[#fdba74]">
+              {noticeWarning}
+            </div>
+          )}
+
           {/* Error */}
           {error && (
             <div className="bg-[#c8102e]/10 border border-[#c8102e]/30 rounded-lg px-3 py-2.5 text-sm text-[#f87171]">
@@ -321,7 +345,7 @@ export default function SpaceBookingModal({
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !!noticeWarning}
               className="flex-1 py-2.5 px-4 bg-[#c8102e] hover:bg-[#a50d26] disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
             >
               {submitting ? (isEditing ? 'Saving…' : 'Booking…') : (isEditing ? 'Save Changes' : 'Confirm Booking')}
