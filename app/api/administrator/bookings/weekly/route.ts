@@ -437,8 +437,25 @@ export async function PATCH(request: Request) {
     .eq('booking_id', booking_id)
     .eq('status', 'Pending')
 
-  const isMissed = status === 'Missed' || occurrences.some((o: { status: string | null }) => o.status === 'Missed')
-  if (isMissed) {
+  // Which weeks this save actually marked Missed.
+  //
+  // Two things were wrong with asking "is anything Missed" (issue #99). It
+  // described the alert using the series' start date and time no matter which
+  // week had been missed -- the same defect as #91, in the one caller that
+  // rewrite did not reach. And because a missed week stays Missed, the condition
+  // stayed true forever: every later edit to the series sent Operational Affairs
+  // another alert about a week they had been told about weeks earlier.
+  //
+  // movedOccurrences is what this save changed, so a week only alerts on the
+  // edit that missed it.
+  const newlyMissedWeeks = movedOccurrences.filter(o => o.status === 'Missed')
+
+  // A series-level Missed applies to every week at once, so there is no single
+  // week to name and the series is the story. Compared against the stored value
+  // so resubmitting an already-missed series does not re-alert either.
+  const seriesNewlyMissed = status === 'Missed' && prevWeekly?.status !== 'Missed'
+
+  if (seriesNewlyMissed || newlyMissedWeeks.length) {
     waitUntil(
       (async () => {
         try {
@@ -447,14 +464,30 @@ export async function PATCH(request: Request) {
           })
           const contacts = leaders.map(l => l.fullName).filter(Boolean)
 
-          await sendMissedReservationEmail({
-            bodyName,
-            date: start_date,
-            roomOrTable: room_name,
-            startTime: start_time,
-            endTime: end_time,
-            contacts,
-          })
+          // One alert per missed reservation rather than one per save. Each
+          // missed room is its own incident for Operational Affairs to chase,
+          // and a single email naming one of several would hide the rest.
+          const missed = seriesNewlyMissed
+            ? [{ date: start_date, startTime: start_time, endTime: end_time, roomOrTable: room_name }]
+            : newlyMissedWeeks.map(o => ({
+                date: o.occurrence_date,
+                // Null on an occurrence means inherit, so these are the values
+                // that actually applied to the week that was missed.
+                startTime: o.start_time ?? start_time,
+                endTime: o.end_time ?? end_time,
+                roomOrTable: o.room_name ?? room_name,
+              }))
+
+          for (const m of missed) {
+            await sendMissedReservationEmail({
+              bodyName,
+              date: m.date,
+              roomOrTable: m.roomOrTable,
+              startTime: m.startTime,
+              endTime: m.endTime,
+              contacts,
+            })
+          }
         } catch (e) {
           console.error('Resend email failed:', e)
         }
