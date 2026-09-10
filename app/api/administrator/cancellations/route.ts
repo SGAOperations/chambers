@@ -3,6 +3,11 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import {
+  applyCancellationOutcomes,
+  cancellationAuditRows,
+  collectPending,
+} from '@/lib/pending-cancellations'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,7 +28,7 @@ export async function GET() {
   const { data: cancellations } = await supabase
     .from('cancellation_requests')
     .select(`
-      id, scope, status, created_at, cancellation_type, occurrence_id, booking_id,
+      id, scope, status, created_at, cancellation_type, occurrence_id, occurrence_date, booking_id,
       bookings(id, type, purpose, bodies(name)),
       users(full_name)
     `)
@@ -39,12 +44,20 @@ export async function GET() {
 
       if (c.scope === 'occurrence' && c.occurrence_id) {
         if (bookingType === 'Weekly Room') {
-          const { data: occ } = await adminSupabase
+          // Matched on the stored date first, and only then on the id. The id
+          // does not survive an edit to the booking -- the PATCH handler
+          // regenerates every occurrence -- which is why these rows showed no
+          // date at all (issue #96).
+          const q = adminSupabase
             .from('weekly_room_occurrences')
-            .select('occurrence_date, reservation_code')
-            .eq('id', c.occurrence_id)
-            .single()
-          occurrence_date = occ?.occurrence_date ?? null
+            .select('occurrence_date, reservation_code, weekly_room_bookings!inner(booking_id)')
+          const { data: occ } = c.occurrence_date
+            ? await q
+                .eq('occurrence_date', c.occurrence_date)
+                .eq('weekly_room_bookings.booking_id', c.booking_id)
+                .maybeSingle()
+            : await q.eq('id', c.occurrence_id).maybeSingle()
+          occurrence_date = occ?.occurrence_date ?? c.occurrence_date ?? null
           reservation_code = occ?.reservation_code ?? null
         } else if (bookingType === 'One-Time Room') {
           const { data: session } = await adminSupabase
@@ -88,7 +101,10 @@ export async function GET() {
         }
       }
 
-      return { ...c, occurrence_date, reservation_code }
+      // The stored date is the fallback for every type: even where the code
+      // lookup fails because the row was regenerated, the request still knows
+      // which date it was about.
+      return { ...c, occurrence_date: occurrence_date ?? c.occurrence_date ?? null, reservation_code }
     })
   )
 
@@ -107,6 +123,38 @@ export async function PATCH(request: Request) {
   if (rateLimitRes) return rateLimitRes
 
   const { id } = await request.json()
+  if (!id) return NextResponse.json({ error: 'A cancellation request id is required.' }, { status: 400 })
+
+  const { data: req } = await adminSupabase
+    .from('cancellation_requests')
+    .select('id')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (!req) return NextResponse.json({ error: 'Cancellation request not found.' }, { status: 404 })
+
+  // Which dated reservations this request covers, and what each is due. Read
+  // from the same collector Auto-Cancel uses, so the two agree about whose row a
+  // request owns -- including the inheritance that makes a series-level
+  // cancellation produce pending occurrences that do not say so themselves.
+  //
+  // `skipped` is included here where Auto-Cancel excludes it. A missing
+  // reservation code means CSC cannot be asked, which is why Auto-Cancel will
+  // not touch those rows; it says nothing about whether an administrator has
+  // dealt with it. Marking Done by hand is that administrator saying they have.
+  const { lines, skipped } = await collectPending()
+  const covered = [...lines, ...skipped].filter(l => l.cancellationRequestId === id)
+
+  const failures = await applyCancellationOutcomes(covered)
+
+  // One entry per booking touched, so the change shows up in the Audit tab
+  // beside every other status change rather than appearing to have happened by
+  // itself. Best effort, as in Auto-Cancel.
+  const auditRows = cancellationAuditRows(covered, user.id)
+  if (auditRows.length) {
+    const { error: auditError } = await adminSupabase.from('audit_logs').insert(auditRows)
+    if (auditError) console.error('Cancellation done audit log failed:', auditError)
+  }
 
   const { error } = await adminSupabase
     .from('cancellation_requests')
@@ -115,5 +163,13 @@ export async function PATCH(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ success: true })
+  return NextResponse.json({
+    success: true,
+    applied: covered.length,
+    cancelled: covered.filter(l => l.resultingStatus === 'Cancelled').length,
+    virtual: covered.filter(l => l.resultingStatus === 'Virtual').length,
+    // The request is closed either way -- the admin has said it is handled -- but
+    // they need to know if a status did not move with it.
+    ...(failures.length ? { statusUpdateFailed: failures } : {}),
+  })
 }

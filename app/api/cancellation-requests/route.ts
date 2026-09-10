@@ -28,12 +28,39 @@ export async function POST(request: Request) {
 
   const bookingType = guard.row.type
 
+  // The date this request is about, resolved now while occurrence_id still
+  // names a live row (issue #96).
+  //
+  // It will not always. The weekly PATCH handler deletes and reinserts every
+  // occurrence on each save, so an edit to the booking leaves occurrence_id
+  // pointing at nothing while the values live on under new ids, carried across
+  // on the date. Storing the date is what lets the request still be matched to
+  // its reservation afterwards -- without it, marking the request Done finds
+  // nothing to do, and Auto-Cancel cannot tell which request asked for what.
+  let occurrenceDate: string | null = null
+  if (scope === 'occurrence' && occurrence_id) {
+    if (bookingType === 'One-Time Room') {
+      const { data } = await adminSupabase
+        .from('one_time_room_bookings').select('booking_date').eq('id', occurrence_id).maybeSingle()
+      occurrenceDate = data?.booking_date ?? null
+    } else if (bookingType === 'Tabling') {
+      const { data } = await adminSupabase
+        .from('tabling_sessions').select('session_date').eq('id', occurrence_id).maybeSingle()
+      occurrenceDate = data?.session_date ?? null
+    } else {
+      const { data } = await adminSupabase
+        .from('weekly_room_occurrences').select('occurrence_date').eq('id', occurrence_id).maybeSingle()
+      occurrenceDate = data?.occurrence_date ?? null
+    }
+  }
+
   // Create cancellation request
   const { error: requestError } = await adminSupabase
     .from('cancellation_requests')
     .insert({
       booking_id,
       occurrence_id: occurrence_id || null,
+      occurrence_date: occurrenceDate,
       requested_by: user.id,
       scope,
       status: 'Pending',
