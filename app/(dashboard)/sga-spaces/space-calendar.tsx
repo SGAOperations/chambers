@@ -219,23 +219,22 @@ export default function SpaceCalendar({
 
   // ── Mouse interaction ────────────────────────────────────────────────────────
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent, dayIdx: number) => {
-    if (!canBook) {
-      setOverlayCursor('default')
-      return
-    }
     const slot = slotFromClientY(e.clientY)
-    if (isSlotBlocked(dayIdx, slot) || isSlotInNoticeZone(dayIdx, slot)) {
+    // Your own booking is reachable first, before the blocked and notice-zone
+    // guards. Those guards are about claiming *new* time, and opening a booking
+    // you already hold claims nothing -- it is how you shorten or cancel it
+    // (issue #94). Deciding this here rather than in the guards keeps a blackout
+    // or the notice window from swallowing the click on a booking sitting inside
+    // it, which is what made such a booking impossible to touch at all.
+    const ownBooking = bookingsByDay[dayIdx].find(
+      bs => slot >= bs.startSlot && slot < bs.endSlot && bs.booking.creator_id === currentUserId
+    )
+    if (ownBooking) {
+      setOverlayCursor('pointer')
+      setHoveredBookingId(ownBooking.booking.id)
+    } else if (!canBook || isSlotBlocked(dayIdx, slot) || isSlotInNoticeZone(dayIdx, slot) || isSlotBooked(dayIdx, slot)) {
       setOverlayCursor('default')
       setHoveredBookingId(null)
-    } else if (isSlotBooked(dayIdx, slot)) {
-      const hit = bookingsByDay[dayIdx].find(bs => slot >= bs.startSlot && slot < bs.endSlot)
-      if (hit && hit.booking.creator_id === currentUserId) {
-        setOverlayCursor('pointer')
-        setHoveredBookingId(hit.booking.id)
-      } else {
-        setOverlayCursor('default')
-        setHoveredBookingId(null)
-      }
     } else {
       setOverlayCursor('crosshair')
       setHoveredBookingId(null)
@@ -245,14 +244,19 @@ export default function SpaceCalendar({
   const handleColumnMouseDown = useCallback((e: React.MouseEvent, dayIdx: number) => {
     e.preventDefault()
     const slot = slotFromClientY(e.clientY)
-    if (isSlotBlocked(dayIdx, slot) || isSlotInNoticeZone(dayIdx, slot)) return
-    if (isSlotBooked(dayIdx, slot)) {
-      if (currentUserId && onBookingClick) {
-        const hit = bookingsByDay[dayIdx].find(bs => slot >= bs.startSlot && slot < bs.endSlot)
-        if (hit && hit.booking.creator_id === currentUserId) onBookingClick(hit.booking)
+    // Same order as the hover handler above: your own booking opens even inside
+    // the notice window (issue #94).
+    if (currentUserId && onBookingClick) {
+      const hit = bookingsByDay[dayIdx].find(
+        bs => slot >= bs.startSlot && slot < bs.endSlot && bs.booking.creator_id === currentUserId
+      )
+      if (hit) {
+        onBookingClick(hit.booking)
+        return
       }
-      return
     }
+    if (isSlotBlocked(dayIdx, slot) || isSlotInNoticeZone(dayIdx, slot)) return
+    if (isSlotBooked(dayIdx, slot)) return
     if (!canBook) return
     dragRef.current = { dayIdx, startSlot: slot, currentSlot: slot }
     setDragPreview({ dayIdx, startSlot: slot, endSlot: slot + 1 })

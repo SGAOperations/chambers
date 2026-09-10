@@ -95,11 +95,19 @@ export function hasUsableCode(code: string | null | undefined): boolean {
   return typeof code === 'string' && code.trim().length > 0
 }
 
-export interface SkippedReservation {
-  date: string
-  roomOrTable: string
-  bodyName: string
-  bookingType: 'One-Time Room' | 'Weekly Room' | 'Tabling'
+/**
+ * Everything a line carries except a code CSC could act on.
+ *
+ * It used to carry only the four display fields, because the only thing anyone
+ * did with a skipped row was print it in the Auto-Cancel preview. Marking a
+ * cancellation request Done has to *act* on these rows (issue #96): the admin
+ * saying they have handled it is not conditional on CSC having had a code to
+ * work from, so the row still needs its status applied and therefore still needs
+ * its id, its table and its outcome.
+ */
+export interface SkippedReservation extends Omit<CancellationLine, 'reservationCode'> {
+  /** Always null. Its absence is what makes the row skipped. */
+  reservationCode: null
 }
 
 /**
@@ -191,20 +199,31 @@ export async function collectPending(): Promise<PendingCancellations> {
   // request beats a resolved one, and the most recent beats an older one.
   const { data: requests } = await adminSupabase
     .from('cancellation_requests')
-    .select('id, booking_id, occurrence_id, scope, status, cancellation_type, created_at')
+    .select('id, booking_id, occurrence_id, occurrence_date, scope, status, cancellation_type, created_at')
     .order('created_at', { ascending: false })
 
   // The id travels with the type: sending closes the request it acted on, so
   // knowing *which* row said 'Virtual' matters as much as the value.
   const byOccurrence = new Map<string, RequestRef>()
+  // Keyed on (booking, date), which is what survives an edit. occurrence_id does
+  // not: the weekly PATCH handler regenerates every occurrence row on each save,
+  // so a request made before an edit points at nothing afterwards -- and every
+  // request in production was in exactly that state (issue #96). Falling through
+  // to bySeriesBooking would have been wrong, and falling through to nothing lost
+  // the cancellation_type, so a request that asked to go Virtual came out
+  // Cancelled.
+  const byBookingDate = new Map<string, RequestRef>()
   const bySeriesBooking = new Map<string, RequestRef>()
   const byBooking = new Map<string, RequestRef>()
+
+  const dateKey = (bookingId: string, date: string) => `${bookingId}|${date}`
 
   for (const pass of ['Pending', 'other'] as const) {
     for (const r of (requests ?? []) as {
       id: string
       booking_id: string | null
       occurrence_id: string | null
+      occurrence_date: string | null
       scope: string
       status: string | null
       cancellation_type: string
@@ -216,6 +235,10 @@ export async function collectPending(): Promise<PendingCancellations> {
       // overwritten by a resolved one.
       if (r.occurrence_id && !byOccurrence.has(r.occurrence_id)) {
         byOccurrence.set(r.occurrence_id, ref)
+      }
+      if (r.booking_id && r.occurrence_date) {
+        const k = dateKey(r.booking_id, r.occurrence_date)
+        if (!byBookingDate.has(k)) byBookingDate.set(k, ref)
       }
       if (r.booking_id) {
         if (r.scope === 'series' && !bySeriesBooking.has(r.booking_id)) {
@@ -233,19 +256,17 @@ export async function collectPending(): Promise<PendingCancellations> {
     request: RequestRef | undefined,
   ) => {
     const outcome = outcomeOf(request?.type)
-    if (hasUsableCode(code)) lines.push({
+    const resolved = {
       ...line,
-      reservationCode: code!.trim(),
       resultingStatus: outcome.status,
       outcomeFromRequest: outcome.fromRequest,
       cancellationRequestId: request?.id ?? null,
-    })
-    else skipped.push({
-      date: line.date,
-      roomOrTable: line.roomOrTable,
-      bodyName: line.bodyName,
-      bookingType: line.bookingType,
-    })
+    }
+    // Built once and routed, rather than assembled differently on each branch.
+    // The two used to diverge, and a skipped row lost the id and table that
+    // marking a request Done now needs (issue #96).
+    if (hasUsableCode(code)) lines.push({ ...resolved, reservationCode: code!.trim() })
+    else skipped.push({ ...resolved, reservationCode: null })
   }
 
   {
@@ -265,7 +286,7 @@ export async function collectPending(): Promise<PendingCancellations> {
         roomOrTable: r.room_name || 'Not recorded',
         bodyName: bodyNameOf(r.bookings),
         bookingType: 'One-Time Room',
-      }, byBooking.get(r.booking_id))
+      }, byBookingDate.get(dateKey(r.booking_id, r.booking_date)) ?? byBooking.get(r.booking_id))
     }
   }
 
@@ -291,7 +312,9 @@ export async function collectPending(): Promise<PendingCancellations> {
         roomOrTable: r.location || 'Not recorded',
         bodyName: bodyNameOf(parent?.bookings ?? null),
         bookingType: 'Tabling',
-      }, parent?.booking_id ? byBooking.get(parent.booking_id) : undefined)
+      }, parent?.booking_id
+        ? byBookingDate.get(dateKey(parent.booking_id, r.session_date)) ?? byBooking.get(parent.booking_id)
+        : undefined)
     }
   }
 
@@ -339,8 +362,14 @@ export async function collectPending(): Promise<PendingCancellations> {
         bookingType: 'Weekly Room',
       },
         // A request naming this exact week wins over one covering the series.
+        // The id is tried first because it is exact when it resolves; the
+        // (booking, date) key is what still works once the row has been
+        // regenerated, which is the usual case rather than the exception.
         byOccurrence.get(r.id)
-          ?? (series?.booking_id ? bySeriesBooking.get(series.booking_id) : undefined)
+          ?? (series?.booking_id
+            ? byBookingDate.get(dateKey(series.booking_id, r.occurrence_date))
+              ?? bySeriesBooking.get(series.booking_id)
+            : undefined)
       )
     }
   }
@@ -353,3 +382,68 @@ export async function collectPending(): Promise<PendingCancellations> {
   }
 }
 
+
+/** Which table each source's `id` belongs to. */
+const TABLE_OF: Record<CancellationLine['source'], string> = {
+  one_time: 'one_time_room_bookings',
+  occurrence: 'weekly_room_occurrences',
+  tabling_session: 'tabling_sessions',
+}
+
+/** The rows a cancellation outcome can be written to. */
+export type OutcomeTarget = Pick<CancellationLine, 'source' | 'id' | 'resultingStatus' | 'bookingId'>
+
+/**
+ * Writes each reservation the status it is due, and returns the batches that
+ * failed.
+ *
+ * Grouped by table *and* by status, so a batch containing both kinds writes each
+ * its own value. Marking everything 'Cancelled' would be wrong for a booking
+ * whose request said it was going virtual: that meeting still happens, it just
+ * does not need the room.
+ *
+ * An occurrence whose status was inherited gets its value written onto the
+ * occurrence itself, which is correct -- only the dates actually acted on stop
+ * being pending, and the rest of the series is untouched.
+ *
+ * Shared by Auto-Cancel and by marking a request Done by hand, which have to
+ * agree about this: the same request resolved either way should leave the
+ * database in the same state.
+ */
+export async function applyCancellationOutcomes(rows: OutcomeTarget[]): Promise<string[]> {
+  const batches = new Map<string, { table: string; status: string; ids: string[] }>()
+  for (const l of rows) {
+    const table = TABLE_OF[l.source]
+    const bucket = `${table}:${l.resultingStatus}`
+    if (!batches.has(bucket)) batches.set(bucket, { table, status: l.resultingStatus, ids: [] })
+    batches.get(bucket)!.ids.push(l.id)
+  }
+
+  const failures: string[] = []
+  for (const { table, status, ids } of batches.values()) {
+    const { error } = await adminSupabase.from(table).update({ status }).in('id', ids)
+    if (error) {
+      console.error(`Could not mark ${table} as ${status}:`, error)
+      failures.push(`${table} (${status})`)
+    }
+  }
+  return failures
+}
+
+/**
+ * Audit rows for a set of reservations, one per booking and status.
+ *
+ * Keyed on booking *and* status: one booking can contribute both a cancelled
+ * week and a virtual one in the same action, and a single row saying 'Cancelled'
+ * would misreport the other.
+ */
+export function cancellationAuditRows(rows: OutcomeTarget[], adminId: string) {
+  return [...new Map(
+    rows
+      .filter(l => l.bookingId)
+      .map(l => [
+        `${l.bookingId}:${l.resultingStatus}`,
+        { booking_id: l.bookingId, admin_id: adminId, new_status: l.resultingStatus },
+      ])
+  ).values()]
+}
