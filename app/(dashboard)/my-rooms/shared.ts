@@ -1,4 +1,5 @@
 import { formatScopeLabel, type BookingScope, type Division } from '@/lib/booking-scope'
+import { APP_TIME_ZONE } from '@/lib/app-zone'
 
 export interface FlatBooking {
   id: string
@@ -150,20 +151,8 @@ export const senateTypeBadgeColors: Record<string, string> = {
 }
 export const DEFAULT_SENATE_BADGE = 'bg-[#1e3a5f] text-[#93b8d8] border border-[#2d5f8f]/40'
 
-/**
- * The timezone every booking date is expressed in.
- *
- * `booking_date`, `occurrence_date` and `session_date` are all DATE columns --
- * no time, no offset. They mean a calendar day in Boston, because that is where
- * the rooms are. "Today" therefore has to mean Boston's today, not the server's
- * and not the viewer's: a student on co-op in California at 10pm PT is still
- * looking at Northeastern's schedule, and should see the same day their peers on
- * campus see.
- *
- * Pinning it also makes the value reproducible, which is what lets this page be
- * server-rendered at all -- see todayInAppZone().
- */
-export const APP_TIME_ZONE = 'America/New_York'
+// Re-exported so this module stays the one import for My Rooms' date helpers.
+export { APP_TIME_ZONE } from '@/lib/app-zone'
 
 /**
  * Today's date in APP_TIME_ZONE, as 'YYYY-MM-DD'.
