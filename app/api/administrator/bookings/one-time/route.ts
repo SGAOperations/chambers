@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { sendMissedReservationEmail, formatDateLong } from '@/lib/emails/missed-reservation'
+import { sendMissedReservationEmail } from '@/lib/emails/missed-reservation'
 import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { sendBookingCreatedEmail } from '@/lib/emails/booking-created'
 import { changed, collectChanges, formatDate, formatTime } from '@/lib/emails/changes'
@@ -315,7 +315,8 @@ export async function PATCH(request: Request) {
 
           await sendMissedReservationEmail({
             bodyName,
-            date: formatDateLong(firstSession.booking_date),
+            date: firstSession.booking_date,
+            roomOrTable: firstSession.room_name,
             startTime: firstSession.start_time,
             endTime: firstSession.end_time,
             contacts,
