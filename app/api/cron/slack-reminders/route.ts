@@ -12,8 +12,8 @@ import {
 } from '@/lib/meeting-reminders'
 
 /**
- * Posts tomorrow's committee meetings to each committee's Slack channel
- * (issue #95).
+ * Posts tomorrow's committee meetings -- or that tomorrow's meeting is off -- to
+ * each committee's Slack channel (issues #95, #104).
  *
  * Driven by .github/workflows/slack-reminders.yml, following the same pattern as
  * /api/cron/warm: a scheduled GitHub Action rather than a Vercel cron, because
@@ -41,11 +41,11 @@ const adminSupabase = createAdminClient(
  * which is what lets the body-level filters below narrow the occurrence rows.
  */
 const SELECT = `
-  occurrence_date, room_name, start_time, end_time, status, purpose, hidden, weekly_booking_id,
+  occurrence_date, room_name, start_time, end_time, status, hidden, weekly_booking_id,
   weekly_room_bookings!inner(
     room_name, start_time, end_time, status,
     bookings!inner(
-      purpose, hidden,
+      hidden,
       bodies!inner(name, body_type, slack_channel_id, slack_reminders_enabled)
     )
   )
@@ -103,7 +103,6 @@ export async function GET(request: Request) {
       start_time: row.start_time,
       end_time: row.end_time,
       status: row.status,
-      purpose: row.purpose,
       hidden: row.hidden,
       weekly_booking_id: row.weekly_booking_id,
       series: {
@@ -112,7 +111,7 @@ export async function GET(request: Request) {
         end_time: series.end_time,
         status: series.status,
       },
-      booking: { purpose: booking.purpose, hidden: booking.hidden },
+      booking: { hidden: booking.hidden },
       body: { name: body.name, slack_channel_id: body.slack_channel_id },
     })
   }

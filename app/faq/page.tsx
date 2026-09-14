@@ -41,6 +41,18 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.14.2 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Bookings can now be marked Alternate Room and Time, for when both the room and the time have changed. It appears right under Alternate Time in status lists, in the same blue as the other alternates.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Committee meeting reminders in Slack have new wording. They name the room and time and call out in bold whichever one is an alternate, point you to your Chair or Director when a meeting is virtual, and say plainly when there is no meeting. A week that is waitlisted, tentative or pending cancellation gets no reminder at all until its status is settled.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v1.14.1 &mdash; released</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               Update emails about a weekly booking now describe the week that actually changed. They had been pointing at whichever week carried the oldest override, which was usually not the week anyone had touched &mdash; so the email named a date months off and listed no changes at all. If one save moves several weeks, the email now covers each of them rather than only the first.

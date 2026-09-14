@@ -69,6 +69,7 @@ const statusCellHex: Record<string, string> = {
   'Reserved': '#4ade80',
   'Alternate Room': '#4285f4',
   'Alternate Time': '#4285f4',
+  'Alternate Room and Time': '#4285f4',
   'Waitlisted': '#f87171',
   'Unavailable': '#f87171',
   'Pending Cancellation': '#fb923c',

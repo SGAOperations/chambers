@@ -126,6 +126,7 @@ const statusColors: Record<string, string> = {
   'Reserved': 'bg-[#0f3d20] text-[#4ade80]',
   'Alternate Room': 'bg-[#0e2f4f] text-[#4285f4]',
   'Alternate Time': 'bg-[#0e2f4f] text-[#4285f4]',
+  'Alternate Room and Time': 'bg-[#0e2f4f] text-[#4285f4]',
   'Waitlisted': 'bg-[#3d0f0f] text-[#f87171]',
   'Unavailable': 'bg-[#3d0f0f] text-[#f87171]',
   'Pending Cancellation': 'bg-[#3d2200] text-[#fb923c]',
