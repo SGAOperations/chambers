@@ -10,6 +10,7 @@ const STATUSES = [
   'Reserved',
   'Alternate Room',
   'Alternate Time',
+  'Alternate Room and Time',
   'Waitlisted',
   'Unavailable',
   'Pending Cancellation',
