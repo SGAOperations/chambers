@@ -13,16 +13,25 @@ import { APP_TIME_ZONE } from '@/lib/app-zone'
 export const REMINDER_HOUR = 9
 
 /**
- * Statuses that mean the meeting is not happening, so a reminder would be wrong.
+ * The statuses a reminder is written for, and which lines of it each one calls
+ * out as alternate (issue #104).
  *
- * Deliberately short. 'Pending Cancellation' is *not* here: that week may still
- * go ahead, and the people in the channel are exactly the ones who need to know
- * it is in doubt -- so it is reported, with its status shown.
+ * An allow-list rather than a block-list: anything not named here -- Waitlisted,
+ * Tentative, Pending Cancellation, Unavailable, Missed, Repurposed, and any
+ * status added later -- posts nothing, because none of them says plainly whether
+ * or where the committee is meeting.
  */
-const NOT_HAPPENING = new Set(['Cancelled', 'Repurposed', 'Missed'])
+const REMINDED_STATUSES = new Set([
+  'Reserved',
+  'Alternate Room',
+  'Alternate Time',
+  'Alternate Room and Time',
+  'Virtual',
+  'Cancelled',
+])
 
-/** Statuses ordinary enough that naming them in the reminder would be noise. */
-const UNREMARKABLE = new Set(['Reserved', 'Confirmed'])
+const ALTERNATE_ROOM = new Set(['Alternate Room', 'Alternate Room and Time'])
+const ALTERNATE_TIME = new Set(['Alternate Time', 'Alternate Room and Time'])
 
 /** 'YYYY-MM-DD' and the hour, in APP_TIME_ZONE, for an instant. */
 export function appZoneParts(now: Date = new Date()): { date: string; hour: number } {
@@ -61,7 +70,6 @@ export interface ReminderCandidate {
   start_time: string | null
   end_time: string | null
   status: string | null
-  purpose: string | null
   hidden: boolean | null
   weekly_booking_id: string
   series: {
@@ -71,7 +79,6 @@ export interface ReminderCandidate {
     status: string | null
   }
   booking: {
-    purpose: string | null
     hidden: boolean | null
   }
   body: {
@@ -89,8 +96,7 @@ export interface ResolvedMeeting {
   roomName: string | null
   startTime: string | null
   endTime: string | null
-  status: string | null
-  purpose: string | null
+  status: string
 }
 
 /**
@@ -98,8 +104,8 @@ export interface ResolvedMeeting {
  * should be posted for it.
  *
  * An occurrence field that is null inherits -- from the series for room, times
- * and status, and from the booking above it for purpose and visibility. That
- * precedence is the same one My Rooms and the update emails apply.
+ * and status, and from the booking above it for visibility. That precedence is
+ * the same one My Rooms and the update emails apply.
  */
 export function resolveMeeting(c: ReminderCandidate): ResolvedMeeting | null {
   if (!c.body.slack_channel_id) return null
@@ -110,7 +116,7 @@ export function resolveMeeting(c: ReminderCandidate): ResolvedMeeting | null {
   if (c.hidden ?? c.booking.hidden) return null
 
   const status = c.status ?? c.series.status
-  if (status && NOT_HAPPENING.has(status)) return null
+  if (!status || !REMINDED_STATUSES.has(status)) return null
 
   return {
     weeklyBookingId: c.weekly_booking_id,
@@ -121,7 +127,6 @@ export function resolveMeeting(c: ReminderCandidate): ResolvedMeeting | null {
     startTime: c.start_time ?? c.series.start_time,
     endTime: c.end_time ?? c.series.end_time,
     status,
-    purpose: c.purpose ?? c.booking.purpose,
   }
 }
 
@@ -149,26 +154,33 @@ function esc(s: string): string {
 }
 
 /**
- * The reminder text.
+ * The reminder text, in the wording set out in issue #104.
  *
- * States what is known and stays quiet about what is not: a week with no room
- * secured says so rather than printing a dash, and an ordinary status is left
- * off entirely so that a status line always means something is unusual.
+ * Cancelled gets a single line, Virtual points members to their Chair or
+ * Director rather than naming a room, and every other reminded status names the
+ * room and the time -- with "Alternate" in bold on whichever of the two moved,
+ * so a member reading quickly sees what is different from the usual week.
+ *
+ * A room or time that is missing says so rather than printing a blank.
  */
 export function formatReminder(m: ResolvedMeeting): string {
+  const body = `*${esc(m.bodyName)}*`
+
+  if (m.status === 'Cancelled') return `${body} has no meeting tomorrow.`
+
+  const opening = `${body} meets tomorrow! Join us on ${formatDate(m.date)}.`
+
+  if (m.status === 'Virtual') {
+    return [opening, 'Check with your Chair/Director for virtual meeting information.'].join('\n')
+  }
+
   const start = formatTime(m.startTime)
   const end = formatTime(m.endTime)
-  const when = start && end ? `${start}–${end}` : start ?? 'time to be confirmed'
+  const when = start && end ? `${start}–${end}` : start ?? 'to be confirmed'
+  const room = m.roomName ? esc(m.roomName) : 'not yet confirmed'
 
-  const lines = [
-    `:calendar: *${esc(m.bodyName)}* meets tomorrow — ${formatDate(m.date)}, ${when}`,
-  ]
+  const roomLabel = ALTERNATE_ROOM.has(m.status) ? '*Alternate* Room' : 'Room'
+  const timeLabel = ALTERNATE_TIME.has(m.status) ? '*Alternate* Time' : 'Time'
 
-  lines.push(m.roomName ? `*Room:* ${esc(m.roomName)}` : '*Room:* not yet confirmed')
-
-  if (m.purpose?.trim()) lines.push(`*Purpose:* ${esc(m.purpose.trim())}`)
-
-  if (m.status && !UNREMARKABLE.has(m.status)) lines.push(`*Status:* ${esc(m.status)}`)
-
-  return lines.join('\n')
+  return [opening, `${roomLabel}: ${room}`, `${timeLabel}: ${when}`].join('\n')
 }
