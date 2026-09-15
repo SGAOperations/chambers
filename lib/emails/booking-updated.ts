@@ -1,4 +1,4 @@
-import { resend } from '@/lib/resend'
+import { emailFrom, resend } from '@/lib/resend'
 import { sanitize, buildEmailHtml } from './utils'
 import { formatDate, formatTime, renderChanges, type BookingChange } from './changes'
 
@@ -113,7 +113,7 @@ export async function sendBookingUpdatedEmail(params: BookingUpdatedEmailParams)
       : buildSeries(sBodyName, sPurpose, { roomOrTable, date, startTime, endTime, status }, changes)
 
   await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL!,
+    from: emailFrom(),
     to: process.env.RESEND_FROM_EMAIL!,
     bcc: recipients,
     subject,

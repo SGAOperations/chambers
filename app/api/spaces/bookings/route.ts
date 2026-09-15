@@ -65,14 +65,22 @@ export async function GET(request: Request) {
   const weekEndParam = searchParams.get('week_end')
   const weekEnd = weekEndParam ?? new Date(new Date(weekStart).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString()
 
+  // space_id=all is the All spaces view: every space's bookings and every
+  // blackout, each still carrying the space_id the calendar sorts it by.
+  const allSpaces = spaceId === 'all'
+
+  let bookingsQuery = adminSupabase.from('space_bookings').select('*').lt('start_time', weekEnd).gt('end_time', weekStart).order('start_time')
+  let blackoutsQuery = adminSupabase.from('space_blackouts').select('*').lt('start_time', weekEnd).gt('end_time', weekStart).order('start_time')
+  if (!allSpaces) {
+    bookingsQuery = bookingsQuery.eq('space_id', spaceId)
+    blackoutsQuery = blackoutsQuery.or(`space_id.eq.${spaceId},space_id.is.null`)
+  }
+
   // Fetch bookings and blackouts in parallel (no join — creator FK points to auth.users which PostgREST can't reach)
   const [
     { data: bookings, error: bookingsError },
     { data: blackouts, error: blackoutsError },
-  ] = await Promise.all([
-    adminSupabase.from('space_bookings').select('*').eq('space_id', spaceId).lt('start_time', weekEnd).gt('end_time', weekStart).order('start_time'),
-    adminSupabase.from('space_blackouts').select('*').or(`space_id.eq.${spaceId},space_id.is.null`).lt('start_time', weekEnd).gt('end_time', weekStart).order('start_time'),
-  ])
+  ] = await Promise.all([bookingsQuery, blackoutsQuery])
 
   if (bookingsError) return NextResponse.json({ error: bookingsError.message }, { status: 500 })
   if (blackoutsError) return NextResponse.json({ error: blackoutsError.message }, { status: 500 })

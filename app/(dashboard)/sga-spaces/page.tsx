@@ -34,7 +34,12 @@ interface Blackout {
 interface ModalSlot {
   start: string
   end: string
+  /** Spaces free for the whole selection, when it was made in the All spaces view. */
+  freeSpaceIds: string[]
 }
+
+/** The tab showing every space on one calendar. Not a space id. */
+const ALL_SPACES = 'all'
 
 interface EditBooking {
   id: string
@@ -207,7 +212,9 @@ export default function SGASpacesPage() {
 
       const list = data as Space[]
       setSpaces(list)
-      if (list.length > 0) setSelectedSpaceId(prev => prev || list[0].id)
+      // All spaces first whenever there is more than one: finding a free room is
+      // the usual question, and it should not take a tab per room to answer.
+      if (list.length > 0) setSelectedSpaceId(prev => prev || (list.length > 1 ? ALL_SPACES : list[0].id))
     } catch (err) {
       console.error('Failed to load spaces:', err)
       setSpaces([])
@@ -300,7 +307,16 @@ export default function SGASpacesPage() {
     return `${weekStart.toLocaleDateString('en-US', opts)} – ${end.toLocaleDateString('en-US', opts)}`
   }
 
+  const showingAll = selectedSpaceId === ALL_SPACES
   const selectedSpace = spaces.find(s => s.id === selectedSpaceId)
+
+  // The space a new booking starts out in: the first one free for the selection
+  // in the All spaces view, otherwise the tab it was made on.
+  const modalSpace = modalSlot
+    ? (showingAll
+        ? spaces.find(s => s.id === modalSlot.freeSpaceIds[0]) ?? spaces[0]
+        : selectedSpace)
+    : undefined
 
   if (spacesLoading) {
     return <SGASpacesSkeleton />
@@ -363,12 +379,24 @@ export default function SGASpacesPage() {
         </div>
 
         {/* Space switcher */}
-        <div className="flex gap-1 border-b border-[#1e5080] flex-shrink-0">
+        <div className="flex gap-1 border-b border-[#1e5080] flex-shrink-0 overflow-x-auto">
+          {spaces.length > 1 && (
+            <button
+              onClick={() => setSelectedSpaceId(ALL_SPACES)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                showingAll
+                  ? 'border-[#c8102e] text-[#f0f6ff] font-semibold'
+                  : 'border-transparent text-[#93b8d8] hover:text-[#c8102e]'
+              }`}
+            >
+              All spaces
+            </button>
+          )}
           {spaces.map(space => (
             <button
               key={space.id}
               onClick={() => setSelectedSpaceId(space.id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 selectedSpaceId === space.id
                   ? 'border-[#c8102e] text-[#f0f6ff] font-semibold'
                   : 'border-transparent text-[#93b8d8] hover:text-[#c8102e]'
@@ -424,7 +452,8 @@ export default function SGASpacesPage() {
               currentUserId={currentUserId ?? undefined}
               minHoursAdvance={minHoursAdvance}
               canBook={canBook}
-              onSlotClick={canBook ? (start, end) => setModalSlot({ start, end }) : () => {}}
+              spaces={showingAll ? spaces : undefined}
+              onSlotClick={canBook ? (start, end, freeSpaceIds) => setModalSlot({ start, end, freeSpaceIds }) : () => {}}
               onBookingClick={handleBookingClick}
             />
           )}
@@ -432,10 +461,11 @@ export default function SGASpacesPage() {
         )}
 
         {/* Create booking modal */}
-        {canBook && modalSlot && selectedSpaceId && selectedSpace && (
+        {canBook && modalSlot && modalSpace && (
           <SpaceBookingModal
-            spaceId={selectedSpaceId}
-            spaceName={selectedSpace.name}
+            spaceId={modalSpace.id}
+            spaceName={modalSpace.name}
+            busySpaceIds={showingAll ? spaces.filter(s => !modalSlot.freeSpaceIds.includes(s.id)).map(s => s.id) : undefined}
             initialStart={modalSlot.start}
             initialEnd={modalSlot.end}
             onClose={() => setModalSlot(null)}

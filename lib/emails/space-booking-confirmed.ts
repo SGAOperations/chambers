@@ -1,4 +1,4 @@
-import { resend } from '@/lib/resend'
+import { emailFrom, resend } from '@/lib/resend'
 import { sanitize, buildEmailHtml } from './utils'
 
 interface SpaceBookingConfirmedParams {
@@ -88,7 +88,7 @@ export async function sendSpaceBookingConfirmedEmail(params: SpaceBookingConfirm
   const sTitle = sanitize(title)
 
   await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL!,
+    from: emailFrom(),
     to: process.env.RESEND_FROM_EMAIL!,
     bcc: recipients,
     subject: `Chambers \u2014 SGA Space Booking Confirmed: ${sTitle}`,
