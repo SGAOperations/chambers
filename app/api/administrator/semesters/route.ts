@@ -19,7 +19,7 @@ export async function GET() {
 
   const { data: semesters, error } = await adminSupabase
     .from('semesters')
-    .select('id, name, is_active, created_at')
+    .select('id, name, is_active, end_date, created_at')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -64,7 +64,22 @@ export async function PATCH(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { id } = await request.json()
+  const body = await request.json()
+  const { id } = body
+
+  // Setting the end date (issue #112) rides on PATCH alongside activation, and
+  // is told apart by the key being present at all -- `end_date: null` clears
+  // it. Handled first and returned from, so saving a date can never activate a
+  // semester by accident.
+  if ('end_date' in body) {
+    const endDate = body.end_date
+    if (endDate !== null && (typeof endDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(endDate))) {
+      return NextResponse.json({ error: 'end_date must be a date or null.' }, { status: 400 })
+    }
+    const { error } = await adminSupabase.from('semesters').update({ end_date: endDate }).eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
 
   // Deactivate all semesters
   const { error: deactivateError } = await adminSupabase

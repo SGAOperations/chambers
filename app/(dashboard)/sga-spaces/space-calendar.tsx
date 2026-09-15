@@ -11,6 +11,7 @@ interface Booking {
   end_time: string
   attendee_ids: string[]
   creator_name: string | null
+  series_id: string | null
 }
 
 interface Blackout {
@@ -549,7 +550,11 @@ export default function SpaceCalendar({
                         } ${hovered ? 'opacity-80' : ''}`}
                         style={{ borderColor: color, backgroundColor: `${color}${hovered ? '99' : 'cc'}` }}
                       >
-                        <span className="text-[9px] text-white font-semibold truncate leading-none min-w-0">{bs.booking.title}</span>
+                        <span className="text-[9px] text-white font-semibold truncate leading-none min-w-0">
+                          {/* Marks one week of a weekly booking (issue #112). */}
+                          {bs.booking.series_id && <span aria-label="Repeats weekly" title="Repeats weekly">↻ </span>}
+                          {bs.booking.title}
+                        </span>
                         {bs.booking.creator_name && (
                           <span className={`text-[8px] text-white/70 leading-none ${isShort ? 'flex-shrink-0 truncate' : 'truncate w-full'}`}>
                             {bs.booking.creator_name}
