@@ -45,9 +45,9 @@ export async function GET() {
       if (c.scope === 'occurrence' && c.occurrence_id) {
         if (bookingType === 'Weekly Room') {
           // Matched on the stored date first, and only then on the id. The id
-          // does not survive an edit to the booking -- the PATCH handler
-          // regenerates every occurrence -- which is why these rows showed no
-          // date at all (issue #96).
+          // did not survive an edit to the booking before issue #113 -- the
+          // PATCH handler regenerated every occurrence -- which is why these
+          // rows showed no date at all (issue #96).
           const q = adminSupabase
             .from('weekly_room_occurrences')
             .select('occurrence_date, reservation_code, weekly_room_bookings!inner(booking_id)')
@@ -102,7 +102,7 @@ export async function GET() {
       }
 
       // The stored date is the fallback for every type: even where the code
-      // lookup fails because the row was regenerated, the request still knows
+      // lookup fails because the row is gone, the request still knows
       // which date it was about.
       return { ...c, occurrence_date: occurrence_date ?? c.occurrence_date ?? null, reservation_code }
     })

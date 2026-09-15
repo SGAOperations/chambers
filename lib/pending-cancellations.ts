@@ -205,10 +205,12 @@ export async function collectPending(): Promise<PendingCancellations> {
   // The id travels with the type: sending closes the request it acted on, so
   // knowing *which* row said 'Virtual' matters as much as the value.
   const byOccurrence = new Map<string, RequestRef>()
-  // Keyed on (booking, date), which is what survives an edit. occurrence_id does
-  // not: the weekly PATCH handler regenerates every occurrence row on each save,
-  // so a request made before an edit points at nothing afterwards -- and every
-  // request in production was in exactly that state (issue #96). Falling through
+  // Keyed on (booking, date), which is what survives an edit. occurrence_id did
+  // not until issue #113: the weekly PATCH handler regenerated every occurrence
+  // row on each save, so a request made before an edit pointed at nothing
+  // afterwards -- and every request in production was in exactly that state
+  // (issue #96). Those requests still exist, and moving a series to another
+  // weekday still changes its occurrence ids. Falling through
   // to bySeriesBooking would have been wrong, and falling through to nothing lost
   // the cancellation_type, so a request that asked to go Virtual came out
   // Cancelled.
@@ -363,8 +365,8 @@ export async function collectPending(): Promise<PendingCancellations> {
       },
         // A request naming this exact week wins over one covering the series.
         // The id is tried first because it is exact when it resolves; the
-        // (booking, date) key is what still works once the row has been
-        // regenerated, which is the usual case rather than the exception.
+        // (booking, date) key is what still works for requests whose row was
+        // regenerated before issue #113, or whose series moved weekday.
         byOccurrence.get(r.id)
           ?? (series?.booking_id
             ? byBookingDate.get(dateKey(series.booking_id, r.occurrence_date))

@@ -44,7 +44,7 @@ const adminSupabase = createAdminClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-/** One stored occurrence as read back before the regeneration below. */
+/** One stored occurrence as read back before the write below. */
 interface PrevOccurrenceRow {
   occurrence_date: string
   room_name: string | null
@@ -208,8 +208,8 @@ export async function PATCH(request: Request) {
 
   // Read before writing, so the email can say what moved rather than only where
   // the booking now stands (issue #79). Both reads are needed up front: the
-  // occurrence rows are deleted and regenerated further down, so after that
-  // point the previous per-week values are gone.
+  // occurrence rows are overwritten further down, so after that point the
+  // previous per-week values are gone.
   const [{ data: prevBooking }, { data: prevWeekly }, { data: prevOccurrences }] = await Promise.all([
     adminSupabase.from('bookings').select('purpose').eq('id', booking_id).single(),
     adminSupabase
@@ -252,12 +252,6 @@ export async function PATCH(request: Request) {
 
   if (weeklyError) return NextResponse.json({ error: weeklyError.message }, { status: 500 })
 
-  // Regenerate occurrences — delete all and reinsert
-  await adminSupabase
-    .from('weekly_room_occurrences')
-    .delete()
-    .eq('weekly_booking_id', weekly_id)
-
   const dates = getWeeklyDates(start_date, end_date)
   const newOccurrences = dates.map(date => {
     const existing = occurrences.find((o: OccurrenceInput) => o.occurrence_date === date)
@@ -285,11 +279,32 @@ export async function PATCH(request: Request) {
     }
   })
 
+  // Written in place, keyed on the date (issue #113). This used to delete every
+  // occurrence and reinsert the lot, so each week got a new id on every save and
+  // nothing could point at one -- a calendar UID, a cancellation request, an
+  // event checklist. Now a week the series still covers keeps its row and id;
+  // only weeks it newly covers are inserted, and only weeks it no longer covers
+  // are removed.
+  //
+  // Upsert before the delete, not after: if the second step fails, the series
+  // is left with a week too many rather than with no weeks at all, which is what
+  // a failed reinsert used to leave behind.
   const { error: occError } = await adminSupabase
     .from('weekly_room_occurrences')
-    .insert(newOccurrences)
+    .upsert(newOccurrences, { onConflict: 'weekly_booking_id,occurrence_date' })
 
   if (occError) return NextResponse.json({ error: occError.message }, { status: 500 })
+
+  // Asked of the table rather than of prevOccurrences, so a failed read above
+  // cannot leave weeks behind that the series no longer covers.
+  let staleQuery = adminSupabase
+    .from('weekly_room_occurrences')
+    .delete()
+    .eq('weekly_booking_id', weekly_id)
+  if (dates.length) staleQuery = staleQuery.not('occurrence_date', 'in', `(${dates.join(',')})`)
+
+  const { error: staleError } = await staleQuery
+  if (staleError) return NextResponse.json({ error: staleError.message }, { status: 500 })
 
   const { data: auditLog } = await adminSupabase
     .from('audit_logs')

@@ -1,9 +1,10 @@
 /**
  * Telling which weeks of a repeating booking an edit actually moved.
  *
- * The weekly PATCH deletes and reinserts every occurrence on every save, so
- * "what changed" cannot be read off the write -- it has to be a comparison
- * against the rows that were there before.
+ * The weekly PATCH rewrites every occurrence on every save -- in place since
+ * issue #113, but with the full set of values each time -- so "what changed"
+ * cannot be read off the write. It has to be a comparison against the rows that
+ * were there before.
  *
  * This used to be approximated as "the first week carrying any override", which
  * is a different question and usually a different week: an override set on week
