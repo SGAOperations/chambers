@@ -53,6 +53,7 @@ interface SpaceBookingModalProps {
 
 /** What the series endpoint returns about one series. */
 interface SeriesInfo {
+  space_id: string
   title: string
   attendee_ids: string[]
   start_time: string
@@ -201,6 +202,7 @@ export default function SpaceBookingModal({
 
     if (next === 'week') {
       setScope('week')
+      setSelectedSpaceId(spaceId)
       setTitle(initialTitle)
       setStartTime(initStartTime)
       setEndTime(initEndTime)
@@ -262,10 +264,11 @@ export default function SpaceBookingModal({
   // and warning about the slot you have not finished picking would be noise.
   // A series edit is checked week by week on the server instead, where a week
   // that cannot take the change is reported rather than refusing the rest.
+  // Moving to another space claims all of the booking's time there.
   const noticeWarning = isEditing && !editingSeries && date
     ? advanceNoticeError(
         { start: dateAndTimeToIso(date, startTime), end: endTimeToIso(date, endTime) },
-        { start: initialStart, end: initialEnd },
+        selectedSpaceId === spaceId ? { start: initialStart, end: initialEnd } : null,
         minHoursAdvance
       )
     : null
@@ -310,7 +313,7 @@ export default function SpaceBookingModal({
           ? await fetch(`/api/spaces/bookings/${editBookingId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ title: title.trim(), start_time, end_time, attendee_ids }),
+              body: JSON.stringify({ space_id: selectedSpaceId, title: title.trim(), start_time, end_time, attendee_ids }),
             })
           : await fetch('/api/spaces/bookings', {
               method: 'POST',
@@ -361,7 +364,9 @@ export default function SpaceBookingModal({
                 : `Book ${spaces?.find(s => s.id === selectedSpaceId)?.name ?? spaceName}`}
             </h2>
             {isEditing && (
-              <p className="text-xs text-[#93b8d8] mt-0.5">{spaceName}</p>
+              <p className="text-xs text-[#93b8d8] mt-0.5">
+                {spaces?.find(s => s.id === (editingSeries ? series?.space_id : spaceId))?.name ?? spaceName}
+              </p>
             )}
           </div>
           <button onClick={onClose} className="text-[#93b8d8] hover:text-[#f0f6ff] transition-colors">
@@ -393,8 +398,13 @@ export default function SpaceBookingModal({
             </div>
           )}
 
-          {/* Location selector (creation mode only) */}
-          {!isEditing && spaces && spaces.length > 1 && (
+          {/*
+            Location selector. Offered when editing one booking -- or one week of
+            a series -- as well as when creating, so a meeting can follow a room
+            change instead of being cancelled and rebooked. Not for a series edit,
+            which keeps the series' space.
+          */}
+          {!editingSeries && spaces && spaces.length > 1 && (
             <div>
               <label className={labelCls}>Location</label>
               <select

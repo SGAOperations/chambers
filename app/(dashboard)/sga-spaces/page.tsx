@@ -495,6 +495,7 @@ export default function SGASpacesPage() {
             editBookingId={editBooking.id}
             initialTitle={editBooking.title}
             initialAttendees={editBooking.attendees}
+            spaces={spaces}
             minHoursAdvance={minHoursAdvance}
             onClose={() => setEditBooking(null)}
             onSuccess={() => {
