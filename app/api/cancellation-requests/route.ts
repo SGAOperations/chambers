@@ -31,12 +31,13 @@ export async function POST(request: Request) {
   // The date this request is about, resolved now while occurrence_id still
   // names a live row (issue #96).
   //
-  // It will not always. The weekly PATCH handler deletes and reinserts every
-  // occurrence on each save, so an edit to the booking leaves occurrence_id
-  // pointing at nothing while the values live on under new ids, carried across
-  // on the date. Storing the date is what lets the request still be matched to
-  // its reservation afterwards -- without it, marking the request Done finds
-  // nothing to do, and Auto-Cancel cannot tell which request asked for what.
+  // It will not always. The weekly PATCH handler used to delete and reinsert
+  // every occurrence on each save, orphaning occurrence_id, and requests made
+  // before issue #113 still point at those lost rows. Even now an occurrence's
+  // id changes when its series moves to another day of the week. Storing the
+  // date is what lets the request still be matched to its reservation -- without
+  // it, marking the request Done finds nothing to do, and Auto-Cancel cannot
+  // tell which request asked for what.
   let occurrenceDate: string | null = null
   if (scope === 'occurrence' && occurrence_id) {
     if (bookingType === 'One-Time Room') {
