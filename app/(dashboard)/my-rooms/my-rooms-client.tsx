@@ -230,12 +230,8 @@ export default function MyRoomsClient({
                     the location line rather than taking a row of its own, so the
                     card is the same height it was (issue #78).
                   */}
-                  <p className="font-semibold text-[#f0f6ff] truncate" title={bookingTitle(b)}>{bookingTitle(b)}</p>
-                  <p className="text-sm text-[#93b8d8] mt-0.5 truncate" title={`${b.scopeLabel} · ${b.location}`}>
-                    {b.scopeLabel} <span className="text-[#4a7ba7]">·</span> {b.location}
-                  </p>
-                  <div className="flex items-center justify-between gap-2 mt-1">
-                    <p className="text-sm text-[#6a96bb] truncate min-w-0">{formatDate(b.date)}</p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="font-semibold text-[#f0f6ff] truncate min-w-0" title={bookingTitle(b)}>{bookingTitle(b)}</p>
 
                     {/*
                       Was the whole card: every Senate booking was an anchor to
@@ -244,13 +240,14 @@ export default function MyRoomsClient({
                       too. The click has to be kept off the parent so the modal
                       does not open behind the new tab.
 
-                      It shares the date's line rather than taking one of its own
+                      It shares the title's line rather than taking one of its own
                       (issue #117). On a line of its own it made every card that
                       had it taller than the cards that did not, and because the
                       grid stretches a row to its tallest card, the cards beside it
-                      grew too, with empty space at the bottom. The date is short
-                      enough to leave room for it, which keeps every card the same
-                      height -- the rule issue #78 set for the scope label.
+                      grew too, with empty space at the bottom. Sharing a line keeps
+                      every card the same height -- the rule issue #78 set for the
+                      scope label -- and the title's line puts it directly under the
+                      status, where the card's other right-hand text sits.
                     */}
                     {hasAttendance && (
                       <a
@@ -266,6 +263,10 @@ export default function MyRoomsClient({
                       </a>
                     )}
                   </div>
+                  <p className="text-sm text-[#93b8d8] mt-0.5 truncate" title={`${b.scopeLabel} · ${b.location}`}>
+                    {b.scopeLabel} <span className="text-[#4a7ba7]">·</span> {b.location}
+                  </p>
+                  <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
                     {b.senateType && (
