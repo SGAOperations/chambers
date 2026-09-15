@@ -1,4 +1,4 @@
--- Rollback for 20260915010000_weekly_occurrence_date_unique.sql.
+-- Rollback for 20260915161852_weekly_occurrence_date_unique.sql.
 --
 -- Roll the application back first. The weekly PATCH handler's upsert names this
 -- constraint as its conflict target, and every edit to a weekly booking fails
