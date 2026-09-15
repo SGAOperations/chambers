@@ -47,6 +47,7 @@ interface Body {
   body_type: BodyType
   slack_channel_id: string | null
   slack_reminders_enabled: boolean
+  sga_emails: string[]
 }
 
 export default function BodiesTab() {
@@ -61,9 +62,11 @@ export default function BodiesTab() {
   const [editValues, setEditValues] = useState<{
     name: string; division: string; is_active: boolean; body_open: boolean
     body_type: BodyType; slack_channel_id: string; slack_reminders_enabled: boolean
+    sga_emails: string
   }>({
     name: '', division: '', is_active: true, body_open: false,
     body_type: 'Other', slack_channel_id: '', slack_reminders_enabled: true,
+    sga_emails: '',
   })
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -96,10 +99,15 @@ export default function BodiesTab() {
     const res = await fetch('/api/administrator/bodies', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...editValues }),
+      body: JSON.stringify({
+        id,
+        ...editValues,
+        // Edited as one comma-separated field; the route validates each address.
+        sga_emails: editValues.sga_emails.split(',').map(e => e.trim()).filter(Boolean),
+      }),
     })
-    // The channel ID is the one field here that can be rejected, and a silent
-    // failure would leave the row looking saved and reminders never arriving.
+    // The channel ID and SGA emails can be rejected, and a silent failure would
+    // leave the row looking saved while the setting never takes effect.
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
       setSaveError(data.error ?? 'Could not save that body.')
@@ -120,6 +128,7 @@ export default function BodiesTab() {
       body_type: body.body_type ?? 'Other',
       slack_channel_id: body.slack_channel_id ?? '',
       slack_reminders_enabled: body.slack_reminders_enabled ?? true,
+      sga_emails: (body.sga_emails ?? []).join(', '),
     })
   }
 
@@ -260,6 +269,24 @@ export default function BodiesTab() {
                     </div>
                   )}
 
+                  <div>
+                    <label htmlFor={`sga-emails-${b.id}`} className="block text-xs font-medium text-[#93b8d8] mb-1">
+                      SGA email(s)
+                    </label>
+                    <input
+                      id={`sga-emails-${b.id}`}
+                      type="text"
+                      placeholder="sgaCampusAffairs@northeastern.edu"
+                      value={editValues.sga_emails}
+                      onChange={e => setEditValues({ ...editValues, sga_emails: e.target.value })}
+                      className={inputCls}
+                    />
+                    <p className="text-xs text-[#6a96bb] mt-1">
+                      Leadership of this body can choose to receive SGA Spaces confirmations here.
+                      Separate several with commas; each is offered as its own choice. Leave blank for none.
+                    </p>
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -301,6 +328,9 @@ export default function BodiesTab() {
                   <div>
                     <p className="font-semibold text-[#f0f6ff]">{b.name}</p>
                     <p className="text-sm text-[#93b8d8]">{b.division} · {b.body_type}</p>
+                    {b.sga_emails?.length > 0 && (
+                      <p className="text-xs text-[#6a96bb] break-all">{b.sga_emails.join(', ')}</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     {/* Only ever shown for a committee that could actually be
