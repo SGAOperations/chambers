@@ -1,4 +1,4 @@
--- Rollback for 20260914000000_spaces_email_destination.sql.
+-- Rollback for 20260914010000_spaces_email_destination.sql.
 --
 -- Drops the inbox list on bodies and each person's choice. Every SGA Spaces
 -- email goes back to users.email. Any inboxes Management had corrected by hand
