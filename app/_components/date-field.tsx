@@ -4,6 +4,7 @@ interface DateFieldProps {
   value: string // YYYY-MM-DD, matching a native <input type="date">
   onChange: (value: string) => void
   min?: string
+  max?: string
   required?: boolean
 }
 
@@ -36,7 +37,7 @@ function formatDisplay(value: string): string | null {
  * aligned text and calendar icon draw on top from the bound value, which is guaranteed to render
  * identically everywhere since it's now plain content we control rather than native internals.
  */
-export default function DateField({ value, onChange, min, required }: DateFieldProps) {
+export default function DateField({ value, onChange, min, max, required }: DateFieldProps) {
   const display = formatDisplay(value)
 
   return (
@@ -46,6 +47,7 @@ export default function DateField({ value, onChange, min, required }: DateFieldP
         value={value}
         onChange={e => onChange(e.target.value)}
         min={min}
+        max={max}
         required={required}
         // opacity-0 rather than text-transparent: on desktop Blink the empty
         // "mm/dd/yyyy" placeholder segments and the focused-segment selection

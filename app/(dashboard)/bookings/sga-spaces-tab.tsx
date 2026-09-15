@@ -42,6 +42,8 @@ interface SpaceBooking {
   end_time: string
   attendee_ids: string[]
   creator_name: string | null
+  /** The weekly series this booking is one week of (issue #112). */
+  series_id: string | null
   spaces?: { name: string } | null
 }
 
@@ -190,6 +192,7 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
   const [bookings, setBookings] = useState<SpaceBooking[]>([])
   const [loading, setLoading] = useState(true)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [cancellingSeriesId, setCancellingSeriesId] = useState<string | null>(null)
   const [range, setRange] = useState<BookingRange>('semester')
 
   const fetchBookings = useCallback(async () => {
@@ -237,6 +240,25 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
     }
   }
 
+  // Every upcoming week of the series goes; past weeks stay as the record. The
+  // list is refetched rather than filtered, because a week of the series may sit
+  // outside the range on screen and the count shown should come from the server.
+  const cancelSeries = async (seriesId: string) => {
+    if (!confirm('Force-cancel every upcoming week of this weekly booking? One cancellation email will be sent.')) return
+    setCancellingSeriesId(seriesId)
+    try {
+      const res = await fetch(`/api/spaces/series/${seriesId}`, { method: 'DELETE' })
+      if (res.ok) {
+        await fetchBookings()
+      } else {
+        const data = await res.json()
+        alert(data.error ?? 'Failed to cancel the weekly booking.')
+      }
+    } finally {
+      setCancellingSeriesId(null)
+    }
+  }
+
   if (loading) return <TableSkeleton cols={6} />
 
   return (
@@ -279,7 +301,10 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
               {bookings.map(b => (
                 <tr key={b.id} className="border-b border-[#1e5080]/50 last:border-0 hover:bg-white/5">
                   <td className="px-4 py-3 text-[#f0f6ff]">{b.spaces?.name ?? '—'}</td>
-                  <td className="px-4 py-3 text-[#f0f6ff] font-medium">{b.title}</td>
+                  <td className="px-4 py-3 text-[#f0f6ff] font-medium">
+                    {b.title}
+                    {b.series_id && <span className="ml-1.5 text-xs font-normal text-[#93b8d8]">↻ Weekly</span>}
+                  </td>
                   <td className="px-4 py-3 text-[#93b8d8]">{b.creator_name ?? '—'}</td>
                   <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.start_time)}</td>
                   <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.end_time)}</td>
@@ -292,6 +317,15 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
                     >
                       {cancellingId === b.id ? 'Cancelling…' : 'Force Cancel'}
                     </button>
+                    {b.series_id && (
+                      <button
+                        onClick={() => cancelSeries(b.series_id!)}
+                        disabled={cancellingSeriesId === b.series_id}
+                        className="block mt-1 text-xs text-[#c8102e] hover:text-[#f87171] disabled:opacity-50 font-medium transition-colors whitespace-nowrap"
+                      >
+                        {cancellingSeriesId === b.series_id ? 'Cancelling…' : 'Force Cancel Series'}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

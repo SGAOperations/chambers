@@ -22,6 +22,8 @@ interface Booking {
   end_time: string
   attendee_ids: string[]
   creator_name: string | null
+  /** The weekly series this booking is one week of (issue #112). */
+  series_id: string | null
 }
 
 interface Blackout {
@@ -49,6 +51,7 @@ interface EditBooking {
   start: string
   end: string
   attendees: { id: string; full_name: string; email: string }[]
+  seriesId: string | null
 }
 
 // Skeleton shown on initial page load before spaces are fetched
@@ -161,6 +164,7 @@ export default function SGASpacesPage() {
   const [remainingHours, setRemainingHours] = useState<number | null>(null)
   const [limitHours, setLimitHours] = useState<number>(18)
   const [minHoursAdvance, setMinHoursAdvance] = useState<number>(24)
+  const [semesterEndDate, setSemesterEndDate] = useState<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isLeadership, setIsLeadership] = useState(false)
@@ -239,6 +243,7 @@ export default function SGASpacesPage() {
     setLimitHours(data.limit)
     if (data.user_id) setCurrentUserId(data.user_id)
     if (data.min_hours_advance != null) setMinHoursAdvance(data.min_hours_advance)
+    setSemesterEndDate(data.semester_end_date ?? null)
   }, [])
 
   useEffect(() => {
@@ -280,6 +285,7 @@ export default function SGASpacesPage() {
       start: booking.start_time,
       end: booking.end_time,
       attendees,
+      seriesId: booking.series_id ?? null,
     })
   }, [spaces])
 
@@ -475,6 +481,7 @@ export default function SGASpacesPage() {
               fetchRemainingHours()
             }}
             spaces={spaces}
+            semesterEndDate={semesterEndDate}
           />
         )}
 
@@ -505,6 +512,18 @@ export default function SGASpacesPage() {
               fetchCalendarData()
               fetchRemainingHours()
             } : undefined}
+            seriesId={editBooking.seriesId}
+            onCancelSeries={editBooking.creatorId === currentUserId && editBooking.seriesId ? async () => {
+              const res = await fetch(`/api/spaces/series/${editBooking.seriesId}`, { method: 'DELETE' })
+              if (!res.ok) {
+                const data = await res.json()
+                throw new Error(data.error ?? 'Failed to cancel the weekly booking.')
+              }
+              setEditBooking(null)
+              fetchCalendarData()
+              fetchRemainingHours()
+            } : undefined}
+            semesterEndDate={semesterEndDate}
           />
         )}
       </div>

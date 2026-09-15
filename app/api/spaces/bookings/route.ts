@@ -7,47 +7,12 @@ import { sendSpaceBookingConfirmedEmail } from '@/lib/emails/space-booking-confi
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { dedupeEmails, resolveSpacesAddresses } from '@/lib/spaces-email'
 import { waitUntil } from '@vercel/functions'
+import { DEFAULT_WEEKLY_HOURS, minutesOf, touchesDeadZone, weekBoundsOf as getWeekBounds } from '@/lib/space-series'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-const DEFAULT_WEEKLY_HOURS = 18
-
-// Returns the Sunday (00:00 UTC) and following Saturday (end of day UTC) bounding a given date
-function getWeekBounds(iso: string): { weekStart: string; weekEnd: string } {
-  const d = new Date(iso)
-  const day = d.getUTCDay() // 0 = Sun
-  const sun = new Date(d)
-  sun.setUTCDate(d.getUTCDate() - day)
-  sun.setUTCHours(0, 0, 0, 0)
-  const sat = new Date(sun)
-  sat.setUTCDate(sun.getUTCDate() + 7)
-  return { weekStart: sun.toISOString(), weekEnd: sat.toISOString() }
-}
-
-function minutesOf(iso: string): number {
-  const d = new Date(iso)
-  return d.getUTCMinutes()
-}
-
-function touchesDeadZone(startIso: string, endIso: string): boolean {
-  const startDate = startIso.slice(0, 10)
-  const endDate = endIso.slice(0, 10)
-  if (endDate > startDate) {
-    // Allow bookings that end exactly at midnight of the very next day (e.g. 11:45 PM → 12:00 AM)
-    const end = new Date(endIso)
-    const endsAtMidnight = end.getUTCHours() === 0 && end.getUTCMinutes() === 0 && end.getUTCSeconds() === 0
-    const nextDay = new Date(`${startDate}T00:00:00Z`)
-    nextDay.setUTCDate(nextDay.getUTCDate() + 1)
-    const isConsecutiveDay = endDate === nextDay.toISOString().slice(0, 10)
-    if (!endsAtMidnight || !isConsecutiveDay) return true
-    // Falls through: ends at next-day midnight — only block if start is before 07:00
-  }
-  const startHour = new Date(startIso).getUTCHours() + new Date(startIso).getUTCMinutes() / 60
-  return startHour < 7
-}
 
 export async function GET(request: Request) {
   const supabase = await createClient()

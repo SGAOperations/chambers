@@ -3,6 +3,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { bostonWallClockNow } from '@/lib/boston-time'
 import { getAuthedUser } from '@/lib/auth'
+import { loadActiveSemesterEnd } from '@/lib/space-series-data'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,10 +38,13 @@ export async function GET() {
 
   const { weekStart, weekEnd } = getWeekBounds()
 
-  const [{ data: weekBookings }, { data: override }, { data: settings }] = await Promise.all([
+  const [{ data: weekBookings }, { data: override }, { data: settings }, semesterEndDate] = await Promise.all([
     adminSupabase.from('space_bookings').select('start_time, end_time').eq('creator_id', user.id).lt('start_time', weekEnd).gt('end_time', weekStart),
     adminSupabase.from('space_weekly_limit_overrides').select('weekly_hours_limit').eq('user_id', user.id).maybeSingle(),
     adminSupabase.from('app_settings').select('min_hours_advance_spaces').eq('id', 1).single(),
+    // Read here, with the other booking rules, so the booking modal knows how far
+    // a weekly booking may run -- and whether it may be made at all (issue #112).
+    loadActiveSemesterEnd(adminSupabase),
   ])
 
   const usedMs = (weekBookings ?? []).reduce((acc: number, b: { start_time: string; end_time: string }) => {
@@ -52,5 +56,12 @@ export async function GET() {
   const remaining = Math.max(0, limit - usedHours)
 
   const minHoursAdvance: number = settings?.min_hours_advance_spaces ?? 24
-  return NextResponse.json({ used: usedHours, limit, remaining, user_id: user.id, min_hours_advance: minHoursAdvance })
+  return NextResponse.json({
+    used: usedHours,
+    limit,
+    remaining,
+    user_id: user.id,
+    min_hours_advance: minHoursAdvance,
+    semester_end_date: semesterEndDate,
+  })
 }
