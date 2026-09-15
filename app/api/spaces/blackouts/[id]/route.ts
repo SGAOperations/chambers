@@ -3,6 +3,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { cancellationAddressing, resolveSpacesAddresses } from '@/lib/spaces-email'
 import { waitUntil } from '@vercel/functions'
 
 const adminSupabase = createAdminClient(
@@ -21,30 +22,28 @@ async function cascadeCancelBookings(spaceId: string | null, startTime: string, 
   const { data: affected } = await q
   if (!affected || affected.length === 0) return
 
-  const allUserIds = [...new Set(affected.flatMap((b: { creator_id: string; attendee_ids: string[] }) =>
-    [b.creator_id, ...(b.attendee_ids ?? [])]
-  ))]
-  const { data: emailUsers } = await adminSupabase.from('users').select('id, email').in('id', allUserIds)
-  const emailMap = new Map((emailUsers ?? []).map((u: { id: string; email: string }) => [u.id, u.email]))
+  // Wherever each affected person chose to receive SGA Spaces emails (issue #109).
+  const addresses = await resolveSpacesAddresses(
+    adminSupabase,
+    affected.flatMap((b: { creator_id: string; attendee_ids: string[] }) =>
+      [b.creator_id, ...(b.attendee_ids ?? [])]
+    )
+  )
 
   await adminSupabase.from('space_bookings').delete().in('id', affected.map((b: { id: string }) => b.id))
 
   // Bookings are already deleted; notifying is a post-commit side effect.
   waitUntil(
     Promise.all(affected.map(async (b: { id: string; title: string; start_time: string; end_time: string; creator_id: string; attendee_ids: string[]; spaces: { name: string }[] | null }) => {
-      const creatorEmail = emailMap.get(b.creator_id)
-      if (!creatorEmail) return
-      const ccEmails = (b.attendee_ids ?? [])
-        .map((id: string) => emailMap.get(id))
-        .filter((e): e is string => !!e && e !== creatorEmail)
+      const { to, bcc } = cancellationAddressing(addresses, b.creator_id, b.attendee_ids)
       await sendSpaceBookingCancelledEmail({
         bookingId: b.id,
         title: b.title,
         spaceName: (Array.isArray(b.spaces) ? b.spaces[0]?.name : null) ?? 'SGA Space',
         startTime: b.start_time,
         endTime: b.end_time,
-        to: creatorEmail,
-        bcc: ccEmails,
+        to,
+        bcc,
       })
     })).catch(e => console.error('Blackout cascade emails failed:', e))
   )

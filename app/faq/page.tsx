@@ -41,6 +41,18 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.14.3 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              If you hold Leadership in a body, you can now choose where your SGA Spaces confirmations go: your personal email, your SGA email, or both. Open Settings and pick from the SGA emails that belong to the bodies you lead. Cancellations follow the same choice, so a booking&apos;s calendar invite and its cancellation always land in the same inbox.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              If you step down from the body whose SGA email you picked, your confirmations go back to your personal email automatically.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v1.14.2 &mdash; released</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               Bookings can now be marked Alternate Room and Time, for when both the room and the time have changed. It appears right under Alternate Time in status lists, in the same blue as the other alternates.

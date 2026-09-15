@@ -5,6 +5,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
+import { cancellationAddressing, resolveSpacesAddresses } from '@/lib/spaces-email'
 import { waitUntil } from '@vercel/functions'
 
 const DEFAULT_WEEKLY_HOURS = 18
@@ -176,28 +177,22 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   waitUntil(
     (async () => {
       try {
-        const allUserIds: string[] = [...new Set([booking.creator_id, ...(booking.attendee_ids ?? [])])]
-        const { data: emailUsers } = await adminSupabase
-          .from('users')
-          .select('id, email')
-          .in('id', allUserIds)
-        const userMap = new Map((emailUsers ?? []).map((u: { id: string; email: string }) => [u.id, u.email]))
-        const creatorEmail = userMap.get(booking.creator_id)
-        const ccEmails = (booking.attendee_ids ?? [])
-          .map((id: string) => userMap.get(id))
-          .filter((e: string | undefined): e is string => !!e && e !== creatorEmail)
+        // Sent wherever each person chose to receive SGA Spaces emails (issue #109),
+        // so the cancellation reaches the same inbox the invite did.
+        const addresses = await resolveSpacesAddresses(
+          adminSupabase, [booking.creator_id, ...(booking.attendee_ids ?? [])]
+        )
+        const { to, bcc } = cancellationAddressing(addresses, booking.creator_id, booking.attendee_ids)
         const spaceName = (booking.spaces as { name: string } | null)?.name ?? 'SGA Space'
-        if (creatorEmail) {
-          await sendSpaceBookingCancelledEmail({
-            bookingId: id,
-            title: booking.title,
-            spaceName,
-            startTime: booking.start_time,
-            endTime: booking.end_time,
-            to: creatorEmail,
-            bcc: ccEmails,
-          })
-        }
+        await sendSpaceBookingCancelledEmail({
+          bookingId: id,
+          title: booking.title,
+          spaceName,
+          startTime: booking.start_time,
+          endTime: booking.end_time,
+          to,
+          bcc,
+        })
       } catch (e) {
         console.error('Space booking cancellation email failed:', e)
       }

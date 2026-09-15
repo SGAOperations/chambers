@@ -5,6 +5,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
 import { sendSpaceBookingConfirmedEmail } from '@/lib/emails/space-booking-confirmed'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { dedupeEmails, resolveSpacesAddresses } from '@/lib/spaces-email'
 import { waitUntil } from '@vercel/functions'
 
 const adminSupabase = createAdminClient(
@@ -213,11 +214,12 @@ export async function POST(request: Request) {
     (async () => {
       try {
         const allUserIds: string[] = [user.id, ...(attendee_ids ?? [])]
-        const [{ data: space }, { data: emailUsers }] = await Promise.all([
+        // Each person's own choice of inbox, creator and attendees alike (issue #109).
+        const [{ data: space }, addresses] = await Promise.all([
           adminSupabase.from('spaces').select('name').eq('id', space_id).single(),
-          adminSupabase.from('users').select('email').in('id', allUserIds),
+          resolveSpacesAddresses(adminSupabase, allUserIds),
         ])
-        const emails = (emailUsers ?? []).map((u: { email: string }) => u.email).filter(Boolean)
+        const emails = dedupeEmails(allUserIds.flatMap(id => addresses.get(id) ?? []))
         await sendSpaceBookingConfirmedEmail({
           bookingId: booking.id,
           title,
