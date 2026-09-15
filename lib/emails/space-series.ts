@@ -24,6 +24,8 @@ export interface SeriesWeek {
   bookingId: string
   startTime: string
   endTime: string
+  /** Set only for a week in a space other than the series' own. */
+  spaceName?: string
 }
 
 interface SeriesBase {
@@ -39,7 +41,7 @@ function toEvents(base: SeriesBase, weeks: SeriesWeek[]): SpaceIcsEvent[] {
   return weeks.map(w => ({
     bookingId: w.bookingId,
     title: base.title,
-    spaceName: base.spaceName,
+    spaceName: w.spaceName ?? base.spaceName,
     startTime: w.startTime,
     endTime: w.endTime,
   }))
@@ -57,7 +59,8 @@ function weekLabel(w: SeriesWeek, first: SeriesWeek): string {
     w.startTime.slice(11, 16) === first.startTime.slice(11, 16) &&
     w.endTime.slice(11, 16) === first.endTime.slice(11, 16)
   const date = formatSpaceShortDate(w.startTime)
-  return sameTime ? date : `${date} (${formatSpaceTime(w.startTime)} – ${formatSpaceTime(w.endTime)})`
+  const label = sameTime ? date : `${date} (${formatSpaceTime(w.startTime)} – ${formatSpaceTime(w.endTime)})`
+  return w.spaceName ? `${label} in ${w.spaceName}` : label
 }
 
 function conflictLines(conflicts: SeriesConflict[]): string[] {

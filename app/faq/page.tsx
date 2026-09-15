@@ -49,6 +49,9 @@ export default async function FaqPage() {
               Opening a week of a weekly booking lets you change just that week or the whole series. Changing the series updates every upcoming week, including weeks you had changed on their own, and cancelling it removes every upcoming week. Past weeks are always left as they were.
             </p>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Editing an SGA Space booking now updates it on everyone&apos;s calendar, and you can move it to a different space instead of cancelling and booking again. People you add get the invite, and people you remove have it taken off their calendar.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
               The SGA Spaces calendar now opens on All spaces, which shows every space side by side in its own colour, so you can find a free room without switching tabs. Clicking an open time selects an hour instead of 15 minutes, and dragging still sets any length.
             </p>
             <p className="text-[#93b8d8] text-sm leading-relaxed">

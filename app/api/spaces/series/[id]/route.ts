@@ -62,6 +62,8 @@ interface WeekRow {
   start_time: string
   end_time: string
   attendee_ids: string[] | null
+  /** Usually the series' space; a week can be moved to another on its own. */
+  space_id: string
 }
 
 async function loadSeries(id: string): Promise<SeriesRow | null> {
@@ -77,7 +79,7 @@ async function loadSeries(id: string): Promise<SeriesRow | null> {
 async function loadUpcoming(seriesId: string): Promise<WeekRow[]> {
   const { data } = await adminSupabase
     .from('space_bookings')
-    .select('id, start_time, end_time, attendee_ids')
+    .select('id, start_time, end_time, attendee_ids, space_id')
     .eq('series_id', seriesId)
     .gte('start_time', bostonWallClockNow().toISOString())
     .order('start_time')
@@ -91,6 +93,24 @@ function mayManage(user: AuthedUser, series: SeriesRow): boolean {
 
 function toWeek(r: { id: string; start_time: string; end_time: string }): SeriesWeek {
   return { bookingId: r.id, startTime: r.start_time, endTime: r.end_time }
+}
+
+/**
+ * Names each week's space when it is not the series' own -- a week moved on its
+ * own and not moved back -- so its invite and its line in the email say where it
+ * really is.
+ */
+async function nameOtherSpaces(
+  weeks: (SeriesWeek & { spaceId: string })[],
+  seriesSpaceId: string
+): Promise<SeriesWeek[]> {
+  const others = [...new Set(weeks.map(w => w.spaceId).filter(s => s !== seriesSpaceId))]
+  const { data } = others.length
+    ? await adminSupabase.from('spaces').select('id, name').in('id', others)
+    : { data: [] as { id: string; name: string }[] }
+  return weeks.map(({ spaceId, ...w }) => (
+    spaceId === seriesSpaceId ? w : { ...w, spaceName: data?.find(s => s.id === spaceId)?.name ?? 'SGA Space' }
+  ))
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -201,7 +221,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     from: weeks[0].interval.start,
     to: weeks.reduce((max, w) => (w.interval.end > max ? w.interval.end : max), weeks[0].interval.end),
   })
-  const { ok, conflicts } = planSeries({ ...ctx, weeks })
+  const { ok, conflicts } = planSeries({ ...ctx, spaceId: series.space_id, weeks })
 
   const movingDates = new Set(moving.map(w => w.date))
   const unchanged: SeriesConflict[] = conflicts.filter(c => movingDates.has(c.date))
@@ -219,7 +239,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const okByDate = new Map(ok.map(w => [w.date, w]))
 
   // Every kept week takes the title and attendees. Only the weeks the plan
-  // accepted take the new time; the rest keep theirs, as the email says.
+  // accepted take the new time -- and the series' space, since a week moved to
+  // another space on its own was checked here as moving back. The rest keep
+  // their time and space, as the email says.
   const updates = await Promise.all(kept.map(r => {
     const planned = okByDate.get(r.start_time.slice(0, 10))
     return adminSupabase
@@ -227,10 +249,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .update({
         title: cleanTitle,
         attendee_ids: attendees,
-        ...(planned ? { start_time: planned.interval.start, end_time: planned.interval.end } : {}),
+        ...(planned ? { start_time: planned.interval.start, end_time: planned.interval.end, space_id: series.space_id } : {}),
       })
       .eq('id', r.id)
-      .select('id, start_time, end_time')
+      .select('id, start_time, end_time, space_id')
       .single()
   }))
   const updateError = updates.find(u => u.error)?.error
@@ -250,7 +272,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         attendee_ids: attendees,
         series_id: id,
       })))
-      .select('id, start_time, end_time, attendee_ids')
+      .select('id, start_time, end_time, attendee_ids, space_id')
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     inserted = (data as WeekRow[] | null) ?? []
   }
@@ -266,14 +288,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     .eq('id', id)
   if (seriesError) return NextResponse.json({ error: seriesError.message }, { status: 500 })
 
-  const finalWeeks = [
-    ...updates.map(u => u.data as { id: string; start_time: string; end_time: string }),
+  const finalRows = [
+    ...updates.map(u => u.data as { id: string; start_time: string; end_time: string; space_id: string }),
     ...inserted,
-  ].map(toWeek).sort((a, b) => a.startTime.localeCompare(b.startTime))
+  ].sort((a, b) => a.start_time.localeCompare(b.start_time))
 
   waitUntil(
     (async () => {
       try {
+        const withSpace = (r: { id: string; start_time: string; end_time: string; space_id: string }) =>
+          ({ ...toWeek(r), spaceId: r.space_id })
+        const [finalWeeks, removedWeeks] = await Promise.all([
+          nameOtherSpaces(finalRows.map(withSpace), series.space_id),
+          nameOtherSpaces(removed.map(withSpace), series.space_id),
+        ])
+
         const previousAttendees = new Set([
           ...series.attendee_ids,
           ...upcoming.flatMap(r => r.attendee_ids ?? []),
@@ -292,7 +321,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           title: cleanTitle,
           spaceName,
           weeks: finalWeeks,
-          removed: removed.map(toWeek),
+          removed: removedWeeks,
           unchanged,
           skipped,
           recipients,
@@ -308,7 +337,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           await sendSpaceSeriesCancelledEmail({
             title: cleanTitle,
             spaceName,
-            weeks: [...finalWeeks, ...removed.map(toWeek)],
+            weeks: [...finalWeeks, ...removedWeeks],
             to: [process.env.RESEND_FROM_EMAIL!],
             bcc: dropped,
             intro: 'You have been removed from this weekly SGA Space booking.',

@@ -119,7 +119,7 @@ export interface PlannedWeek {
    * interval is what advance notice measures newly claimed time against, and
    * its own hours are not counted twice against the weekly limit.
    */
-  existing?: { id: string; start_time: string; end_time: string }
+  existing?: { id: string; start_time: string; end_time: string; space_id?: string }
 }
 
 interface StoredBooking {
@@ -130,6 +130,12 @@ interface StoredBooking {
 
 export interface PlanInput {
   weeks: PlannedWeek[]
+  /**
+   * The space the weeks are planned in. A week whose existing row sits in a
+   * different one -- moved there on its own -- is moving back, and claims all of
+   * its time here.
+   */
+  spaceId?: string
   /** Bookings in the same space that the weeks must not overlap. */
   spaceBookings: StoredBooking[]
   /** Blackouts on this space or on every space. */
@@ -150,7 +156,8 @@ export interface PlanInput {
  * against every week it lands in, not only the first, and a 2-hour weekly
  * meeting uses 2 hours of each of those weeks.
  *
- * A week an edit leaves exactly where it was is accepted without checks. It
+ * A week an edit leaves exactly where it was -- same time, same space -- is
+ * accepted without checks. It
  * claims nothing new, and a rename should not fail because a blackout was later
  * drawn over time the booking already held.
  */
@@ -165,9 +172,11 @@ export function planSeries(input: PlanInput): { ok: PlannedWeek[]; conflicts: Se
 
   for (const week of sorted) {
     const { interval, existing } = week
+    const inOtherSpace = !!existing?.space_id && !!input.spaceId && existing.space_id !== input.spaceId
 
     if (
       existing &&
+      !inOtherSpace &&
       Date.parse(existing.start_time) === Date.parse(interval.start) &&
       Date.parse(existing.end_time) === Date.parse(interval.end)
     ) {
@@ -175,7 +184,7 @@ export function planSeries(input: PlanInput): { ok: PlannedWeek[]; conflicts: Se
       continue
     }
 
-    const prev = existing ? { start: existing.start_time, end: existing.end_time } : null
+    const prev = existing && !inOtherSpace ? { start: existing.start_time, end: existing.end_time } : null
     if (advanceNoticeError(interval, prev, input.minHoursAdvance, now)) {
       conflicts.push({ date: week.date, reason: 'notice' })
       continue
