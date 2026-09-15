@@ -1,9 +1,9 @@
-import { resend } from '@/lib/resend'
+import { emailFrom, resend } from '@/lib/resend'
 import { buildEmailHtml } from './utils'
 
 export async function sendSignupOtpEmail({ to, otp }: { to: string; otp: string }) {
   await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL!,
+    from: emailFrom(),
     to,
     subject: 'Your Chambers Signup Code',
     text: `You requested to create a Chambers account — the official room and event booking platform for the Northeastern Student Government Association.

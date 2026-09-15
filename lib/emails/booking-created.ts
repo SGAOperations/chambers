@@ -1,4 +1,4 @@
-import { resend } from '@/lib/resend'
+import { emailFrom, resend } from '@/lib/resend'
 import { sanitize, buildEmailHtml } from './utils'
 import { formatDate, formatTime } from './changes'
 
@@ -73,7 +73,7 @@ export async function sendBookingCreatedEmail(params: BookingCreatedEmailParams)
     : ''
 
   await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL!,
+    from: emailFrom(),
     // BCC, matching the other booking emails: recipients are a whole body's
     // membership and should not see each other's addresses.
     to: process.env.RESEND_FROM_EMAIL!,

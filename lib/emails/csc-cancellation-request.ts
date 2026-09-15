@@ -1,4 +1,4 @@
-import { resend } from '@/lib/resend'
+import { emailFrom, resend } from '@/lib/resend'
 import { sanitize, buildEmailHtml } from './utils'
 import { formatDate, formatTime } from './changes'
 
@@ -100,7 +100,7 @@ export async function sendCscCancellationRequest(params: CscCancellationRequestP
     .join('')
 
   await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL!,
+    from: emailFrom(),
     to,
     ...(cc ? { cc } : {}),
     // So a reply lands with the Operational Affairs inbox rather than the

@@ -1,4 +1,4 @@
-import { resend } from '@/lib/resend'
+import { emailFrom, resend } from '@/lib/resend'
 import { sanitize, buildEmailHtml } from './utils'
 import { formatDate, formatTime } from './changes'
 
@@ -40,7 +40,7 @@ export async function sendMissedReservationEmail(params: MissedReservationEmailP
   const roomHtml = sRoomOrTable ? `<strong>Room/Table:</strong> ${sRoomOrTable}<br>` : ''
 
   await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL!,
+    from: emailFrom(),
     // Straight to Operational Affairs rather than bcc'd to a membership: this is
     // an internal alert about a body, not a notification to it.
     to: process.env.OPS_EMAIL!,

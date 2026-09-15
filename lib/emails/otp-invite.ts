@@ -1,11 +1,11 @@
-import { resend } from '@/lib/resend'
+import { emailFrom, resend } from '@/lib/resend'
 import { buildEmailHtml } from './utils'
 
 export async function sendOtpInviteEmail({ to, otp }: { to: string; otp: string }) {
   const loginUrl = 'https://chambers.northeasternsga.com'
 
   await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL!,
+    from: emailFrom(),
     to,
     subject: 'Welcome to Chambers \u2014 Your One-Time Password',
     text: `Welcome to Chambers, the official room and event booking platform for the Northeastern Student Government Association.
