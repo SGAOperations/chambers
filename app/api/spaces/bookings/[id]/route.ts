@@ -3,42 +3,12 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
+import { sendSpaceBookingUpdatedEmail, type SpaceBookingDetails } from '@/lib/emails/space-booking-updated'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
-import { cancellationAddressing, resolveSpacesAddresses } from '@/lib/spaces-email'
+import { cancellationAddressing, dedupeEmails, resolveSpacesAddresses } from '@/lib/spaces-email'
 import { waitUntil } from '@vercel/functions'
-
-const DEFAULT_WEEKLY_HOURS = 18
-
-function getWeekBounds(iso: string): { weekStart: string; weekEnd: string } {
-  const d = new Date(iso)
-  const day = d.getUTCDay()
-  const sun = new Date(d)
-  sun.setUTCDate(d.getUTCDate() - day)
-  sun.setUTCHours(0, 0, 0, 0)
-  const sat = new Date(sun)
-  sat.setUTCDate(sun.getUTCDate() + 7)
-  return { weekStart: sun.toISOString(), weekEnd: sat.toISOString() }
-}
-
-function minutesOf(iso: string): number {
-  return new Date(iso).getUTCMinutes()
-}
-
-function touchesDeadZone(startIso: string, endIso: string): boolean {
-  const startDate = startIso.slice(0, 10)
-  const endDate = endIso.slice(0, 10)
-  if (endDate > startDate) {
-    const end = new Date(endIso)
-    const endsAtMidnight = end.getUTCHours() === 0 && end.getUTCMinutes() === 0 && end.getUTCSeconds() === 0
-    const nextDay = new Date(`${startDate}T00:00:00Z`)
-    nextDay.setUTCDate(nextDay.getUTCDate() + 1)
-    const isConsecutiveDay = endDate === nextDay.toISOString().slice(0, 10)
-    if (!endsAtMidnight || !isConsecutiveDay) return true
-  }
-  const startHour = new Date(startIso).getUTCHours() + new Date(startIso).getUTCMinutes() / 60
-  return startHour < 7
-}
+import { DEFAULT_WEEKLY_HOURS, minutesOf, touchesDeadZone, weekBoundsOf as getWeekBounds } from '@/lib/space-series'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -68,7 +38,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { title, start_time, end_time, attendee_ids } = await request.json()
+  const { title, start_time, end_time, attendee_ids, space_id } = await request.json()
 
   if (!title || !start_time || !end_time) {
     return NextResponse.json({ error: 'title, start_time, and end_time are required' }, { status: 400 })
@@ -86,31 +56,45 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Bookings may not start or end between 12:00 AM and 7:00 AM.' }, { status: 400 })
   }
 
+  // The space can change too. Moving is how a meeting follows a room change
+  // without being cancelled and rebooked, which would drop it from everyone's
+  // calendar and invite them again.
+  const spaceId: string = typeof space_id === 'string' && space_id ? space_id : existing.space_id
+  const movingSpace = spaceId !== existing.space_id
+
   // Run all validation checks in parallel
   const { weekStart, weekEnd } = getWeekBounds(start_time)
 
   const [
+    { data: spaces },
     { data: overlapping },
     { data: blackoutHit },
     { data: weekBookings },
     { data: override },
     { data: settings },
   ] = await Promise.all([
-    adminSupabase.from('space_bookings').select('id').eq('space_id', existing.space_id).neq('id', id).lt('start_time', end_time).gt('end_time', start_time).limit(1),
-    adminSupabase.from('space_blackouts').select('id').or(`space_id.eq.${existing.space_id},space_id.is.null`).lt('start_time', end_time).gt('end_time', start_time).limit(1),
+    adminSupabase.from('spaces').select('id, name').in('id', [...new Set([existing.space_id, spaceId])]),
+    adminSupabase.from('space_bookings').select('id').eq('space_id', spaceId).neq('id', id).lt('start_time', end_time).gt('end_time', start_time).limit(1),
+    adminSupabase.from('space_blackouts').select('id').or(`space_id.eq.${spaceId},space_id.is.null`).lt('start_time', end_time).gt('end_time', start_time).limit(1),
     adminSupabase.from('space_bookings').select('start_time, end_time').eq('creator_id', existing.creator_id).neq('id', id).lt('start_time', weekEnd).gt('end_time', weekStart),
     adminSupabase.from('space_weekly_limit_overrides').select('weekly_hours_limit').eq('user_id', existing.creator_id).maybeSingle(),
     adminSupabase.from('app_settings').select('min_hours_advance_spaces').eq('id', 1).single(),
   ])
 
+  const spaceNameOf = (sid: string) => (spaces ?? []).find(s => s.id === sid)?.name as string | undefined
+  if (movingSpace && !spaceNameOf(spaceId)) {
+    return NextResponse.json({ error: 'That space does not exist.' }, { status: 400 })
+  }
+
   // Advance notice applies to the time this edit newly claims, not to whether the
   // start moved (issue #94). Shortening a booking, pushing its start later or
   // renaming it releases time or leaves it alone, and needs no notice; only
-  // adding time inside the window is refused.
+  // adding time inside the window is refused. Moving to another space claims all
+  // of its time there, as a new booking would.
   const minHours: number = settings?.min_hours_advance_spaces ?? 24
   const noticeError = advanceNoticeError(
     { start: start_time, end: end_time },
-    { start: existing.start_time, end: existing.end_time },
+    movingSpace ? null : { start: existing.start_time, end: existing.end_time },
     minHours
   )
   if (noticeError) return NextResponse.json({ error: noticeError }, { status: 400 })
@@ -138,14 +122,94 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }, { status: 400 })
   }
 
+  const cleanTitle = title.trim()
+  const nextAttendees: string[] = Array.isArray(attendee_ids) ? attendee_ids : []
+
   const { data: updated, error: updateError } = await adminSupabase
     .from('space_bookings')
-    .update({ title: title.trim(), start_time, end_time, attendee_ids: attendee_ids ?? [] })
+    .update({ title: cleanTitle, start_time, end_time, attendee_ids: nextAttendees, space_id: spaceId })
     .eq('id', id)
     .select()
     .single()
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+
+  // Calendars only learn about an edit from an email, so an edit that sent none
+  // left every calendar showing the booking as it was first made. Each email
+  // counts every recipient against the Resend quota, so each goes only to the
+  // people whose calendar it changes, and a save that changes nothing sends none.
+  const previous: SpaceBookingDetails = {
+    title: existing.title,
+    spaceName: spaceNameOf(existing.space_id) ?? 'SGA Space',
+    startTime: existing.start_time,
+    endTime: existing.end_time,
+  }
+  const booking: SpaceBookingDetails = {
+    title: cleanTitle,
+    spaceName: spaceNameOf(spaceId) ?? 'SGA Space',
+    startTime: start_time,
+    endTime: end_time,
+  }
+  const detailsChanged =
+    booking.title !== previous.title ||
+    movingSpace ||
+    Date.parse(booking.startTime) !== Date.parse(previous.startTime) ||
+    Date.parse(booking.endTime) !== Date.parse(previous.endTime)
+
+  const previousAttendees: string[] = existing.attendee_ids ?? []
+  const addedAttendees = nextAttendees.filter(a => !previousAttendees.includes(a))
+  const removedAttendees = previousAttendees.filter(a => !nextAttendees.includes(a) && a !== existing.creator_id)
+
+  if (detailsChanged || addedAttendees.length > 0 || removedAttendees.length > 0) {
+    waitUntil(
+      (async () => {
+        try {
+          const currentIds = [existing.creator_id, ...nextAttendees]
+          const addresses = await resolveSpacesAddresses(adminSupabase, [...currentIds, ...removedAttendees])
+          const addressesOf = (ids: string[]) => dedupeEmails(ids.flatMap(u => addresses.get(u) ?? []))
+          const current = addressesOf(currentIds)
+          const inCurrent = new Set(current.map(e => e.toLowerCase()))
+
+          if (detailsChanged) {
+            // Everyone on the booking now, including anyone just added: the
+            // invite puts the event on a calendar that lacks it and moves it on
+            // one that has it.
+            await sendSpaceBookingUpdatedEmail({ bookingId: id, booking, previous, recipients: current })
+          } else if (addedAttendees.length > 0) {
+            // Nothing moved, so only the new attendees need the invite. An inbox
+            // someone already on the booking also uses -- a shared SGA inbox --
+            // already has it.
+            const held = new Set(addressesOf([existing.creator_id, ...previousAttendees]).map(e => e.toLowerCase()))
+            const recipients = addressesOf(addedAttendees).filter(e => !held.has(e.toLowerCase()))
+            await sendSpaceBookingUpdatedEmail({
+              bookingId: id, booking, previous: booking, recipients,
+              intro: 'You have been added to an SGA Space booking.',
+            })
+          }
+
+          // Someone taken off the booking still has it on their calendar. The
+          // cancellation describes it as they last saw it, and skips an inbox a
+          // current recipient also uses, since that inbox should keep the event.
+          const dropped = addressesOf(removedAttendees).filter(e => !inCurrent.has(e.toLowerCase()))
+          if (dropped.length > 0) {
+            await sendSpaceBookingCancelledEmail({
+              bookingId: id,
+              title: previous.title,
+              spaceName: previous.spaceName,
+              startTime: previous.startTime,
+              endTime: previous.endTime,
+              to: [process.env.RESEND_FROM_EMAIL!],
+              bcc: dropped,
+              intro: 'You have been removed from this SGA Space booking.',
+            })
+          }
+        } catch (e) {
+          console.error('Space booking update email failed:', e)
+        }
+      })()
+    )
+  }
+
   return NextResponse.json({ success: true, booking: updated })
 }
 

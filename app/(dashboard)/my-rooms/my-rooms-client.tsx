@@ -230,7 +230,39 @@ export default function MyRoomsClient({
                     the location line rather than taking a row of its own, so the
                     card is the same height it was (issue #78).
                   */}
-                  <p className="font-semibold text-[#f0f6ff] truncate" title={bookingTitle(b)}>{bookingTitle(b)}</p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="font-semibold text-[#f0f6ff] truncate min-w-0" title={bookingTitle(b)}>{bookingTitle(b)}</p>
+
+                    {/*
+                      Was the whole card: every Senate booking was an anchor to
+                      Attendance Manager, so there was no way to open its details,
+                      and Office Hours -- which AM does not track -- linked there
+                      too. The click has to be kept off the parent so the modal
+                      does not open behind the new tab.
+
+                      It shares the title's line rather than taking one of its own
+                      (issue #117). On a line of its own it made every card that
+                      had it taller than the cards that did not, and because the
+                      grid stretches a row to its tallest card, the cards beside it
+                      grew too, with empty space at the bottom. Sharing a line keeps
+                      every card the same height -- the rule issue #78 set for the
+                      scope label -- and the title's line puts it directly under the
+                      status, where the card's other right-hand text sits.
+                    */}
+                    {hasAttendance && (
+                      <a
+                        href="https://attendance.northeasternsga.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        onKeyDown={e => e.stopPropagation()}
+                        aria-label="Go to Attendance Manager (opens in a new tab)"
+                        className="flex-shrink-0 whitespace-nowrap text-sm font-semibold text-[#93b8d8] underline underline-offset-2 hover:text-[#f0f6ff] transition-colors"
+                      >
+                        Attendance Manager
+                      </a>
+                    )}
+                  </div>
                   <p className="text-sm text-[#93b8d8] mt-0.5 truncate" title={`${b.scopeLabel} · ${b.location}`}>
                     {b.scopeLabel} <span className="text-[#4a7ba7]">·</span> {b.location}
                   </p>
@@ -241,27 +273,6 @@ export default function MyRoomsClient({
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
                     )}
                   </div>
-
-                  {/*
-                    Was the whole card: every Senate booking was an anchor to
-                    Attendance Manager, so there was no way to open its details,
-                    and Office Hours -- which AM does not track -- linked there
-                    too. Now it is one line of text on a card that behaves like
-                    every other card, and the click has to be kept off the parent
-                    so the modal does not open behind the new tab.
-                  */}
-                  {hasAttendance && (
-                    <a
-                      href="https://attendance.northeasternsga.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
-                      onKeyDown={e => e.stopPropagation()}
-                      className="inline-block mt-2 text-sm text-[#93b8d8] hover:text-[#f0f6ff] transition-colors"
-                    >
-                      Go to <span className="font-semibold underline underline-offset-2">Attendance Manager</span>
-                    </a>
-                  )}
                 </div>
               )
             })}

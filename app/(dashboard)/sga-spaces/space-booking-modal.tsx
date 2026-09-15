@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import TimePicker from '../bookings/time-picker'
 import DateField from '@/app/_components/date-field'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
+import { SERIES_CONFLICT_LABELS, addDays, weekdayOf, type SeriesConflict } from '@/lib/space-series'
 
 interface User {
   id: string
@@ -30,8 +31,38 @@ interface SpaceBookingModalProps {
   initialAttendees?: User[]
   onCancelBooking?: () => Promise<void>
   spaces?: Space[]
+  /**
+   * Spaces already taken at the time picked, when it was picked in the All
+   * spaces view. They are listed after the free ones and marked, not hidden:
+   * changing the time in this form can free them, and the server has the final
+   * word either way.
+   */
+  busySpaceIds?: string[]
   /** Hours of notice required before newly claimed time. 0 disables the rule. */
   minHoursAdvance?: number
+  /** The series this booking is one week of, when it is (issue #112). */
+  seriesId?: string | null
+  /** Cancels every upcoming week of seriesId. Offered only alongside onCancelBooking. */
+  onCancelSeries?: () => Promise<void>
+  /**
+   * The active semester's last day: the furthest a weekly booking may run. Null
+   * means Management has not set it, and weekly booking is unavailable.
+   */
+  semesterEndDate?: string | null
+}
+
+/** What the series endpoint returns about one series. */
+interface SeriesInfo {
+  space_id: string
+  title: string
+  attendee_ids: string[]
+  start_time: string
+  end_time: string
+  ends_on: string
+  weekday: string
+  upcoming_count: number
+  next_date: string | null
+  semester_end_date: string | null
 }
 
 function isoToDateAndTime(iso: string): { date: string; time: string } {
@@ -52,6 +83,12 @@ function endTimeToIso(date: string, time: string): string {
   return d.toISOString()
 }
 
+function formatShortDate(date: string): string {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
+  })
+}
+
 export default function SpaceBookingModal({
   spaceId,
   spaceName,
@@ -64,7 +101,11 @@ export default function SpaceBookingModal({
   initialAttendees = [],
   onCancelBooking,
   spaces,
+  busySpaceIds,
   minHoursAdvance = 0,
+  seriesId = null,
+  onCancelSeries,
+  semesterEndDate = null,
 }: SpaceBookingModalProps) {
   const isEditing = !!editBookingId
 
@@ -86,6 +127,30 @@ export default function SpaceBookingModal({
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Weekly bookings (issue #112).
+  //   repeat/until   -- creating one.
+  //   scope          -- editing a week of one: this week alone, or the series.
+  const [repeat, setRepeat] = useState(false)
+  const [until, setUntil] = useState('')
+  const [scope, setScope] = useState<'week' | 'series'>('week')
+  const [series, setSeries] = useState<SeriesInfo | null>(null)
+  const [seriesLoading, setSeriesLoading] = useState(false)
+
+  const editingSeries = isEditing && scope === 'series'
+
+  /**
+   * The weeks the server said conflict, tagged with the form values they were
+   * computed for. They are shown only while the form still matches -- change a
+   * time or the end date and the list no longer describes what would be
+   * submitted, so it quietly stops applying rather than needing an effect to
+   * clear it.
+   */
+  const [conflicts, setConflicts] = useState<{ key: string; list: SeriesConflict[]; applicable: number } | null>(null)
+  const formKey = JSON.stringify([
+    scope, selectedSpaceId, title.trim(), date, startTime, endTime, repeat, until, attendees.map(a => a.id),
+  ])
+  const activeConflicts = conflicts?.key === formKey ? conflicts : null
 
   const searchUsers = useCallback(async (q: string) => {
     if (q.length < 2) { setSearchResults([]); return }
@@ -123,12 +188,69 @@ export default function SpaceBookingModal({
     setAttendees(prev => prev.filter(a => a.id !== id))
   }
 
-  const handleCancelBooking = async () => {
-    if (!onCancelBooking) return
+  /**
+   * Switches between editing this week and editing the series, loading each
+   * one's own values into the form. The series' values can differ from this
+   * week's -- the week may have been edited on its own -- and the form should
+   * show what a save would actually write.
+   */
+  const switchScope = async (next: 'week' | 'series') => {
+    if (next === scope) return
+    setError(null)
+    setCancelConfirm(false)
+    setCancelError(null)
+
+    if (next === 'week') {
+      setScope('week')
+      setSelectedSpaceId(spaceId)
+      setTitle(initialTitle)
+      setStartTime(initStartTime)
+      setEndTime(initEndTime)
+      setAttendees(initialAttendees)
+      return
+    }
+
+    if (!seriesId) return
+    setSeriesLoading(true)
+    try {
+      const res = await fetch(`/api/spaces/series/${seriesId}`)
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Could not load this weekly booking.')
+        return
+      }
+      const info: SeriesInfo = {
+        ...data.series,
+        upcoming_count: data.upcoming_count,
+        next_date: data.next_date,
+        semester_end_date: data.semester_end_date,
+      }
+
+      let seriesAttendees: User[] = []
+      if (info.attendee_ids.length > 0) {
+        const r = await fetch(`/api/users/by-ids?ids=${info.attendee_ids.join(',')}`)
+        if (r.ok) seriesAttendees = await r.json()
+      }
+
+      setSeries(info)
+      setTitle(info.title)
+      setStartTime(info.start_time)
+      setEndTime(info.end_time)
+      setUntil(info.ends_on)
+      setAttendees(seriesAttendees)
+      setScope('series')
+    } finally {
+      setSeriesLoading(false)
+    }
+  }
+
+  const handleCancel = async () => {
+    const cancel = editingSeries ? onCancelSeries : onCancelBooking
+    if (!cancel) return
     setCancelling(true)
     setCancelError(null)
     try {
-      await onCancelBooking()
+      await cancel()
     } catch (e) {
       setCancelError(e instanceof Error ? e.message : 'Failed to cancel booking.')
       setCancelling(false)
@@ -140,47 +262,73 @@ export default function SpaceBookingModal({
   // would be refused says so before it is submitted (issue #94). Only for edits:
   // a new booking cannot be drawn inside the notice window in the first place,
   // and warning about the slot you have not finished picking would be noise.
-  const noticeWarning = isEditing && date
+  // A series edit is checked week by week on the server instead, where a week
+  // that cannot take the change is reported rather than refusing the rest.
+  // Moving to another space claims all of the booking's time there.
+  const noticeWarning = isEditing && !editingSeries && date
     ? advanceNoticeError(
         { start: dateAndTimeToIso(date, startTime), end: endTimeToIso(date, endTime) },
-        { start: initialStart, end: initialEnd },
+        selectedSpaceId === spaceId ? { start: initialStart, end: initialEnd } : null,
         minHoursAdvance
       )
     : null
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const creatingSeries = !isEditing && repeat
+  const repeatAvailable = !!semesterEndDate
+
+  const submit = async (skipConflicts: boolean) => {
     setError(null)
 
     if (!title.trim()) { setError('Title is required.'); return }
     if (!date) { setError('Date is required.'); return }
+    if ((creatingSeries || editingSeries) && !until) { setError('Choose the date the weekly booking ends.'); return }
 
     setSubmitting(true)
     try {
-      const start_time = dateAndTimeToIso(date, startTime)
-      const end_time = endTimeToIso(date, endTime)
+      const attendee_ids = attendees.map(a => a.id)
+      let res: Response
 
-      const res = isEditing
-        ? await fetch(`/api/spaces/bookings/${editBookingId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ title: title.trim(), start_time, end_time, attendee_ids: attendees.map(a => a.id) }),
-          })
-        : await fetch('/api/spaces/bookings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              space_id: selectedSpaceId,
-              title: title.trim(),
-              start_time,
-              end_time,
-              attendee_ids: attendees.map(a => a.id),
-            }),
-          })
+      if (editingSeries && seriesId) {
+        res = await fetch(`/api/spaces/series/${seriesId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: title.trim(), start_time: startTime, end_time: endTime, until, attendee_ids,
+            skip_conflicts: skipConflicts,
+          }),
+        })
+      } else if (creatingSeries) {
+        res = await fetch('/api/spaces/series', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            space_id: selectedSpaceId, title: title.trim(), date, start_time: startTime, end_time: endTime, until,
+            attendee_ids, skip_conflicts: skipConflicts,
+          }),
+        })
+      } else {
+        const start_time = dateAndTimeToIso(date, startTime)
+        const end_time = endTimeToIso(date, endTime)
+        res = isEditing
+          ? await fetch(`/api/spaces/bookings/${editBookingId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ space_id: selectedSpaceId, title: title.trim(), start_time, end_time, attendee_ids }),
+            })
+          : await fetch('/api/spaces/bookings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ space_id: selectedSpaceId, title: title.trim(), start_time, end_time, attendee_ids }),
+            })
+      }
 
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error ?? 'Something went wrong.')
+        if (Array.isArray(data.conflicts)) {
+          setConflicts({ key: formKey, list: data.conflicts, applicable: data.bookable ?? data.applicable ?? 0 })
+        }
+        // A 409 is a question, not a failure: the conflict panel asks it.
+        if (res.status !== 409) setError(data.error ?? 'Something went wrong.')
         return
       }
 
@@ -190,8 +338,17 @@ export default function SpaceBookingModal({
     }
   }
 
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    submit(false)
+  }
+
   const inputCls = "bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition w-full"
   const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
+
+  const seriesMaxDate = editingSeries ? series?.semester_end_date ?? undefined : semesterEndDate ?? undefined
+  const cancelLabel = editingSeries ? 'Cancel all upcoming weeks' : seriesId ? 'Cancel this week' : 'Cancel this booking'
+  const canCancel = editingSeries ? !!onCancelSeries : !!onCancelBooking
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -202,10 +359,14 @@ export default function SpaceBookingModal({
         <div className="flex items-center justify-between p-5 border-b border-[#1e5080]">
           <div>
             <h2 className="text-lg font-semibold text-[#f0f6ff]">
-              {isEditing ? 'Edit Booking' : `Book ${spaces?.find(s => s.id === selectedSpaceId)?.name ?? spaceName}`}
+              {isEditing
+                ? (editingSeries ? 'Edit Weekly Booking' : 'Edit Booking')
+                : `Book ${spaces?.find(s => s.id === selectedSpaceId)?.name ?? spaceName}`}
             </h2>
             {isEditing && (
-              <p className="text-xs text-[#93b8d8] mt-0.5">{spaceName}</p>
+              <p className="text-xs text-[#93b8d8] mt-0.5">
+                {spaces?.find(s => s.id === (editingSeries ? series?.space_id : spaceId))?.name ?? spaceName}
+              </p>
             )}
           </div>
           <button onClick={onClose} className="text-[#93b8d8] hover:text-[#f0f6ff] transition-colors">
@@ -216,8 +377,34 @@ export default function SpaceBookingModal({
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {/* Location selector (creation mode only) */}
-          {!isEditing && spaces && spaces.length > 1 && (
+          {/* This week or the whole series (issue #112) */}
+          {isEditing && seriesId && (
+            <div className="grid grid-cols-2 gap-1 p-1 bg-[#0f2a4a] border border-[#1e5080] rounded-lg" role="tablist">
+              {(['week', 'series'] as const).map(s => (
+                <button
+                  key={s}
+                  type="button"
+                  role="tab"
+                  aria-selected={scope === s}
+                  onClick={() => switchScope(s)}
+                  disabled={seriesLoading}
+                  className={`py-1.5 text-sm font-medium rounded-md transition-colors disabled:opacity-60 ${
+                    scope === s ? 'bg-[#c8102e] text-white' : 'text-[#93b8d8] hover:text-[#f0f6ff]'
+                  }`}
+                >
+                  {s === 'week' ? 'This week' : seriesLoading ? 'Loading…' : 'Whole series'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/*
+            Location selector. Offered when editing one booking -- or one week of
+            a series -- as well as when creating, so a meeting can follow a room
+            change instead of being cancelled and rebooked. Not for a series edit,
+            which keeps the series' space.
+          */}
+          {!editingSeries && spaces && spaces.length > 1 && (
             <div>
               <label className={labelCls}>Location</label>
               <select
@@ -225,9 +412,13 @@ export default function SpaceBookingModal({
                 onChange={e => setSelectedSpaceId(e.target.value)}
                 className={inputCls}
               >
-                {spaces.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} (cap. {s.capacity})</option>
-                ))}
+                {[...spaces]
+                  .sort((a, b) => Number(!!busySpaceIds?.includes(a.id)) - Number(!!busySpaceIds?.includes(b.id)))
+                  .map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (cap. {s.capacity}){busySpaceIds?.includes(s.id) ? ' — booked at the time you picked' : ''}
+                    </option>
+                  ))}
               </select>
             </div>
           )}
@@ -245,11 +436,18 @@ export default function SpaceBookingModal({
             />
           </div>
 
-          {/* Date */}
-          <div>
-            <label className={labelCls}>Date <span className="text-[#c8102e]">*</span></label>
-            <DateField value={date} onChange={setDate} required />
-          </div>
+          {/* Date -- or, for a series, the weekday it repeats on */}
+          {editingSeries && series ? (
+            <div className="text-sm text-[#93b8d8] bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5">
+              Every <span className="text-[#f0f6ff] font-medium">{series.weekday}</span>
+              {' · '}{series.upcoming_count} upcoming week{series.upcoming_count === 1 ? '' : 's'}
+            </div>
+          ) : (
+            <div>
+              <label className={labelCls}>{creatingSeries ? 'First Date' : 'Date'} <span className="text-[#c8102e]">*</span></label>
+              <DateField value={date} onChange={setDate} required />
+            </div>
+          )}
 
           {/* Times */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -262,6 +460,57 @@ export default function SpaceBookingModal({
               <TimePicker value={endTime} onChange={setEndTime} interval={15} />
             </div>
           </div>
+
+          {/* Repeat weekly (creation) */}
+          {!isEditing && (
+            <div className="space-y-2">
+              <label className={`flex items-center gap-2 ${repeatAvailable ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                <input
+                  type="checkbox"
+                  checked={repeat}
+                  disabled={!repeatAvailable}
+                  onChange={e => {
+                    setRepeat(e.target.checked)
+                    if (e.target.checked && !until && date) {
+                      const suggested = addDays(date, 7 * 3)
+                      setUntil(semesterEndDate && suggested > semesterEndDate ? semesterEndDate : suggested)
+                    }
+                  }}
+                  className="accent-[#c8102e]"
+                />
+                <span className="text-sm text-[#f0f6ff]">
+                  Repeat weekly{date ? ` on ${weekdayOf(date)}s` : ''}
+                </span>
+              </label>
+              {!repeatAvailable && (
+                <p className="text-xs text-[#6a96bb]">
+                  Weekly bookings are unavailable until an administrator sets the end date of the current semester.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Repeat until (creating or editing a series) */}
+          {(creatingSeries || editingSeries) && (
+            <div>
+              <label className={labelCls}>Repeat Until <span className="text-[#c8102e]">*</span></label>
+              <DateField
+                value={until}
+                onChange={setUntil}
+                min={editingSeries ? series?.next_date ?? undefined : date ? addDays(date, 7) : undefined}
+                max={seriesMaxDate}
+                required
+              />
+              {seriesMaxDate && (
+                <p className="text-xs text-[#6a96bb] mt-1">Up to the end of the semester, {formatShortDate(seriesMaxDate)}.</p>
+              )}
+              {editingSeries && (
+                <p className="text-xs text-[#6a96bb] mt-1">
+                  Changes apply to every upcoming week, including weeks edited on their own. Past weeks are left as they were.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Attendee search */}
           <div>
@@ -327,6 +576,40 @@ export default function SpaceBookingModal({
             </div>
           )}
 
+          {/* Weeks that conflict (issue #112). Shown as a choice, not an error:
+              one clash should not cost someone the rest of their semester. */}
+          {activeConflicts && activeConflicts.list.length > 0 && (
+            <div className="bg-[#f97316]/10 border border-[#f97316]/30 rounded-lg px-3 py-2.5 space-y-2">
+              <p className="text-sm text-[#fdba74] font-medium">
+                {editingSeries
+                  ? `${activeConflicts.list.length} week${activeConflicts.list.length === 1 ? '' : 's'} can't take this change:`
+                  : `${activeConflicts.list.length} week${activeConflicts.list.length === 1 ? '' : 's'} can't be booked:`}
+              </p>
+              <ul className="text-xs text-[#fdba74] space-y-0.5">
+                {activeConflicts.list.map(c => (
+                  <li key={c.date}>{formatShortDate(c.date)} — {SERIES_CONFLICT_LABELS[c.reason]}</li>
+                ))}
+              </ul>
+              {editingSeries && (
+                <p className="text-xs text-[#fdba74]/80">
+                  Upcoming weeks that can&apos;t move keep their current time. New weeks that can&apos;t be added are skipped.
+                </p>
+              )}
+              {activeConflicts.applicable > 0 && (
+                <button
+                  type="button"
+                  onClick={() => submit(true)}
+                  disabled={submitting}
+                  className="w-full py-2 px-3 bg-[#f97316] hover:bg-[#ea580c] disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  {editingSeries
+                    ? 'Save the rest'
+                    : `Book the other ${activeConflicts.applicable} week${activeConflicts.applicable === 1 ? '' : 's'}`}
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Error */}
           {error && (
             <div className="bg-[#c8102e]/10 border border-[#c8102e]/30 rounded-lg px-3 py-2.5 text-sm text-[#f87171]">
@@ -345,7 +628,7 @@ export default function SpaceBookingModal({
             </button>
             <button
               type="submit"
-              disabled={submitting || !!noticeWarning}
+              disabled={submitting || seriesLoading || !!noticeWarning || !!activeConflicts}
               className="flex-1 py-2.5 px-4 bg-[#c8102e] hover:bg-[#a50d26] disabled:opacity-60 text-white text-sm font-medium rounded-lg transition-colors"
             >
               {submitting ? (isEditing ? 'Saving…' : 'Booking…') : (isEditing ? 'Save Changes' : 'Confirm Booking')}
@@ -353,7 +636,7 @@ export default function SpaceBookingModal({
           </div>
 
           {/* Cancel booking (edit mode, own bookings only) */}
-          {isEditing && onCancelBooking && (
+          {isEditing && canCancel && (
             <div className="pt-3 border-t border-[#1e5080]">
               {!cancelConfirm ? (
                 <button
@@ -361,14 +644,18 @@ export default function SpaceBookingModal({
                   onClick={() => setCancelConfirm(true)}
                   className="text-sm text-[#6a96bb] hover:text-[#f87171] transition-colors"
                 >
-                  Cancel this booking
+                  {cancelLabel}
                 </button>
               ) : (
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className="text-sm text-[#93b8d8]">Cancel this booking?</span>
+                  <span className="text-sm text-[#93b8d8]">
+                    {editingSeries
+                      ? (series ? `Cancel all ${series.upcoming_count} upcoming weeks?` : 'Cancel all upcoming weeks?')
+                      : seriesId ? 'Cancel just this week?' : 'Cancel this booking?'}
+                  </span>
                   <button
                     type="button"
-                    onClick={handleCancelBooking}
+                    onClick={handleCancel}
                     disabled={cancelling}
                     className="text-sm font-medium text-[#f87171] hover:text-red-400 disabled:opacity-60 transition-colors"
                   >

@@ -69,6 +69,7 @@ interface Semester {
   id: string
   name: string
   is_active: boolean
+  end_date: string | null
   created_at: string
 }
 
@@ -222,6 +223,24 @@ export default function BookingSettingsTab() {
       const data = await res.json()
       setCreateError(data.error || 'Something went wrong.')
       setCreatingState('error')
+    }
+  }
+
+  // A semester's last day (issue #112): how far a weekly SGA Space booking may
+  // run. Saved as soon as it is picked, like the per-row actions beside it.
+  const [endDateError, setEndDateError] = useState<{ id: string; text: string } | null>(null)
+  const saveEndDate = async (id: string, endDate: string | null) => {
+    setEndDateError(null)
+    setSemesters(prev => prev.map(s => s.id === id ? { ...s, end_date: endDate } : s))
+    const res = await fetch('/api/administrator/semesters', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, end_date: endDate }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setEndDateError({ id, text: data.error || 'Could not save that date.' })
+      fetchSemesters()
     }
   }
 
@@ -380,7 +399,8 @@ export default function BookingSettingsTab() {
               <p className="text-[#6a96bb] text-sm">No semesters yet.</p>
             )}
             {semesters.map(sem => (
-              <div key={sem.id} className="flex items-center justify-between border border-[#1e5080] rounded-lg px-3 py-2.5 bg-[#0f2a4a]">
+              <div key={sem.id} className="border border-[#1e5080] rounded-lg px-3 py-2.5 bg-[#0f2a4a] space-y-2">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <span className="text-sm text-[#f0f6ff]">{sem.name}</span>
                   {sem.is_active ? (
@@ -405,6 +425,23 @@ export default function BookingSettingsTab() {
                     </button>
                   )}
                 </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <label htmlFor={`sem-end-${sem.id}`} className="text-xs text-[#93b8d8]">Ends</label>
+                <input
+                  id={`sem-end-${sem.id}`}
+                  type="date"
+                  value={sem.end_date ?? ''}
+                  onChange={e => saveEndDate(sem.id, e.target.value || null)}
+                  className="bg-[#0a1628] border border-[#1e5080] rounded-md px-2 py-1 text-xs text-[#f0f6ff] [color-scheme:dark] focus:outline-none focus:border-[#c8102e]"
+                />
+                {sem.is_active && !sem.end_date && (
+                  <span className="text-xs text-[#fbbf24]">Weekly SGA Space bookings are off until this is set.</span>
+                )}
+              </div>
+              {endDateError?.id === sem.id && (
+                <p className="text-xs text-[#f87171]">{endDateError.text}</p>
+              )}
               </div>
             ))}
           </div>

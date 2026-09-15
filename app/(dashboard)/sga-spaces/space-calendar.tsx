@@ -11,6 +11,7 @@ interface Booking {
   end_time: string
   attendee_ids: string[]
   creator_name: string | null
+  series_id: string | null
 }
 
 interface Blackout {
@@ -20,6 +21,11 @@ interface Blackout {
   end_time: string
 }
 
+interface CalendarSpace {
+  id: string
+  name: string
+}
+
 interface SpaceCalendarProps {
   weekStart: Date // Sunday 00:00 UTC
   bookings: Booking[]
@@ -27,7 +33,14 @@ interface SpaceCalendarProps {
   currentUserId?: string
   minHoursAdvance?: number
   canBook?: boolean
-  onSlotClick: (startIso: string, endIso: string) => void
+  /**
+   * Given for the All spaces view: each day splits into one lane per space, and
+   * a time is open while any of them is free. Omitted, the calendar shows one
+   * space, as it always has.
+   */
+  spaces?: CalendarSpace[]
+  /** `freeSpaceIds` are the spaces free for the whole selection -- only filled in the All spaces view. */
+  onSlotClick: (startIso: string, endIso: string, freeSpaceIds: string[]) => void
   onBookingClick?: (booking: Booking) => void
 }
 
@@ -36,6 +49,19 @@ const TOTAL_SLOTS = 96
 const SLOT_HEIGHT = 14 // px per 15-min slot
 const DEAD_ZONE_START = 0  // slot index 0 = 00:00
 const DEAD_ZONE_END = 28   // slot index 28 = 07:00 (7 * 4)
+
+/**
+ * How long a plain click books: an hour. A 15-minute default meant nearly every
+ * booking started with dragging the end out, which on a phone -- where there is
+ * no drag, only a tap -- meant fixing the time in the form every time.
+ */
+const CLICK_SLOTS = 4
+
+/**
+ * One colour per space in the All spaces view, in the order the spaces are
+ * listed. The first is the red a single space has always been drawn in.
+ */
+const LANE_COLORS = ['#c8102e', '#2b7bd3', '#d18a0b', '#139e8c', '#8a5cd6']
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -64,6 +90,18 @@ function dayOfWeekUTC(iso: string): number {
   return new Date(iso).getUTCDay()
 }
 
+/**
+ * Where a selection wants to end. One that has not left the slot it started in
+ * is a click, and asks for CLICK_SLOTS; dragging sets the length by hand.
+ */
+function rawEndFor(startSlot: number, slot: number): number {
+  return slot === startSlot ? startSlot + CLICK_SLOTS : slot + 1
+}
+
+function isDeadZone(slot: number): boolean {
+  return slot >= DEAD_ZONE_START && slot < DEAD_ZONE_END
+}
+
 interface DragState {
   dayIdx: number
   startSlot: number
@@ -83,6 +121,7 @@ export default function SpaceCalendar({
   currentUserId,
   minHoursAdvance = 24,
   canBook = false,
+  spaces,
   onSlotClick,
   onBookingClick,
 }: SpaceCalendarProps) {
@@ -113,6 +152,13 @@ export default function SpaceCalendar({
   const [overlayCursor, setOverlayCursor] = useState<string>('crosshair')
   const [hoveredBookingId, setHoveredBookingId] = useState<string | null>(null)
 
+  // ── Lanes: one per space in the All spaces view, otherwise just one ─────────
+  // A single space is the one-lane case of the same logic, so it behaves exactly
+  // as it did: the server has already filtered bookings and blackouts to it.
+  const laneSpaces = useMemo(() => (spaces && spaces.length > 1 ? spaces : null), [spaces])
+  const laneCount = laneSpaces?.length ?? 1
+  const lanes = useMemo(() => Array.from({ length: laneCount }, (_, i) => i), [laneCount])
+
   // ── Day header labels ────────────────────────────────────────────────────────
   const dayLabels = useMemo(() => {
     return DAYS.map((name, i) => {
@@ -126,24 +172,31 @@ export default function SpaceCalendar({
   }, [weekStart, isCurrentWeek, todayDay])
 
   // ── Booking spans per day ────────────────────────────────────────────────────
-  interface BookingSpan { booking: Booking; startSlot: number; endSlot: number }
+  interface BookingSpan { booking: Booking; startSlot: number; endSlot: number; lane: number }
   const bookingsByDay: BookingSpan[][] = useMemo(() => {
     const days: BookingSpan[][] = Array.from({ length: 7 }, () => [])
     for (const b of bookings) {
+      const lane = laneSpaces ? laneSpaces.findIndex(s => s.id === b.space_id) : 0
+      if (lane < 0) continue
       const dayIdx = dayOfWeekUTC(b.start_time)
       const rawEndSlot = slotIndex(b.end_time)
       // Booking ending at next-day midnight has slotIndex 0 — fill to end of column instead
       const endsNextDayMidnight = rawEndSlot === 0 && b.end_time.slice(0, 10) > b.start_time.slice(0, 10)
       const endSlot = endsNextDayMidnight ? TOTAL_SLOTS : rawEndSlot
-      days[dayIdx].push({ booking: b, startSlot: slotIndex(b.start_time), endSlot })
+      days[dayIdx].push({ booking: b, startSlot: slotIndex(b.start_time), endSlot, lane })
     }
     return days
-  }, [bookings])
+  }, [bookings, laneSpaces])
 
-  // ── Blackout spans per day (multi-day blackouts clipped per column, overlaps merged) ───────────
-  const blackoutsByDay: { startSlot: number; endSlot: number }[][] = useMemo(() => {
-    const days: { startSlot: number; endSlot: number }[][] = Array.from({ length: 7 }, () => [])
+  // ── Blackout spans per day and lane (multi-day blackouts clipped per column, overlaps merged) ──
+  // A blackout with no space covers every lane.
+  const blackoutsByDay: { startSlot: number; endSlot: number }[][][] = useMemo(() => {
+    const days: { startSlot: number; endSlot: number }[][][] =
+      Array.from({ length: 7 }, () => Array.from({ length: laneCount }, () => []))
     for (const bl of blackouts) {
+      const blLanes = !laneSpaces || bl.space_id === null
+        ? lanes
+        : [laneSpaces.findIndex(s => s.id === bl.space_id)].filter(l => l >= 0)
       const blStart = new Date(bl.start_time)
       const blEnd = new Date(bl.end_time)
       for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
@@ -158,10 +211,10 @@ export default function SpaceCalendar({
         const startSlot = effStart.getUTCHours() * 4 + Math.floor(effStart.getUTCMinutes() / 15)
         const rawEndSlot = effEnd.getUTCHours() * 4 + Math.floor(effEnd.getUTCMinutes() / 15)
         const endSlot = rawEndSlot === 0 ? TOTAL_SLOTS : rawEndSlot
-        days[dayIdx].push({ startSlot, endSlot })
+        for (const lane of blLanes) days[dayIdx][lane].push({ startSlot, endSlot })
       }
     }
-    return days.map(spans => {
+    return days.map(dayLanes => dayLanes.map(spans => {
       if (spans.length <= 1) return spans
       spans.sort((a, b) => a.startSlot - b.startSlot)
       const merged: { startSlot: number; endSlot: number }[] = [{ ...spans[0] }]
@@ -174,8 +227,8 @@ export default function SpaceCalendar({
         }
       }
       return merged
-    })
-  }, [blackouts, weekStart])
+    }))
+  }, [blackouts, weekStart, laneSpaces, laneCount, lanes])
 
   // ── Advance notice zone: end slot per day up to (now + minHoursAdvance) ──────
   const noticeZoneEndSlots: number[] = useMemo(() => {
@@ -196,18 +249,21 @@ export default function SpaceCalendar({
   const todayLineTopPx = (wallClockNow.getUTCHours() * 60 + wallClockNow.getUTCMinutes()) / 15 * SLOT_HEIGHT
 
   // ── Slot state helpers ───────────────────────────────────────────────────────
-  const isSlotBlocked = useCallback((dayIdx: number, slot: number): boolean => {
-    if (slot >= DEAD_ZONE_START && slot < DEAD_ZONE_END) return true
-    return blackoutsByDay[dayIdx].some(bl => slot >= bl.startSlot && slot < bl.endSlot)
-  }, [blackoutsByDay])
-
   const isSlotInNoticeZone = useCallback((dayIdx: number, slot: number): boolean => {
     return slot < noticeZoneEndSlots[dayIdx]
   }, [noticeZoneEndSlots])
 
-  const isSlotBooked = useCallback((dayIdx: number, slot: number): boolean => {
-    return bookingsByDay[dayIdx].some(bs => slot >= bs.startSlot && bs.endSlot > slot)
-  }, [bookingsByDay])
+  /** Whether one space has nothing -- no booking, no blackout -- at this slot. */
+  const isLaneFree = useCallback((dayIdx: number, lane: number, slot: number): boolean => {
+    if (blackoutsByDay[dayIdx][lane].some(bl => slot >= bl.startSlot && slot < bl.endSlot)) return false
+    return !bookingsByDay[dayIdx].some(bs => bs.lane === lane && slot >= bs.startSlot && slot < bs.endSlot)
+  }, [blackoutsByDay, bookingsByDay])
+
+  /** Whether a new booking could start at this slot in at least one space. */
+  const isSlotOpen = useCallback((dayIdx: number, slot: number): boolean => {
+    if (isDeadZone(slot) || isSlotInNoticeZone(dayIdx, slot)) return false
+    return lanes.some(lane => isLaneFree(dayIdx, lane, slot))
+  }, [isSlotInNoticeZone, isLaneFree, lanes])
 
   const slotFromClientY = useCallback((clientY: number): number => {
     if (!scrollRef.current) return 0
@@ -216,6 +272,21 @@ export default function SpaceCalendar({
     const y = clientY - rect.top - headerHeight + scrollRef.current.scrollTop
     return Math.max(0, Math.min(TOTAL_SLOTS - 1, Math.floor(y / SLOT_HEIGHT)))
   }, [])
+
+  /** Which lane of the column the pointer is over. Always 0 for a single space. */
+  const laneFromEvent = useCallback((e: React.MouseEvent): number => {
+    if (laneCount === 1) return 0
+    const rect = e.currentTarget.getBoundingClientRect()
+    const lane = Math.floor(((e.clientX - rect.left) / rect.width) * laneCount)
+    return Math.max(0, Math.min(laneCount - 1, lane))
+  }, [laneCount])
+
+  /** Your own booking under the pointer, which opens rather than starting a new one. */
+  const ownBookingAt = useCallback((dayIdx: number, lane: number, slot: number) => {
+    return bookingsByDay[dayIdx].find(
+      bs => bs.lane === lane && slot >= bs.startSlot && slot < bs.endSlot && bs.booking.creator_id === currentUserId
+    )
+  }, [bookingsByDay, currentUserId])
 
   // ── Mouse interaction ────────────────────────────────────────────────────────
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent, dayIdx: number) => {
@@ -226,20 +297,46 @@ export default function SpaceCalendar({
     // (issue #94). Deciding this here rather than in the guards keeps a blackout
     // or the notice window from swallowing the click on a booking sitting inside
     // it, which is what made such a booking impossible to touch at all.
-    const ownBooking = bookingsByDay[dayIdx].find(
-      bs => slot >= bs.startSlot && slot < bs.endSlot && bs.booking.creator_id === currentUserId
-    )
+    const ownBooking = ownBookingAt(dayIdx, laneFromEvent(e), slot)
     if (ownBooking) {
       setOverlayCursor('pointer')
       setHoveredBookingId(ownBooking.booking.id)
-    } else if (!canBook || isSlotBlocked(dayIdx, slot) || isSlotInNoticeZone(dayIdx, slot) || isSlotBooked(dayIdx, slot)) {
+    } else if (!canBook || !isSlotOpen(dayIdx, slot)) {
       setOverlayCursor('default')
       setHoveredBookingId(null)
     } else {
       setOverlayCursor('crosshair')
       setHoveredBookingId(null)
     }
-  }, [canBook, slotFromClientY, isSlotBlocked, isSlotInNoticeZone, isSlotBooked, bookingsByDay, currentUserId])
+  }, [canBook, slotFromClientY, isSlotOpen, ownBookingAt, laneFromEvent])
+
+  /**
+   * How far a selection from `startSlot` can run toward `rawEnd`: as far as the
+   * space that stays free longest allows. With one space that is simply up to
+   * the next booking, blackout or closed hour.
+   */
+  const clampEndSlot = useCallback((dayIdx: number, startSlot: number, rawEnd: number): number => {
+    const target = Math.min(Math.max(startSlot + 1, rawEnd), TOTAL_SLOTS)
+    let best = startSlot + 1
+    for (const lane of lanes) {
+      if (!isLaneFree(dayIdx, lane, startSlot)) continue
+      let end = startSlot + 1
+      while (end < target && !isDeadZone(end) && !isSlotInNoticeZone(dayIdx, end) && isLaneFree(dayIdx, lane, end)) end++
+      best = Math.max(best, end)
+    }
+    return best
+  }, [lanes, isLaneFree, isSlotInNoticeZone])
+
+  /** The spaces free for every slot of [startSlot, endSlot). */
+  const freeSpaceIdsFor = useCallback((dayIdx: number, startSlot: number, endSlot: number): string[] => {
+    if (!laneSpaces) return []
+    return lanes
+      .filter(lane => {
+        for (let s = startSlot; s < endSlot; s++) if (!isLaneFree(dayIdx, lane, s)) return false
+        return true
+      })
+      .map(lane => laneSpaces[lane].id)
+  }, [laneSpaces, lanes, isLaneFree])
 
   const handleColumnMouseDown = useCallback((e: React.MouseEvent, dayIdx: number) => {
     e.preventDefault()
@@ -247,31 +344,17 @@ export default function SpaceCalendar({
     // Same order as the hover handler above: your own booking opens even inside
     // the notice window (issue #94).
     if (currentUserId && onBookingClick) {
-      const hit = bookingsByDay[dayIdx].find(
-        bs => slot >= bs.startSlot && slot < bs.endSlot && bs.booking.creator_id === currentUserId
-      )
+      const hit = ownBookingAt(dayIdx, laneFromEvent(e), slot)
       if (hit) {
         onBookingClick(hit.booking)
         return
       }
     }
-    if (isSlotBlocked(dayIdx, slot) || isSlotInNoticeZone(dayIdx, slot)) return
-    if (isSlotBooked(dayIdx, slot)) return
+    if (!isSlotOpen(dayIdx, slot)) return
     if (!canBook) return
     dragRef.current = { dayIdx, startSlot: slot, currentSlot: slot }
-    setDragPreview({ dayIdx, startSlot: slot, endSlot: slot + 1 })
-  }, [canBook, slotFromClientY, isSlotBlocked, isSlotInNoticeZone, isSlotBooked, currentUserId, onBookingClick, bookingsByDay])
-
-  const clampEndSlot = useCallback((dayIdx: number, startSlot: number, rawEnd: number): number => {
-    let end = Math.max(startSlot + 1, rawEnd)
-    for (let s = startSlot + 1; s < end; s++) {
-      if (isSlotBlocked(dayIdx, s) || isSlotInNoticeZone(dayIdx, s) || isSlotBooked(dayIdx, s)) {
-        end = s
-        break
-      }
-    }
-    return Math.min(end, TOTAL_SLOTS)
-  }, [isSlotBlocked, isSlotInNoticeZone, isSlotBooked])
+    setDragPreview({ dayIdx, startSlot: slot, endSlot: clampEndSlot(dayIdx, slot, slot + CLICK_SLOTS) })
+  }, [canBook, slotFromClientY, isSlotOpen, currentUserId, onBookingClick, ownBookingAt, laneFromEvent, clampEndSlot])
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -279,7 +362,7 @@ export default function SpaceCalendar({
       const { dayIdx, startSlot } = dragRef.current
       const slot = slotFromClientY(e.clientY)
       dragRef.current.currentSlot = slot
-      const endSlot = clampEndSlot(dayIdx, startSlot, slot + 1)
+      const endSlot = clampEndSlot(dayIdx, startSlot, rawEndFor(startSlot, slot))
       setDragPreview({ dayIdx, startSlot, endSlot })
     }
 
@@ -287,12 +370,12 @@ export default function SpaceCalendar({
       if (!dragRef.current) return
       const { dayIdx, startSlot } = dragRef.current
       const slot = slotFromClientY(e.clientY)
-      const endSlot = clampEndSlot(dayIdx, startSlot, slot + 1)
+      const endSlot = clampEndSlot(dayIdx, startSlot, rawEndFor(startSlot, slot))
       dragRef.current = null
       setDragPreview(null)
       const start = slotToIso(weekStart, dayIdx, startSlot)
       const end = slotToIso(weekStart, dayIdx, endSlot)
-      onSlotClick(start, end)
+      onSlotClick(start, end, freeSpaceIdsFor(dayIdx, startSlot, endSlot))
     }
 
     document.addEventListener('mousemove', handleMouseMove)
@@ -301,9 +384,15 @@ export default function SpaceCalendar({
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [weekStart, onSlotClick, slotFromClientY, clampEndSlot])
+  }, [weekStart, onSlotClick, slotFromClientY, clampEndSlot, freeSpaceIdsFor])
 
   const totalHeight = TOTAL_SLOTS * SLOT_HEIGHT
+
+  /** Horizontal placement of something drawn in one lane of a day column. */
+  const laneStyle = (lane: number) => ({
+    left: `${(lane / laneCount) * 100}%`,
+    width: `${100 / laneCount}%`,
+  })
 
   return (
     /*
@@ -318,6 +407,19 @@ export default function SpaceCalendar({
       bottom of the screen instead.
     */
     <div className="rounded-xl border border-[#1e5080] overflow-hidden bg-[#0a1628] select-none isolate flex flex-col h-full min-h-0">
+      {/* Which colour, and which lane of each day, is which space */}
+      {laneSpaces && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 border-b border-[#1e5080] flex-shrink-0">
+          {laneSpaces.map((s, i) => (
+            <div key={s.id} className="flex items-center gap-1.5 text-xs text-[#93b8d8]">
+              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: LANE_COLORS[i % LANE_COLORS.length] }} />
+              {s.name}
+            </div>
+          ))}
+          <span className="text-xs text-[#6a96bb] sm:ml-auto">Left to right in each day</span>
+        </div>
+      )}
+
       <div ref={scrollRef} className="overflow-y-auto flex-1 min-h-0">
         {/* Sticky day header */}
         <div ref={headerRef} className="flex border-b border-[#1e5080] sticky top-0 z-[60] bg-[#0a1628]">
@@ -376,6 +478,15 @@ export default function SpaceCalendar({
                   />
                 ))}
 
+                {/* Lane dividers (All spaces view) */}
+                {lanes.slice(1).map(lane => (
+                  <div
+                    key={lane}
+                    className="absolute inset-y-0 border-l border-dashed border-white/10 pointer-events-none"
+                    style={{ left: `${(lane / laneCount) * 100}%` }}
+                  />
+                ))}
+
                 {/* Advance notice zone — darkened band */}
                 {noticeEndSlot > 0 && (
                   <div
@@ -398,11 +509,12 @@ export default function SpaceCalendar({
                 </div>
 
                 {/* Blackout overlays */}
-                {blackoutsByDay[dayIdx].map((bl, i) => (
+                {blackoutsByDay[dayIdx].flatMap((laneSpans, lane) => laneSpans.map((bl, i) => (
                   <div
-                    key={i}
-                    className="absolute inset-x-0 z-20 pointer-events-none"
+                    key={`${lane}-${i}`}
+                    className="absolute z-20 pointer-events-none"
                     style={{
+                      ...laneStyle(lane),
                       top: bl.startSlot * SLOT_HEIGHT,
                       height: (bl.endSlot - bl.startSlot) * SLOT_HEIGHT,
                     }}
@@ -414,24 +526,35 @@ export default function SpaceCalendar({
                       <span className="text-[8px] text-[#93b8d8] font-medium truncate">Blocked</span>
                     </div>
                   </div>
-                ))}
+                )))}
 
                 {/* Booking overlays */}
                 {bookingsByDay[dayIdx].map((bs, i) => {
                   const isShort = (bs.endSlot - bs.startSlot) <= 2
+                  const color = LANE_COLORS[bs.lane % LANE_COLORS.length]
+                  const hovered = hoveredBookingId === bs.booking.id
                   return (
                     <div
                       key={i}
-                      className="absolute inset-x-0 z-30 pointer-events-none"
+                      className="absolute z-30 pointer-events-none"
                       style={{
+                        ...laneStyle(bs.lane),
                         top: bs.startSlot * SLOT_HEIGHT,
                         height: (bs.endSlot - bs.startSlot) * SLOT_HEIGHT,
                       }}
+                      title={laneSpaces ? `${bs.booking.title} · ${laneSpaces[bs.lane].name}` : undefined}
                     >
-                      <div className={`h-full mx-0.5 rounded border border-[#c8102e] flex px-1 overflow-hidden transition-opacity ${
-                        isShort ? 'flex-row items-center gap-1' : 'flex-col items-start pt-0.5'
-                      } ${hoveredBookingId === bs.booking.id ? 'bg-[#c8102e]/60 opacity-80' : 'bg-[#c8102e]/80'}`}>
-                        <span className="text-[9px] text-white font-semibold truncate leading-none min-w-0">{bs.booking.title}</span>
+                      <div
+                        className={`h-full mx-0.5 rounded border flex px-1 overflow-hidden transition-opacity ${
+                          isShort ? 'flex-row items-center gap-1' : 'flex-col items-start pt-0.5'
+                        } ${hovered ? 'opacity-80' : ''}`}
+                        style={{ borderColor: color, backgroundColor: `${color}${hovered ? '99' : 'cc'}` }}
+                      >
+                        <span className="text-[9px] text-white font-semibold truncate leading-none min-w-0">
+                          {/* Marks one week of a weekly booking (issue #112). */}
+                          {bs.booking.series_id && <span aria-label="Repeats weekly" title="Repeats weekly">↻ </span>}
+                          {bs.booking.title}
+                        </span>
                         {bs.booking.creator_name && (
                           <span className={`text-[8px] text-white/70 leading-none ${isShort ? 'flex-shrink-0 truncate' : 'truncate w-full'}`}>
                             {bs.booking.creator_name}
