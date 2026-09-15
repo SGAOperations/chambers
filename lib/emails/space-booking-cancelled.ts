@@ -7,7 +7,8 @@ interface SpaceBookingCancelledParams {
   spaceName: string
   startTime: string // ISO timestamptz
   endTime: string   // ISO timestamptz
-  to: string
+  /** Several when the creator chose both their personal and an SGA inbox (issue #109). */
+  to: string[]
   bcc?: string[]
 }
 
@@ -78,7 +79,7 @@ function buildCancelIcs(bookingId: string, title: string, spaceName: string, sta
 
 export async function sendSpaceBookingCancelledEmail(params: SpaceBookingCancelledParams) {
   const { bookingId, title, spaceName, startTime, endTime, to, bcc } = params
-  if (!to) return
+  if (!to.length) return
 
   const sTitle = sanitize(title)
 

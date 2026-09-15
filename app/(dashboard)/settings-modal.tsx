@@ -5,6 +5,7 @@ import { getJson } from '@/lib/fetch-json'
 import { Skeleton } from '@/app/_components/skeleton'
 import { getPrefsForRole, EMAIL_PREF_LABELS, EmailPrefKey } from '@/lib/email-preferences'
 import { SENATE_TYPES } from '@/lib/senate-types'
+import type { SgaEmailOption, SpacesEmailDestination } from '@/lib/spaces-email'
 
 interface Membership {
   id: string
@@ -30,6 +31,10 @@ export interface Settings {
   senate_type_preferences: Record<string, boolean>
   admin_role: string | null
   iems_role: string | null
+  personal_email: string
+  spaces_email_destination: SpacesEmailDestination
+  spaces_sga_email: string | null
+  sga_email_options: SgaEmailOption[]
   memberships: Membership[]
   pending_requests: PendingRequest[]
   available_bodies: AvailableBody[]
@@ -56,6 +61,7 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
   const [addingBody, setAddingBody] = useState(false)
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [spacesEmailError, setSpacesEmailError] = useState(false)
 
   const loadSettings = () => {
     setLoading(true)
@@ -148,7 +154,42 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
     window.dispatchEvent(new Event('chambers:senate-prefs-updated'))
   }
 
+  // Where SGA Spaces emails go (issue #109). Saved on change like the toggles
+  // below, but rolled back on failure: the server refuses an inbox the user no
+  // longer leads a body for, and a choice that looks saved and is not would send
+  // the next invite somewhere the user is not expecting.
+  const saveSpacesEmail = async (destination: SpacesEmailDestination, sgaEmail: string | null) => {
+    if (!settings) return
+    const previous = {
+      spaces_email_destination: settings.spaces_email_destination,
+      spaces_sga_email: settings.spaces_sga_email,
+    }
+    setSettings(prev => prev ? { ...prev, spaces_email_destination: destination, spaces_sga_email: sgaEmail } : prev)
+    setSpacesEmailError(false)
+    const res = await fetch('/api/me/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spaces_email_destination: destination, spaces_sga_email: sgaEmail }),
+    })
+    if (!res.ok) {
+      setSettings(prev => prev ? { ...prev, ...previous } : prev)
+      setSpacesEmailError(true)
+    }
+  }
+
   const eligibleKeys = settings ? getPrefsForRole(settings.admin_role, settings.iems_role) : []
+  const isLeadership = settings?.memberships.some(m => m.role === 'Leadership') ?? false
+  const sgaOptions = settings?.sga_email_options ?? []
+  // The stored inbox only counts while it is still on offer. Otherwise the send
+  // path falls back to personal, so the modal says so rather than showing a
+  // choice that is no longer honored.
+  const chosenSgaOption = sgaOptions.find(
+    o => o.email.toLowerCase() === settings?.spaces_sga_email?.toLowerCase()
+  )
+  const spacesChoiceLapsed = !!settings && settings.spaces_email_destination !== 'personal' && !chosenSgaOption
+  const spacesDestination: SpacesEmailDestination = spacesChoiceLapsed
+    ? 'personal'
+    : settings?.spaces_email_destination ?? 'personal'
   const selectedBody = settings?.available_bodies.find(b => b.id === selectedBodyId)
   const isSenateMember = settings?.memberships.some(m => m.bodies?.name === 'Senate') ?? false
 
@@ -293,6 +334,69 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
                 </label>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* SGA Spaces email destination (issue #109). Leadership only -- they are
+            the only ones who can book SGA Spaces, and the only ones with an SGA
+            inbox to choose. */}
+        {!loading && isLeadership && settings && (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-medium text-[#93b8d8]">Send SGA Spaces Confirmations To</p>
+              <p className="text-xs text-[#6a96bb] mt-1">
+                Applies to confirmation and cancellation emails, including their calendar invites.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <select
+                aria-label="SGA Spaces email destination"
+                value={spacesDestination}
+                onChange={e => {
+                  const destination = e.target.value as SpacesEmailDestination
+                  const inbox = destination === 'personal'
+                    ? null
+                    : (chosenSgaOption ?? sgaOptions[0])?.email ?? null
+                  saveSpacesEmail(destination, inbox)
+                }}
+                className={inputCls}
+              >
+                <option value="personal">My personal email</option>
+                <option value="sga" disabled={sgaOptions.length === 0}>My SGA email</option>
+                <option value="both" disabled={sgaOptions.length === 0}>Both</option>
+              </select>
+              {spacesDestination !== 'personal' && sgaOptions.length > 0 && (
+                <select
+                  aria-label="SGA email"
+                  value={chosenSgaOption?.email ?? ''}
+                  onChange={e => saveSpacesEmail(spacesDestination, e.target.value)}
+                  className={inputCls}
+                >
+                  {sgaOptions.map(o => (
+                    <option key={o.email} value={o.email}>{o.email}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {sgaOptions.length === 0 ? (
+              <p className="text-xs text-[#6a96bb]">
+                None of the bodies you lead has an SGA email, so confirmations go to {settings.personal_email}.
+              </p>
+            ) : spacesChoiceLapsed ? (
+              <p className="text-xs text-[#fbbf24]">
+                The SGA email you chose is no longer available to you, so confirmations go to {settings.personal_email}.
+              </p>
+            ) : spacesDestination === 'personal' ? (
+              <p className="text-xs text-[#6a96bb]">Sent to {settings.personal_email}.</p>
+            ) : (
+              <p className="text-xs text-[#6a96bb]">
+                {spacesDestination === 'both' ? `Sent to ${settings.personal_email} and ` : 'Sent to '}
+                {chosenSgaOption?.email} ({chosenSgaOption?.bodies.join(', ')}).
+              </p>
+            )}
+            {spacesEmailError && (
+              <p className="text-xs text-[#f87171]">Could not save that choice.</p>
+            )}
           </div>
         )}
 

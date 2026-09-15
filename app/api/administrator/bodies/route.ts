@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { isManagementRole } from '@/lib/admin-roles'
 import { isBodyType } from '@/lib/body-types'
+import { dedupeEmails, isSgaEmail } from '@/lib/spaces-email'
 
 export async function GET() {
   const supabase = await createClient()
@@ -18,7 +19,7 @@ export async function GET() {
 
   const { data: bodies } = await supabase
     .from('bodies')
-    .select('id, name, division, is_active, body_open, body_type, slack_channel_id, slack_reminders_enabled')
+    .select('id, name, division, is_active, body_open, body_type, slack_channel_id, slack_reminders_enabled, sga_emails')
     .order('name', { ascending: true })
 
   return NextResponse.json({ bodies: bodies || [] })
@@ -78,7 +79,7 @@ export async function PATCH(request: Request) {
 
   const {
     id, name, division, is_active, body_open,
-    body_type, slack_channel_id, slack_reminders_enabled,
+    body_type, slack_channel_id, slack_reminders_enabled, sga_emails,
   } = await request.json()
 
   if (body_type !== undefined && !isBodyType(body_type)) {
@@ -103,6 +104,24 @@ export async function PATCH(request: Request) {
     }
   }
 
+  // The shared SGA inboxes this body's Leadership may send SGA Spaces emails to
+  // (issue #109). Checked here because Postgres would take any string, and a
+  // typo'd inbox would be offered in Settings and then deliver nowhere.
+  let sgaEmails: string[] | undefined
+  if (sga_emails !== undefined) {
+    if (!Array.isArray(sga_emails)) {
+      return NextResponse.json({ error: 'sga_emails must be a list.' }, { status: 400 })
+    }
+    const trimmed = sga_emails.map((e: unknown) => (typeof e === 'string' ? e.trim() : e)).filter(Boolean)
+    const invalid = trimmed.find((e: unknown) => !isSgaEmail(e))
+    if (invalid !== undefined) {
+      return NextResponse.json({
+        error: `"${String(invalid)}" is not a northeastern.edu email address.`,
+      }, { status: 400 })
+    }
+    sgaEmails = dedupeEmails(trimmed as string[])
+  }
+
   const updates: Record<string, unknown> = {}
   if (name !== undefined) updates.name = name
   if (division !== undefined) updates.division = division
@@ -110,6 +129,7 @@ export async function PATCH(request: Request) {
   if (body_open !== undefined) updates.body_open = body_open
   if (body_type !== undefined) updates.body_type = body_type
   if (channelId !== undefined) updates.slack_channel_id = channelId
+  if (sgaEmails !== undefined) updates.sga_emails = sgaEmails
   if (slack_reminders_enabled !== undefined) {
     updates.slack_reminders_enabled = !!slack_reminders_enabled
   }
