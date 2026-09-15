@@ -30,6 +30,13 @@ interface SpaceBookingModalProps {
   initialAttendees?: User[]
   onCancelBooking?: () => Promise<void>
   spaces?: Space[]
+  /**
+   * Spaces already taken at the time picked, when it was picked in the All
+   * spaces view. They are listed after the free ones and marked, not hidden:
+   * changing the time in this form can free them, and the server has the final
+   * word either way.
+   */
+  busySpaceIds?: string[]
   /** Hours of notice required before newly claimed time. 0 disables the rule. */
   minHoursAdvance?: number
 }
@@ -64,6 +71,7 @@ export default function SpaceBookingModal({
   initialAttendees = [],
   onCancelBooking,
   spaces,
+  busySpaceIds,
   minHoursAdvance = 0,
 }: SpaceBookingModalProps) {
   const isEditing = !!editBookingId
@@ -225,9 +233,13 @@ export default function SpaceBookingModal({
                 onChange={e => setSelectedSpaceId(e.target.value)}
                 className={inputCls}
               >
-                {spaces.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} (cap. {s.capacity})</option>
-                ))}
+                {[...spaces]
+                  .sort((a, b) => Number(!!busySpaceIds?.includes(a.id)) - Number(!!busySpaceIds?.includes(b.id)))
+                  .map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (cap. {s.capacity}){busySpaceIds?.includes(s.id) ? ' — booked at the time you picked' : ''}
+                    </option>
+                  ))}
               </select>
             </div>
           )}
