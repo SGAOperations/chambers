@@ -28,6 +28,12 @@ interface Body {
 }
 
 interface OneTimeSession {
+  /**
+   * The stored row this edits, sent back so the save writes it in place rather
+   * than replacing it -- which is what keeps its calendar invite pointing at the
+   * same event (issue #69). Absent for a session added here.
+   */
+  id?: string
   room_name: string
   booking_date: string
   start_time: string
@@ -85,6 +91,7 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
 
   const [sessions, setSessions] = useState<OneTimeSession[]>(
     booking.one_time_room_bookings?.map(d => ({
+      id: d.id,
       room_name: d.room_name ?? '',
       booking_date: d.booking_date ?? '',
       start_time: d.start_time.slice(0, 5) ?? '',

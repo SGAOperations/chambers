@@ -1,6 +1,9 @@
 import { emailFrom, resend } from '@/lib/resend'
 import { sanitize, buildEmailHtml } from './utils'
 import { formatDate, formatTime, renderChanges, type BookingChange } from './changes'
+import { icsSequenceNow } from './ics-core'
+import { roomIcsAttachments } from './room-ics'
+import type { InvitePlan } from '@/lib/room-calendar'
 
 /**
  * One session of a repeating booking that an edit actually moved.
@@ -48,6 +51,13 @@ interface BookingUpdatedEmailParams {
   sessions?: UpdatedSession[] | null
   /** Shown above the details when set, e.g. the booking's purpose. */
   purpose?: string | null
+  /**
+   * How this edit changes the recipients' calendars (issue #69): the sessions to
+   * put on or move, and the ones to take off. Attached here rather than sent
+   * separately, since these people are being emailed anyway and every address
+   * counts against the Resend quota.
+   */
+  invite?: InvitePlan | null
 }
 
 /** The "Body / Room / Date / Time / Status" block, in both bodies of the email. */
@@ -95,7 +105,7 @@ ${details.text.split('\n').map(l => `  ${l}`).join('\n')}`,
 export async function sendBookingUpdatedEmail(params: BookingUpdatedEmailParams) {
   const {
     bodyName, roomOrTable, date, startTime, endTime, status, recipients,
-    changes = [], sessions = null, purpose = null,
+    changes = [], sessions = null, purpose = null, invite = null,
   } = params
   if (!recipients.length) return
 
@@ -126,6 +136,9 @@ If you have questions, please reach out to sgaOperations@northeastern.edu.`,
       <p style="margin:0 0 16px;">${lead}</p>
       ${html}
     `),
+    ...(invite && (invite.request.length || invite.cancel.length)
+      ? { attachments: roomIcsAttachments(invite, icsSequenceNow()) }
+      : {}),
   })
 }
 

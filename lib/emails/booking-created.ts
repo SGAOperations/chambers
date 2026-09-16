@@ -1,6 +1,9 @@
 import { emailFrom, resend } from '@/lib/resend'
 import { sanitize, buildEmailHtml } from './utils'
 import { formatDate, formatTime } from './changes'
+import { icsSequenceNow } from './ics-core'
+import { roomIcsAttachments } from './room-ics'
+import type { InvitePlan } from '@/lib/room-calendar'
 
 /**
  * One dated slot on the booking. A one-time booking can carry several, a weekly
@@ -23,6 +26,12 @@ interface BookingCreatedEmailParams {
   /** Shown only when set; a weekly series has one, a one-time booking does not. */
   dateRange?: { start: string; end: string } | null
   recipients: string[]
+  /**
+   * The sessions to put on the recipients' calendars (issue #69). Attached to
+   * this email rather than sent as one of its own, because every address counts
+   * against the Resend quota and these people are being emailed anyway.
+   */
+  invite?: InvitePlan | null
 }
 
 /**
@@ -36,7 +45,7 @@ interface BookingCreatedEmailParams {
 const MAX_LISTED_SESSIONS = 8
 
 export async function sendBookingCreatedEmail(params: BookingCreatedEmailParams) {
-  const { bodyName, bookingType, purpose, roomOrTable, status, sessions, dateRange, recipients } = params
+  const { bodyName, bookingType, purpose, roomOrTable, status, sessions, dateRange, recipients, invite } = params
   if (!recipients.length) return
 
   const sBodyName = sanitize(bodyName)
@@ -107,5 +116,8 @@ If you have questions, please reach out to sgaOperations@northeastern.edu.`,
       </table>
       <p style="margin:0;color:#555;">You can see this booking, and request a change to it, in Chambers under My Rooms.</p>
     `),
+    ...(invite && (invite.request.length || invite.cancel.length)
+      ? { attachments: roomIcsAttachments(invite, icsSequenceNow()) }
+      : {}),
   })
 }

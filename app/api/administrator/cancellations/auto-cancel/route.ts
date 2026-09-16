@@ -3,6 +3,8 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { notifyCancelledReservations } from '@/lib/room-invites'
+import { waitUntil } from '@vercel/functions'
 import { sendCscCancellationRequest } from '@/lib/emails/csc-cancellation-request'
 import {
   applyCancellationOutcomes,
@@ -192,6 +194,20 @@ export async function POST(request: Request) {
   // result: the same request resolved either way should leave the database in
   // the same state.
   const failures = await applyCancellationOutcomes(selected)
+
+  // The body is told too (issue #69). Auto-Cancel emailed CSC to release the
+  // room and nobody else, so the meeting stayed on every calendar it had
+  // reached. waitUntil: the statuses are written, and the admin should not wait
+  // on a Resend round trip.
+  waitUntil(
+    (async () => {
+      try {
+        await notifyCancelledReservations(selected)
+      } catch (e) {
+        console.error('Cancellation notice failed:', e)
+      }
+    })()
+  )
 
   // Close the cancellation requests this send acted on, so nobody has to go and
   // press "Mark as Done" for work Auto-Cancel already did.

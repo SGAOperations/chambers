@@ -338,6 +338,11 @@ export interface Recipient {
   userId: string
   email: string
   fullName: string
+  /**
+   * What they follow, for callers that decide session by session rather than
+   * per email -- calendar invites list one event per session (issue #69).
+   */
+  senatePreferences: Record<string, boolean> | null
 }
 
 interface RecipientUser {
@@ -442,6 +447,7 @@ export async function resolveBookingRecipients(
         userId: m.user_id,
         email: user.email,
         fullName: user.full_name,
+        senatePreferences: user.senate_type_preferences ?? null,
       })
     }
   }
