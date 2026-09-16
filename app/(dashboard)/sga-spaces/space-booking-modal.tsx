@@ -233,6 +233,7 @@ export default function SpaceBookingModal({
       }
 
       setSeries(info)
+      setSelectedSpaceId(info.space_id)
       setTitle(info.title)
       setStartTime(info.start_time)
       setEndTime(info.end_time)
@@ -293,8 +294,8 @@ export default function SpaceBookingModal({
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: title.trim(), start_time: startTime, end_time: endTime, until, attendee_ids,
-            skip_conflicts: skipConflicts,
+            space_id: selectedSpaceId, title: title.trim(), start_time: startTime, end_time: endTime, until,
+            attendee_ids, skip_conflicts: skipConflicts,
           }),
         })
       } else if (creatingSeries) {
@@ -349,6 +350,7 @@ export default function SpaceBookingModal({
   const seriesMaxDate = editingSeries ? series?.semester_end_date ?? undefined : semesterEndDate ?? undefined
   const cancelLabel = editingSeries ? 'Cancel all upcoming weeks' : seriesId ? 'Cancel this week' : 'Cancel this booking'
   const canCancel = editingSeries ? !!onCancelSeries : !!onCancelBooking
+  const busyIds = editingSeries ? undefined : busySpaceIds
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -399,12 +401,13 @@ export default function SpaceBookingModal({
           )}
 
           {/*
-            Location selector. Offered when editing one booking -- or one week of
-            a series -- as well as when creating, so a meeting can follow a room
-            change instead of being cancelled and rebooked. Not for a series edit,
-            which keeps the series' space.
+            Location selector. Offered when creating and when editing -- one
+            booking, one week of a series, or the whole series (issue #127) -- so
+            a meeting can follow a room change instead of being cancelled and
+            rebooked. The busy markers describe the one time picked, so they are
+            left off a series, whose weeks are checked on the server.
           */}
-          {!editingSeries && spaces && spaces.length > 1 && (
+          {(!editingSeries || series) && spaces && spaces.length > 1 && (
             <div>
               <label className={labelCls}>Location</label>
               <select
@@ -413,10 +416,10 @@ export default function SpaceBookingModal({
                 className={inputCls}
               >
                 {[...spaces]
-                  .sort((a, b) => Number(!!busySpaceIds?.includes(a.id)) - Number(!!busySpaceIds?.includes(b.id)))
+                  .sort((a, b) => Number(!!busyIds?.includes(a.id)) - Number(!!busyIds?.includes(b.id)))
                   .map(s => (
                     <option key={s.id} value={s.id}>
-                      {s.name} (cap. {s.capacity}){busySpaceIds?.includes(s.id) ? ' — booked at the time you picked' : ''}
+                      {s.name} (cap. {s.capacity}){busyIds?.includes(s.id) ? ' — booked at the time you picked' : ''}
                     </option>
                   ))}
               </select>
