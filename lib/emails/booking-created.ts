@@ -4,6 +4,7 @@ import { formatDate, formatTime } from './changes'
 import { icsSequenceNow } from './ics-core'
 import { roomIcsAttachments } from './room-ics'
 import type { InvitePlan } from '@/lib/room-calendar'
+import { meetingTimeMatchesStart } from '@/lib/meeting-time'
 
 /**
  * One dated slot on the booking. A one-time booking can carry several, a weekly
@@ -13,7 +14,26 @@ export interface BookingSession {
   date: string
   startTime: string
   endTime: string
+  /**
+   * When the meeting itself starts, already resolved (issue #126). Required so
+   * a caller cannot omit it; it is only *printed* when it differs from
+   * startTime, since otherwise the reservation window on the same line already
+   * says it and a semester of identical "meets at" suffixes is noise.
+   */
+  meetingTime: string
   roomOrTable?: string | null
+}
+
+/**
+ * "meets 6:30 PM", preceded by `sep`, or nothing at all when the meeting starts
+ * with the reservation. The separator is a parameter because the two bodies of
+ * this email spell it differently -- a literal middot in the text part, the HTML
+ * entity in the markup.
+ */
+function meetsSuffix(s: BookingSession, sep: string): string {
+  return meetingTimeMatchesStart(s.meetingTime, s.startTime)
+    ? ''
+    : `${sep}meets ${formatTime(s.meetingTime)}`
 }
 
 interface BookingCreatedEmailParams {
@@ -60,13 +80,13 @@ export async function sendBookingCreatedEmail(params: BookingCreatedEmailParams)
   const remaining = sessions.length - listed.length
 
   const sessionLinesText = listed
-    .map(s => `  ${formatDate(s.date)} · ${formatTime(s.startTime)} to ${formatTime(s.endTime)}${
+    .map(s => `  ${formatDate(s.date)} · ${formatTime(s.startTime)} to ${formatTime(s.endTime)}${meetsSuffix(s, ' · ')}${
       s.roomOrTable ? ` · ${sanitize(s.roomOrTable)}` : ''
     }`)
     .join('\n')
 
   const sessionLinesHtml = listed
-    .map(s => `<tr><td style="padding:3px 0;">${formatDate(s.date)} &middot; ${formatTime(s.startTime)} to ${formatTime(s.endTime)}${
+    .map(s => `<tr><td style="padding:3px 0;">${formatDate(s.date)} &middot; ${formatTime(s.startTime)} to ${formatTime(s.endTime)}${meetsSuffix(s, ' &middot; ')}${
       s.roomOrTable ? ` &middot; ${sanitize(s.roomOrTable)}` : ''
     }</td></tr>`)
     .join('')

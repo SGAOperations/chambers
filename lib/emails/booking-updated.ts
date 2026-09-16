@@ -16,6 +16,12 @@ export interface UpdatedSession {
   date: string
   startTime: string
   endTime: string
+  /**
+   * When the meeting itself starts, already resolved against the series
+   * (issue #126). Required rather than optional so a caller cannot quietly omit
+   * it and send an email that describes only the reservation window.
+   */
+  meetingTime: string
   roomOrTable: string
   status: string
   purpose?: string | null
@@ -31,6 +37,8 @@ interface BookingUpdatedEmailParams {
   date: string
   startTime: string
   endTime: string
+  /** The series' resolved meeting time (issue #126). */
+  meetingTime: string
   status: string
   recipients: string[]
   /**
@@ -83,6 +91,7 @@ function renderSession(session: UpdatedSession): { text: string; html: string } 
     ...(session.purpose ? [{ label: 'Purpose', value: sanitize(session.purpose) }] : []),
     { label: 'Room/Table', value: sanitize(session.roomOrTable) },
     { label: 'Time', value: `${formatTime(session.startTime)} to ${formatTime(session.endTime)}` },
+    { label: 'Meeting time', value: formatTime(session.meetingTime) },
     { label: 'Status', value: sanitize(session.status) },
   ])
 
@@ -104,7 +113,7 @@ ${details.text.split('\n').map(l => `  ${l}`).join('\n')}`,
 
 export async function sendBookingUpdatedEmail(params: BookingUpdatedEmailParams) {
   const {
-    bodyName, roomOrTable, date, startTime, endTime, status, recipients,
+    bodyName, roomOrTable, date, startTime, endTime, meetingTime, status, recipients,
     changes = [], sessions = null, purpose = null, invite = null,
   } = params
   if (!recipients.length) return
@@ -120,7 +129,7 @@ export async function sendBookingUpdatedEmail(params: BookingUpdatedEmailParams)
     ? buildMultiSession(sBodyName, moved)
     : moved.length === 1
       ? buildSingleSession(sBodyName, moved[0])
-      : buildSeries(sBodyName, sPurpose, { roomOrTable, date, startTime, endTime, status }, changes)
+      : buildSeries(sBodyName, sPurpose, { roomOrTable, date, startTime, endTime, meetingTime, status }, changes)
 
   await resend.emails.send({
     from: emailFrom(),
@@ -145,7 +154,7 @@ If you have questions, please reach out to sgaOperations@northeastern.edu.`,
 function buildSeries(
   sBodyName: string,
   sPurpose: string | null,
-  now: { roomOrTable: string; date: string; startTime: string; endTime: string; status: string },
+  now: { roomOrTable: string; date: string; startTime: string; endTime: string; meetingTime: string; status: string },
   changes: BookingChange[]
 ) {
   const rendered = renderChanges(changes)
@@ -154,7 +163,11 @@ function buildSeries(
     { label: 'Body', value: sBodyName },
     { label: 'Room/Table', value: sanitize(now.roomOrTable) },
     { label: 'Date', value: formatDate(now.date) },
+    // Kept next to the reservation window rather than replacing it: the window
+    // is what Chambers holds and what a body needs if it is setting up early,
+    // and the meeting time is the one its members act on (issue #126).
     { label: 'Time', value: `${formatTime(now.startTime)} to ${formatTime(now.endTime)}` },
+    { label: 'Meeting time', value: formatTime(now.meetingTime) },
     { label: 'Status', value: sanitize(now.status) },
   ])
 
@@ -179,6 +192,7 @@ function buildSingleSession(sBodyName: string, session: UpdatedSession) {
     { label: 'Room/Table', value: sanitize(session.roomOrTable) },
     { label: 'Session date', value: formatDate(session.date) },
     { label: 'Time', value: `${formatTime(session.startTime)} to ${formatTime(session.endTime)}` },
+    { label: 'Meeting time', value: formatTime(session.meetingTime) },
     { label: 'Status', value: sanitize(session.status) },
     ...(session.position ? [{ label: 'Session', value: sanitize(session.position) }] : []),
   ])

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { sendMissedReservationEmail } from '@/lib/emails/missed-reservation'
 import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { sendBookingCreatedEmail } from '@/lib/emails/booking-created'
+import { meetingTimeForStorage, resolveMeetingTime } from '@/lib/meeting-time'
 import { changed, collectChanges, formatDate, formatTime } from '@/lib/emails/changes'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
@@ -90,6 +91,7 @@ export async function POST(request: Request) {
     session_date: string
     start_time: string
     end_time: string
+    meeting_time: string | null
     reservation_code: string
     status: string
   }) => ({
@@ -98,6 +100,7 @@ export async function POST(request: Request) {
     session_date: s.session_date,
     start_time: s.start_time,
     end_time: s.end_time,
+    meeting_time: meetingTimeForStorage(s.meeting_time, s.start_time),
     reservation_code: s.reservation_code || null,
     status: s.status,
   }))
@@ -133,10 +136,11 @@ export async function POST(request: Request) {
           purpose,
           roomOrTable: sessionRows[0]?.location || 'N/A',
           status: sessionRows[0]?.status ?? 'Reserved',
-          sessions: sessionRows.map((r: { session_date: string; start_time: string; end_time: string; location: string }) => ({
+          sessions: sessionRows.map((r: { session_date: string; start_time: string; end_time: string; meeting_time: string | null; location: string }) => ({
             date: r.session_date,
             startTime: r.start_time,
             endTime: r.end_time,
+            meetingTime: resolveMeetingTime(r.meeting_time, r.start_time),
             roomOrTable: r.location,
           })),
           recipients: recipients.map(r => r.email),
@@ -155,6 +159,8 @@ interface Session {
   session_date: string
   start_time: string
   end_time: string
+  /** Blank means the session meets when its reservation starts (issue #126). */
+  meeting_time: string | null
   status: string
   reservation_code: string | null
 }
@@ -182,7 +188,7 @@ export async function PATCH(request: Request) {
     adminSupabase.from('tabling_bookings').select('reservation_code').eq('id', tabling_id).single(),
     adminSupabase
       .from('tabling_sessions')
-      .select('location, session_date, start_time, end_time, status')
+      .select('location, session_date, start_time, end_time, meeting_time, status')
       .eq('tabling_booking_id', tabling_id)
       .order('session_date', { ascending: true }),
   ])
@@ -226,6 +232,7 @@ export async function PATCH(request: Request) {
     session_date: s.session_date,
     start_time: s.start_time,
     end_time: s.end_time,
+    meeting_time: meetingTimeForStorage(s.meeting_time, s.start_time),
     status: s.status,
     reservation_code: s.reservation_code || null,
   }))
@@ -288,6 +295,14 @@ export async function PATCH(request: Request) {
           changed('Date', prevFirst?.session_date, sessions[0]?.session_date, formatDate),
           changed('Start time', prevFirst?.start_time, sessions[0]?.start_time, formatTime),
           changed('End time', prevFirst?.end_time, sessions[0]?.end_time, formatTime),
+          // Effective values on both sides, so a session that has never set a
+          // meeting time does not report one when its start time moves (#126).
+          changed(
+            'Meeting time',
+            resolveMeetingTime(prevFirst?.meeting_time, prevFirst?.start_time),
+            resolveMeetingTime(sessions[0]?.meeting_time, sessions[0]?.start_time),
+            formatTime
+          ),
         )
 
         await sendBookingUpdatedEmail({
@@ -297,6 +312,7 @@ export async function PATCH(request: Request) {
           date: sessions[0]?.session_date ?? '',
           startTime: sessions[0]?.start_time ?? '',
           endTime: sessions[0]?.end_time ?? '',
+          meetingTime: resolveMeetingTime(sessions[0]?.meeting_time, sessions[0]?.start_time ?? ''),
           status: statusSummary,
           changes,
           recipients: emails,

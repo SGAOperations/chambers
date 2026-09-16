@@ -1,4 +1,5 @@
 import { APP_TIME_ZONE } from '@/lib/app-zone'
+import { resolveMeetingTime } from '@/lib/meeting-time'
 
 /**
  * Working out which committee meetings the Slack bot should remind a channel
@@ -69,6 +70,7 @@ export interface ReminderCandidate {
   room_name: string | null
   start_time: string | null
   end_time: string | null
+  meeting_time: string | null
   status: string | null
   hidden: boolean | null
   weekly_booking_id: string
@@ -76,6 +78,7 @@ export interface ReminderCandidate {
     room_name: string | null
     start_time: string | null
     end_time: string | null
+    meeting_time: string | null
     status: string | null
   }
   booking: {
@@ -96,6 +99,13 @@ export interface ResolvedMeeting {
   roomName: string | null
   startTime: string | null
   endTime: string | null
+  /**
+   * The time the meeting itself starts, already resolved (issue #126). This is
+   * the only time the reminder prints; startTime and endTime stay on the shape
+   * because the resolution below falls back to startTime and because a future
+   * reminder may want to say what the room is held for.
+   */
+  meetingTime: string | null
   status: string
 }
 
@@ -118,14 +128,21 @@ export function resolveMeeting(c: ReminderCandidate): ResolvedMeeting | null {
   const status = c.status ?? c.series.status
   if (!status || !REMINDED_STATUSES.has(status)) return null
 
+  const startTime = c.start_time ?? c.series.start_time
+
   return {
     weeklyBookingId: c.weekly_booking_id,
     date: c.occurrence_date,
     channelId: c.body.slack_channel_id,
     bodyName: c.body.name,
     roomName: c.room_name ?? c.series.room_name,
-    startTime: c.start_time ?? c.series.start_time,
+    startTime,
     endTime: c.end_time ?? c.series.end_time,
+    // Same precedence as everything above it, with one extra level on the end:
+    // a series that has never had a meeting time set falls back to the start
+    // time this week resolved to, so the reminder reads exactly as it did
+    // before the field existed (issue #126).
+    meetingTime: resolveMeetingTime(c.meeting_time, c.series.meeting_time, startTime),
     status,
   }
 }
@@ -174,9 +191,12 @@ export function formatReminder(m: ResolvedMeeting): string {
     return [opening, 'Check with your Chair/Director for virtual meeting information.'].join('\n')
   }
 
-  const start = formatTime(m.startTime)
-  const end = formatTime(m.endTime)
-  const when = start && end ? `${start}–${end}` : start ?? 'to be confirmed'
+  // The meeting time alone, not the reservation window (issue #126). The window
+  // is what Chambers holds the room for -- it usually opens before the meeting
+  // does and runs past the end of it -- and printing it here told a channel to
+  // turn up at a time nobody meant. Still labelled "Time", the colloquial
+  // reading the issue asks for.
+  const when = formatTime(m.meetingTime) ?? 'to be confirmed'
   const room = m.roomName ? esc(m.roomName) : 'not yet confirmed'
 
   const roomLabel = ALTERNATE_ROOM.has(m.status) ? '*Alternate* Room' : 'Room'

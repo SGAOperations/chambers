@@ -8,6 +8,7 @@ import {
   statusTextColors,
   formatTime,
 } from './shared'
+import { meetingTimeMatchesStart } from '@/lib/meeting-time'
 
 interface CalendarViewProps {
   bookings: FlatBooking[]
@@ -168,7 +169,16 @@ export default function CalendarView({ bookings, onSelect, today }: CalendarView
                         <span className="text-xs text-[#93b8d8] truncate">{b.scopeLabel}</span>
                       )}
                     </div>
-                    <p className="text-sm text-[#6a96bb]">{b.location} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                    {/* Meeting time first, reservation window only when it differs (issue #126). */}
+                    <p className="text-sm text-[#6a96bb]">
+                      {b.location} ·{' '}
+                      <span className="text-[#93b8d8] font-medium">{formatTime(b.meetingTime)}</span>
+                      {meetingTimeMatchesStart(b.meetingTime, b.startTime) ? (
+                        <> – {formatTime(b.endTime)}</>
+                      ) : (
+                        <> (reserved {formatTime(b.startTime)} – {formatTime(b.endTime)})</>
+                      )}
+                    </p>
                   </div>
                   <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
                 </div>

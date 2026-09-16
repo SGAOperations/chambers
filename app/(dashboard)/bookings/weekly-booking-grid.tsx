@@ -9,6 +9,8 @@ interface WeeklyOccurrence {
   room_name: string | null
   start_time: string | null
   end_time: string | null
+  /** Overrides the series meeting time for this date; null inherits (issue #126). */
+  meeting_time: string | null
   status: string | null
   reservation_code: string | null
   senate_type: string | null
@@ -38,6 +40,7 @@ interface WeeklyBooking {
     end_date: string
     start_time: string
     end_time: string
+    meeting_time: string | null
     status: string
     reservation_code: string | null
     weekly_room_occurrences: WeeklyOccurrence[]

@@ -22,6 +22,7 @@ import {
   formatTime,
   formatDate,
 } from './shared'
+import { meetingTimeMatchesStart } from '@/lib/meeting-time'
 
 function MyRoomsSkeleton() {
   return (
@@ -267,8 +268,25 @@ export default function MyRoomsClient({
                     {b.scopeLabel} <span className="text-[#4a7ba7]">·</span> {b.location}
                   </p>
                   <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
+                  {/*
+                    The meeting time leads, because it is the one a member acts
+                    on -- the reservation window is when the room is held, which
+                    is Chambers' concern rather than theirs (issue #126). When no
+                    distinct meeting time is set the two are the same, so the
+                    line reads exactly as it always did with the start bolded;
+                    only a booking that genuinely meets later spends the extra
+                    words saying what the room is held for. Either way it is one
+                    line, so the card keeps the height issue #78 settled on.
+                  */}
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                    <p className="text-sm text-[#6a96bb]">
+                      <span className="text-[#f0f6ff] font-semibold">{formatTime(b.meetingTime)}</span>
+                      {meetingTimeMatchesStart(b.meetingTime, b.startTime) ? (
+                        <> – {formatTime(b.endTime)}</>
+                      ) : (
+                        <> <span className="text-[#4a7ba7]">·</span> reserved {formatTime(b.startTime)} – {formatTime(b.endTime)}</>
+                      )}
+                    </p>
                     {b.senateType && (
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
                     )}
@@ -376,7 +394,15 @@ export default function MyRoomsClient({
                                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
                                 )}
                               </div>
-                              <p className="text-sm text-[#6a96bb]">{b.location} · {formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                              <p className="text-sm text-[#6a96bb]">
+                                {b.location} · {formatDate(b.date)} ·{' '}
+                                <span className="text-[#93b8d8] font-medium">{formatTime(b.meetingTime)}</span>
+                                {meetingTimeMatchesStart(b.meetingTime, b.startTime) ? (
+                                  <> – {formatTime(b.endTime)}</>
+                                ) : (
+                                  <> (reserved {formatTime(b.startTime)} – {formatTime(b.endTime)})</>
+                                )}
+                              </p>
                             </div>
                             <span className="hidden md:inline text-xs text-[#6a96bb] flex-shrink-0">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
                             <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>

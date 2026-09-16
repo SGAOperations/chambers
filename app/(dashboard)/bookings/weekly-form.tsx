@@ -86,6 +86,7 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
     end_date: '',
     start_time: '',
     end_time: '',
+    meeting_time: '',
     reservation_code: '',
     status: 'Reserved',
   })
@@ -220,6 +221,29 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
           <label className={labelCls}>End Time *</label>
           <TimePicker value={form.end_time} onChange={v => setForm({ ...form, end_time: v })} />
         </div>
+      </div>
+
+      {/*
+        Meeting Time: when the body actually meets, as opposed to when the room
+        is held (issue #126). Tracks the start time until it is touched -- an
+        empty picker would invite retyping the start time by hand, and the server
+        collapses a meeting time equal to the start back to "inherit" anyway, so
+        an untouched field stores nothing and keeps following the reservation.
+
+        Its own row rather than a third column: three TimePickers abreast is what
+        issue #24 had to unpick on mobile.
+      */}
+      <div>
+        <label className={labelCls}>Meeting Time</label>
+        <div className="sm:w-1/2 sm:pr-1.5">
+          <TimePicker
+            value={form.meeting_time || form.start_time}
+            onChange={v => setForm({ ...form, meeting_time: v })}
+          />
+        </div>
+        <p className="text-xs text-[#6a96bb] mt-1">
+          When the meeting itself starts. Leave it on the start time unless the room is held early for setup.
+        </p>
       </div>
 
       <div>
