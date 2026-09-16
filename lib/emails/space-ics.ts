@@ -6,7 +6,13 @@
  * cancelling a single week of a series -- which goes through the one-off
  * cancellation email -- remove exactly that week from a calendar that received
  * the whole series in one invite.
+ *
+ * The VCALENDAR around the events, the escaping and the SEQUENCE are shared with
+ * room booking invites in ics-core (issue #69).
  */
+import { buildCalendar, escapeIcs, icsUtcStamp } from './ics-core'
+
+export { icsSequenceNow } from './ics-core'
 
 export interface SpaceIcsEvent {
   bookingId: string
@@ -27,29 +33,8 @@ function toIcsLocal(iso: string): string {
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`
 }
 
-// DTSTAMP records when the ICS was generated — must be real UTC with Z.
-function toIcsUtc(date: Date): string {
-  return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}T${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}Z`
-}
-
-function escapeIcs(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n')
-}
-
 export function spaceIcsUid(bookingId: string): string {
   return `${bookingId}@chambers.northeasternsga.com`
-}
-
-/**
- * A SEQUENCE that is always higher than any this app issued before.
- *
- * Calendars ignore an update or cancellation whose SEQUENCE is not above the
- * one they hold, and an event may be updated any number of times, so a fixed
- * value cannot work once series edits send updated invites. Whole seconds since
- * the epoch only ever increase and fit the 32-bit integer calendars expect.
- */
-export function icsSequenceNow(): number {
-  return Math.floor(Date.now() / 1000)
 }
 
 /**
@@ -63,34 +48,12 @@ export function buildSpaceIcs(
   events: SpaceIcsEvent[],
   sequence?: number
 ): Buffer {
-  const stamp = toIcsUtc(new Date())
+  const stamp = icsUtcStamp()
 
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Chambers//SGA Room Manager//EN',
-    `METHOD:${method}`,
-    // VTIMEZONE lets Outlook resolve the TZID on DTSTART/DTEND correctly.
-    'BEGIN:VTIMEZONE',
-    'TZID:America/New_York',
-    'BEGIN:DAYLIGHT',
-    'TZOFFSETFROM:-0500',
-    'TZOFFSETTO:-0400',
-    'TZNAME:EDT',
-    'DTSTART:19700308T020000',
-    'RRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3',
-    'END:DAYLIGHT',
-    'BEGIN:STANDARD',
-    'TZOFFSETFROM:-0400',
-    'TZOFFSETTO:-0500',
-    'TZNAME:EST',
-    'DTSTART:19701101T020000',
-    'RRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=11',
-    'END:STANDARD',
-    'END:VTIMEZONE',
-  ]
+  const blocks: string[][] = []
 
   for (const e of events) {
+    const lines: string[] = []
     lines.push(
       'BEGIN:VEVENT',
       `UID:${spaceIcsUid(e.bookingId)}`,
@@ -107,10 +70,10 @@ export function buildSpaceIcs(
     }
     if (sequence !== undefined) lines.push(`SEQUENCE:${sequence}`)
     lines.push('END:VEVENT')
+    blocks.push(lines)
   }
 
-  lines.push('END:VCALENDAR')
-  return Buffer.from(lines.join('\r\n'))
+  return buildCalendar(method, blocks)
 }
 
 /** "Tuesday, September 16, 2026, 6:00 PM" from a stored space time. */

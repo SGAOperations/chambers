@@ -6,6 +6,8 @@ import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { sendBookingCreatedEmail } from '@/lib/emails/booking-created'
 import { changed, collectChanges, formatDate, formatTime } from '@/lib/emails/changes'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+import { planInvites } from '@/lib/room-calendar'
+import { appToday, oneTimeRoomSessions, sendPerAudience, type OneTimeRow } from '@/lib/room-invites'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
 import {
@@ -22,6 +24,8 @@ const adminSupabase = createAdminClient(
 )
 
 interface OneTimeSession {
+  /** Present for a session that already exists; absent for one just added. */
+  id?: string
   room_name: string
   booking_date: string
   start_time: string
@@ -95,9 +99,12 @@ export async function POST(request: Request) {
     status: s.status,
   }))
 
-  const { error: detailError } = await adminSupabase
+  // Selected back for their ids, which the calendar invite uses as its event
+  // ids (issue #69).
+  const { data: createdSessions, error: detailError } = await adminSupabase
     .from('one_time_room_bookings')
     .insert(sessionRows)
+    .select('id, booking_date, start_time, end_time, status, room_name')
 
   if (detailError) return NextResponse.json({ error: detailError.message }, { status: 500 })
 
@@ -120,19 +127,29 @@ export async function POST(request: Request) {
         const { data: bodyData } = await adminSupabase
           .from('bodies').select('name').eq('id', selection.value.body_id).single()
 
-        await sendBookingCreatedEmail({
-          bodyName: bodyData?.name ?? 'Unknown',
-          bookingType: 'One-Time Room',
-          purpose,
-          roomOrTable: sessionRows[0]?.room_name || 'N/A',
-          status: sessionRows[0]?.status ?? 'Reserved',
-          sessions: sessionRows.map((r: { booking_date: string; start_time: string; end_time: string; room_name: string | null }) => ({
-            date: r.booking_date,
-            startTime: r.start_time,
-            endTime: r.end_time,
-            roomOrTable: r.room_name,
-          })),
-          recipients: recipients.map(r => r.email),
+        const bodyName = bodyData?.name ?? 'Unknown'
+        const plan = planInvites(
+          null,
+          oneTimeRoomSessions((createdSessions ?? []) as OneTimeRow[], purpose, bodyName),
+          appToday()
+        )
+
+        await sendPerAudience(recipients, plan, bodyName, async audience => {
+          await sendBookingCreatedEmail({
+            bodyName,
+            bookingType: 'One-Time Room',
+            purpose,
+            roomOrTable: sessionRows[0]?.room_name || 'N/A',
+            status: sessionRows[0]?.status ?? 'Reserved',
+            sessions: sessionRows.map((r: { booking_date: string; start_time: string; end_time: string; room_name: string | null }) => ({
+              date: r.booking_date,
+              startTime: r.start_time,
+              endTime: r.end_time,
+              roomOrTable: r.room_name,
+            })),
+            recipients: audience.recipients,
+            invite: audience.plan,
+          })
         })
       } catch (e) {
         console.error('Booking created email failed:', e)
@@ -167,7 +184,7 @@ export async function PATCH(request: Request) {
     adminSupabase.from('bookings').select('purpose').eq('id', booking_id).single(),
     adminSupabase
       .from('one_time_room_bookings')
-      .select('room_name, booking_date, start_time, end_time, status, reservation_code')
+      .select('id, room_name, booking_date, start_time, end_time, status, reservation_code')
       .eq('booking_id', booking_id)
       .order('booking_date', { ascending: true }),
   ])
@@ -190,14 +207,6 @@ export async function PATCH(request: Request) {
   )
   if (bodiesError) return NextResponse.json({ error: bodiesError }, { status: 500 })
 
-  // Delete existing session rows and reinsert
-  const { error: deleteError } = await adminSupabase
-    .from('one_time_room_bookings')
-    .delete()
-    .eq('booking_id', booking_id)
-
-  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
-
   const sessionRows = sessions.map((s: OneTimeSession) => ({
     booking_id,
     room_name: s.room_name || null,
@@ -208,11 +217,46 @@ export async function PATCH(request: Request) {
     status: s.status,
   }))
 
-  const { error: insertError } = await adminSupabase
-    .from('one_time_room_bookings')
-    .insert(sessionRows)
+  // Written in place, keyed on the session's own id -- the treatment issue #113
+  // gave weekly occurrences, for the same reason (issue #69). Deleting every row
+  // and reinserting gave each session a new id on every save, so a calendar
+  // invite had nothing stable to name and would add an event per edit rather
+  // than moving the one it had.
+  //
+  // Updates and inserts run before the delete: if that last step fails, the
+  // booking is left with a session too many rather than with none at all.
+  const kept: string[] = []
+  for (const [i, s] of (sessions as OneTimeSession[]).entries()) {
+    if (!s.id) continue
+    const { error } = await adminSupabase
+      .from('one_time_room_bookings')
+      .update(sessionRows[i])
+      .eq('id', s.id)
+      .eq('booking_id', booking_id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    kept.push(s.id)
+  }
 
-  if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+  const toInsert = sessionRows.filter((_: unknown, i: number) => !(sessions as OneTimeSession[])[i].id)
+  if (toInsert.length) {
+    const { data: inserted, error: insertError } = await adminSupabase
+      .from('one_time_room_bookings')
+      .insert(toInsert)
+      .select('id')
+    if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+    for (const row of (inserted ?? []) as { id: string }[]) kept.push(row.id)
+  }
+
+  // Asked of the table rather than of the payload, so a session removed in the
+  // editor goes even if the read above failed.
+  let staleQuery = adminSupabase
+    .from('one_time_room_bookings')
+    .delete()
+    .eq('booking_id', booking_id)
+  if (kept.length) staleQuery = staleQuery.not('id', 'in', `(${kept.join(',')})`)
+
+  const { error: deleteError } = await staleQuery
+  if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
 
   const firstSession = sessions[0] as OneTimeSession
 
@@ -257,11 +301,9 @@ export async function PATCH(request: Request) {
   waitUntil(
     (async () => {
       try {
-        const emails = recipients.map(r => r.email)
-        // Sessions are replaced wholesale rather than edited in place, so they
-        // are compared position by position against the previous list, sorted
-        // the same way. A change in how many there are is reported on its own
-        // line, since pairing them up past that point would invent moves.
+        // Sessions are compared position by position against the previous list,
+        // sorted the same way. A change in how many there are is reported on its
+        // own line, since pairing them up past that point would invent moves.
         const prevFirst = (prevSessions ?? [])[0]
         const sessionCountChange = changed(
           'Sessions',
@@ -280,16 +322,37 @@ export async function PATCH(request: Request) {
           changed('Reservation code', prevFirst?.reservation_code, firstSession.reservation_code),
         )
 
-        await sendBookingUpdatedEmail({
-          bodyName,
-          purpose,
-          roomOrTable: firstSession.room_name || 'N/A',
-          date: firstSession.booking_date,
-          startTime: firstSession.start_time,
-          endTime: firstSession.end_time,
-          status: firstSession.status,
-          changes,
-          recipients: emails,
+        // What this edit does to calendars: sessions that are still meetings go
+        // on or move, and ones that stopped being meetings -- cancelled, or
+        // removed in the editor -- come off.
+        const { data: storedSessions } = await adminSupabase
+          .from('one_time_room_bookings')
+          .select('id, booking_date, start_time, end_time, status, room_name')
+          .eq('booking_id', booking_id)
+
+        const plan = planInvites(
+          oneTimeRoomSessions(
+            ((prevSessions ?? []) as OneTimeRow[]),
+            prevBooking?.purpose ?? null,
+            bodyName
+          ),
+          oneTimeRoomSessions((storedSessions ?? []) as OneTimeRow[], purpose, bodyName),
+          appToday()
+        )
+
+        await sendPerAudience(recipients, plan, bodyName, async audience => {
+          await sendBookingUpdatedEmail({
+            bodyName,
+            purpose,
+            roomOrTable: firstSession.room_name || 'N/A',
+            date: firstSession.booking_date,
+            startTime: firstSession.start_time,
+            endTime: firstSession.end_time,
+            status: firstSession.status,
+            changes,
+            recipients: audience.recipients,
+            invite: audience.plan,
+          })
         })
       } catch (e) {
         console.error('Booking updated email failed:', e)

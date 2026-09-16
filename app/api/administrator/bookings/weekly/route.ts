@@ -7,6 +7,8 @@ import { sendBookingCreatedEmail } from '@/lib/emails/booking-created'
 import { changed, collectChanges, formatDate, formatTime } from '@/lib/emails/changes'
 import { occurrenceMoved } from '@/lib/weekly-occurrences'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+import { planInvites } from '@/lib/room-calendar'
+import { appToday, sendPerAudience, weeklyRoomSessions, type OccurrenceRow } from '@/lib/room-invites'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
 
@@ -46,6 +48,8 @@ const adminSupabase = createAdminClient(
 
 /** One stored occurrence as read back before the write below. */
 interface PrevOccurrenceRow {
+  /** Read for the calendar invite: the event id a recipient already holds (issue #69). */
+  id: string
   occurrence_date: string
   room_name: string | null
   start_time: string | null
@@ -141,9 +145,13 @@ export async function POST(request: Request) {
     occurrence_date: date,
   }))
 
-  const { error: occurrenceError } = await adminSupabase
+  // Selected back for their ids, which the calendar invite uses as its event
+  // ids (issue #69). They are stable across later edits, so an edit moves the
+  // event a recipient already has rather than adding a second one.
+  const { data: createdOccurrences, error: occurrenceError } = await adminSupabase
     .from('weekly_room_occurrences')
     .insert(occurrences)
+    .select('id, occurrence_date, room_name, start_time, end_time, status, senate_type, purpose')
 
   if (occurrenceError) return NextResponse.json({ error: occurrenceError.message }, { status: 500 })
 
@@ -168,17 +176,34 @@ export async function POST(request: Request) {
         const { data: bodyData } = await adminSupabase
           .from('bodies').select('name').eq('id', selection.value.body_id).single()
 
-        await sendBookingCreatedEmail({
-          bodyName: bodyData?.name ?? 'Unknown',
-          bookingType: 'Weekly Room',
-          purpose,
-          roomOrTable: room_name || 'N/A',
-          status,
-          dateRange: { start: start_date, end: end_date },
-          // Freshly generated, so every occurrence carries the series' room and
-          // time -- there are no per-week overrides to report yet.
-          sessions: dates.map(d => ({ date: d, startTime: start_time, endTime: end_time })),
-          recipients: recipients.map(r => r.email),
+        const bodyName = bodyData?.name ?? 'Unknown'
+
+        // Everything upcoming goes on calendars; nothing comes off, since this
+        // booking has never been sent to anybody.
+        const plan = planInvites(
+          null,
+          weeklyRoomSessions(
+            (createdOccurrences ?? []) as OccurrenceRow[],
+            { room_name, start_time, end_time, status, purpose },
+            bodyName
+          ),
+          appToday()
+        )
+
+        await sendPerAudience(recipients, plan, bodyName, async audience => {
+          await sendBookingCreatedEmail({
+            bodyName,
+            bookingType: 'Weekly Room',
+            purpose,
+            roomOrTable: room_name || 'N/A',
+            status,
+            dateRange: { start: start_date, end: end_date },
+            // Freshly generated, so every occurrence carries the series' room and
+            // time -- there are no per-week overrides to report yet.
+            sessions: dates.map(d => ({ date: d, startTime: start_time, endTime: end_time })),
+            recipients: audience.recipients,
+            invite: audience.plan,
+          })
         })
       } catch (e) {
         console.error('Booking created email failed:', e)
@@ -220,7 +245,7 @@ export async function PATCH(request: Request) {
     adminSupabase
       .from('weekly_room_occurrences')
       .select(
-        'occurrence_date, room_name, start_time, end_time, status, reservation_code, purpose, senate_type, hidden, is_event'
+        'id, occurrence_date, room_name, start_time, end_time, status, reservation_code, purpose, senate_type, hidden, is_event'
       )
       .eq('weekly_booking_id', weekly_id),
   ])
@@ -305,6 +330,14 @@ export async function PATCH(request: Request) {
 
   const { error: staleError } = await staleQuery
   if (staleError) return NextResponse.json({ error: staleError.message }, { status: 500 })
+
+  // Read back after the write, for the ids the calendar invite needs (issue
+  // #69). A week the series still covers kept the id it was created with, so a
+  // recipient's event is moved rather than duplicated.
+  const { data: storedOccurrences } = await adminSupabase
+    .from('weekly_room_occurrences')
+    .select('id, occurrence_date, room_name, start_time, end_time, status, senate_type, purpose')
+    .eq('weekly_booking_id', weekly_id)
 
   const { data: auditLog } = await adminSupabase
     .from('audit_logs')
@@ -392,8 +425,6 @@ export async function PATCH(request: Request) {
   waitUntil(
     (async () => {
       try {
-        const emails = recipients.map(r => r.email)
-
         // When the series itself did not move, the edit was to the weeks that
         // moved -- so the email describes those weeks. If the series moved too,
         // the series is the story and a per-week heading would understate it.
@@ -427,17 +458,52 @@ export async function PATCH(request: Request) {
           }
         })
 
-        await sendBookingUpdatedEmail({
-          bodyName,
-          purpose,
-          roomOrTable: room_name || 'N/A',
-          date: start_date,
-          startTime: start_time,
-          endTime: end_time,
-          status,
-          changes: seriesChanges,
-          sessions,
-          recipients: emails,
+        // What this edit does to calendars: every upcoming week that is still a
+        // meeting is (re)sent, and one that stopped being a meeting -- cancelled,
+        // waitlisted, or trimmed off the end of the series -- is taken off.
+        const plan = planInvites(
+          weeklyRoomSessions(
+            ((prevOccurrences ?? []) as PrevOccurrenceRow[]).map(o => ({
+              id: o.id,
+              occurrence_date: o.occurrence_date,
+              room_name: o.room_name,
+              start_time: o.start_time,
+              end_time: o.end_time,
+              status: o.status,
+              senate_type: o.senate_type,
+              purpose: o.purpose,
+            })),
+            {
+              room_name: prevWeekly?.room_name ?? null,
+              start_time: prevWeekly?.start_time ?? start_time,
+              end_time: prevWeekly?.end_time ?? end_time,
+              status: prevWeekly?.status ?? status,
+              purpose: prevBooking?.purpose ?? null,
+            },
+            bodyName
+          ),
+          weeklyRoomSessions(
+            (storedOccurrences ?? []) as OccurrenceRow[],
+            { room_name, start_time, end_time, status, purpose },
+            bodyName
+          ),
+          appToday()
+        )
+
+        await sendPerAudience(recipients, plan, bodyName, async audience => {
+          await sendBookingUpdatedEmail({
+            bodyName,
+            purpose,
+            roomOrTable: room_name || 'N/A',
+            date: start_date,
+            startTime: start_time,
+            endTime: end_time,
+            status,
+            changes: seriesChanges,
+            sessions,
+            recipients: audience.recipients,
+            invite: audience.plan,
+          })
         })
       } catch (e) {
         console.error('Booking updated email failed:', e)
