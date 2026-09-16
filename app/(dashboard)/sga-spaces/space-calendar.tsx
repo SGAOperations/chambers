@@ -151,6 +151,16 @@ export default function SpaceCalendar({
   const [overlayCursor, setOverlayCursor] = useState<string>('crosshair')
   const [hoveredBookingId, setHoveredBookingId] = useState<string | null>(null)
 
+  /**
+   * Which day the narrow layout is showing, remembered against the week it was
+   * chosen in (issue #125).
+   *
+   * Paired with its week rather than reset by an effect: stepping to another
+   * week should go back to the default day, and deriving that during render
+   * avoids a setState-in-effect and the extra paint that comes with it.
+   */
+  const [daySelection, setDaySelection] = useState<{ week: number; day: number } | null>(null)
+
   // ── Lanes: one per space in the All spaces view, otherwise just one ─────────
   // A single space is the one-lane case of the same logic, so it behaves exactly
   // as it did: the server has already filtered bookings and blackouts to it.
@@ -169,6 +179,63 @@ export default function SpaceCalendar({
       return { name, month, day, isToday }
     })
   }, [weekStart, isCurrentWeek, todayDay])
+
+  /*
+    ── One day at a time on a narrow screen (issue #125) ──────────────────────
+    Seven days times one lane per space is 21 columns, and at phone width that
+    left each about 17px -- not a layout to tune, a layout with no phone form.
+    Narrow screens show a single day instead, keeping every space side by side,
+    because "which room is free at 3pm" is the question this view exists to
+    answer and it cannot be answered one room at a time.
+
+    Done entirely in CSS, with all seven days still rendered and all but one
+    hidden. Measuring the viewport in JS would mean either a server render that
+    is wrong for half the visitors and corrects itself after hydration, or no
+    server render at all; this way the markup is right at every width on the
+    first paint.
+
+    Single-space weeks are untouched at every width. Seven columns of one lane
+    are what that view has always been, and they are fine.
+  */
+  const dayAtATime = laneSpaces !== null
+
+  /**
+   * Where the week stops fitting, which depends on how many lanes a day carries.
+   *
+   * The calendar never gets the whole viewport: the shell's sidebar takes 224px
+   * from `md` up and <main> adds 64px of padding, so at a 1280px window the grid
+   * is about 934px -- roughly 133px per day, which three spaces divide into 44px
+   * each. The same window with five spaces gives 27px, and 1024px with three
+   * gives 32px, which is the crushing this issue is about rather than a fix for
+   * it. So the switch moves outward as lanes are added.
+   *
+   * Spelled as whole literal class names, never interpolated, because Tailwind
+   * finds classes by scanning the source for exactly these strings.
+   */
+  const narrowVariant =
+    laneCount <= 2
+      ? { hide: 'max-lg:hidden', edge: 'max-lg:border-r-0', picker: 'lg:hidden' }
+      : laneCount === 3
+        ? { hide: 'max-xl:hidden', edge: 'max-xl:border-r-0', picker: 'xl:hidden' }
+        : { hide: 'max-2xl:hidden', edge: 'max-2xl:border-r-0', picker: '2xl:hidden' }
+
+  const selectedDay = daySelection?.week === weekStart.getTime()
+    ? daySelection.day
+    // Opening on today is right far more often than opening on Sunday, and on
+    // any other week there is no better guess than the start of it.
+    : (isCurrentWeek ? todayDay : 0)
+
+  /**
+   * Hides every day column but the selected one while the week does not fit; a
+   * no-op for a single space. Only the grid needs this -- the header row above
+   * it is dropped whole.
+   */
+  const dayVisibilityCls = (dayIdx: number) =>
+    !dayAtATime ? '' : dayIdx === selectedDay
+      // The one visible column sits against the container's own border here, so
+      // its divider would draw a line just inside the rounded edge.
+      ? narrowVariant.edge
+      : narrowVariant.hide
 
   // ── Booking spans per day ────────────────────────────────────────────────────
   interface BookingSpan { booking: Booking; startSlot: number; endSlot: number; lane: number }
@@ -419,9 +486,58 @@ export default function SpaceCalendar({
         </div>
       )}
 
+      {/*
+        The day picker for the narrow layout. Only rendered for the all-spaces
+        view, and only shown at the widths where the grid is down to one day.
+
+        Seven buttons across a 375px phone is ~47px each, which clears the 44px
+        tap target the rest of the app is built to.
+      */}
+      {dayAtATime && (
+        <div className={`${narrowVariant.picker} flex gap-1 px-2 py-2 border-b border-[#1e5080] flex-shrink-0`}>
+          {dayLabels.map((dl, i) => {
+            const isSelected = i === selectedDay
+            return (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setDaySelection({ week: weekStart.getTime(), day: i })}
+                aria-pressed={isSelected}
+                aria-label={`${dl.name} ${dl.month} ${dl.day}`}
+                className={`flex-1 min-w-0 rounded-lg py-1.5 transition-colors ${
+                  isSelected ? 'bg-[#c8102e]' : 'hover:bg-white/5'
+                }`}
+              >
+                <span className={`block text-[10px] leading-none ${isSelected ? 'text-white/80' : 'text-[#93b8d8]'}`}>
+                  {dl.name}
+                </span>
+                <span className={`block text-xs font-semibold leading-none mt-0.5 ${
+                  isSelected ? 'text-white' : dl.isToday ? 'text-[#c8102e]' : 'text-[#f0f6ff]'
+                }`}>
+                  {dl.day}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       <div ref={scrollRef} className="overflow-y-auto flex-1 min-h-0">
-        {/* Sticky day header */}
-        <div ref={headerRef} className="flex border-b border-[#1e5080] sticky top-0 z-[60] bg-[#0a1628]">
+        {/*
+          Sticky day header. Dropped in the narrow all-spaces layout: with one
+          day on screen it would spend ~100px of a phone's height repeating what
+          the picker above already says, and the picker sits outside the scroll
+          area so it stays visible without needing to be sticky at all.
+
+          slotFromClientY reads this element's offsetHeight, which is 0 once it
+          is display:none, so the slot maths follows without being told.
+        */}
+        <div
+          ref={headerRef}
+          className={`flex border-b border-[#1e5080] sticky top-0 z-[60] bg-[#0a1628] ${
+            dayAtATime ? narrowVariant.hide : ''
+          }`}
+        >
           <div className="w-14 flex-shrink-0 border-r border-[#1e5080]" />
           {dayLabels.map((dl, i) => (
             <div
@@ -463,7 +579,7 @@ export default function SpaceCalendar({
             return (
               <div
                 key={dayIdx}
-                className="flex-1 min-w-0 border-r border-[#1e5080] last:border-r-0 relative"
+                className={`flex-1 min-w-0 border-r border-[#1e5080] last:border-r-0 relative ${dayVisibilityCls(dayIdx)}`}
                 style={{ height: totalHeight }}
               >
                 {/* Hour grid lines */}
