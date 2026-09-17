@@ -3,6 +3,8 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { notifyCancelledReservations } from '@/lib/room-invites'
+import { waitUntil } from '@vercel/functions'
 import {
   applyCancellationOutcomes,
   cancellationAuditRows,
@@ -146,6 +148,18 @@ export async function PATCH(request: Request) {
   const covered = [...lines, ...skipped].filter(l => l.cancellationRequestId === id)
 
   const failures = await applyCancellationOutcomes(covered)
+
+  // Same notice Auto-Cancel sends, for the same reason: approving a request
+  // changed a status and told the body nothing (issue #69).
+  waitUntil(
+    (async () => {
+      try {
+        await notifyCancelledReservations(covered)
+      } catch (e) {
+        console.error('Cancellation notice failed:', e)
+      }
+    })()
+  )
 
   // One entry per booking touched, so the change shows up in the Audit tab
   // beside every other status change rather than appearing to have happened by

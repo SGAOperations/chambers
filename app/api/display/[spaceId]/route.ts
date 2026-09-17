@@ -7,6 +7,11 @@ const adminSupabase = createAdminClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+function guestLabel(count: number): string[] {
+  if (count === 0) return []
+  return [count === 1 ? 'Guest' : `${count} guests`]
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ spaceId: string }> }
@@ -44,7 +49,7 @@ export async function GET(
       .single(),
     adminSupabase
       .from('space_bookings')
-      .select('id, title, start_time, end_time, creator_id, attendee_ids')
+      .select('id, title, start_time, end_time, creator_id, attendee_ids, external_attendees')
       .eq('space_id', spaceId)
       .gte('start_time', todayStart.toISOString())
       .lt('start_time', todayEnd.toISOString())
@@ -93,7 +98,12 @@ export async function GET(
       start_time: b.start_time,
       end_time: b.end_time,
       creator_name: userMap[b.creator_id] ?? null,
-      attendee_names: (b.attendee_ids ?? []).map((id: string) => userMap[id]).filter(Boolean),
+      // External attendees (issue #132) are counted, not named: this screen hangs
+      // outside the room, and their addresses are not for passers-by.
+      attendee_names: [
+        ...(b.attendee_ids ?? []).map((id: string) => userMap[id]).filter(Boolean),
+        ...guestLabel((b.external_attendees ?? []).length),
+      ],
     })),
   })
 }

@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import BookingModal from '../bookings/booking-modal'
 import { type FlatBooking, statusTextColors, senateTypeBadgeColors, DEFAULT_SENATE_BADGE } from './shared'
+import { AWAITING_CSC, OPEN_STATUS_DESCRIPTIONS, type OpenRequestStatus } from '@/lib/request-status'
 
 interface BookingDetailModalProps {
   booking: FlatBooking
@@ -35,6 +36,20 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
   const [bodiesExpanded, setBodiesExpanded] = useState(false)
   const scopeFull = booking.scopeFull ?? [booking.scopeLabel]
   const hasPeerBodies = scopeFull.length > 1
+
+  // The booking's open revision request, if any, so its leaders can see where it
+  // stands -- with Operational Affairs or with CSC (issue #128). Only leaders may
+  // request a revision, so only they are asked about one.
+  const [openRevision, setOpenRevision] = useState<{ status: OpenRequestStatus; created_at: string } | null>(null)
+  useEffect(() => {
+    if (!isLeadership) return
+    let cancelled = false
+    fetch(`/api/revision-requests?booking_id=${encodeURIComponent(booking.bookingId)}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => { if (!cancelled) setOpenRevision(data?.revision ?? null) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [isLeadership, booking.bookingId])
 
   return (
     <BookingModal title="Booking Details" onClose={onClose}>
@@ -91,9 +106,23 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
           )}
         </div>
 
+        {openRevision && (
+          <div className={`rounded-lg border px-3 py-2.5 text-sm ${
+            openRevision.status === AWAITING_CSC
+              ? 'border-[#a78bfa]/30 bg-[#a78bfa]/10 text-[#c4b5fd]'
+              : 'border-[#fbbf24]/30 bg-[#fbbf24]/10 text-[#fcd34d]'
+          }`}>
+            <p className="font-semibold">Revision request: {openRevision.status}</p>
+            <p className="text-xs mt-0.5 opacity-90">
+              {OPEN_STATUS_DESCRIPTIONS[openRevision.status]} Submitted{' '}
+              {new Date(openRevision.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.
+            </p>
+          </div>
+        )}
+
         {(canCancel || canRevise) && (
           <div className="flex flex-col gap-2 mt-2">
-            {canRevise && (
+            {canRevise && !openRevision && (
               <button
                 onClick={onRevisionClick}
                 className="w-full py-2.5 rounded-xl bg-[#1a4d8a] hover:bg-[#2563eb] hover:scale-105 text-white font-semibold text-sm transition-all"

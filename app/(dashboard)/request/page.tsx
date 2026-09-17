@@ -10,6 +10,13 @@ import { Skeleton } from '@/app/_components/skeleton'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import ScopeLabel from '@/app/_components/scope-label'
 import type { Division, BookingScope } from '@/lib/booking-scope'
+import {
+  AWAITING_CSC,
+  OPEN_STATUS_DESCRIPTIONS,
+  OPS_REVIEW,
+  isOpenRequestStatus,
+  type RoomRequestStatus,
+} from '@/lib/request-status'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
 
@@ -25,7 +32,7 @@ interface MyRequest {
   purpose: string
   /** Null on tabling, and on room requests made before issue #76. */
   capacity: number | null
-  status: 'Pending' | 'Fulfilled' | 'Denied'
+  status: RoomRequestStatus
   notes: string | null
   created_at: string
   body_id: string
@@ -155,13 +162,15 @@ function formatDate(date: string) {
 }
 
 const requestStatusBarColors: Record<string, string> = {
-  'Pending': 'bg-[#fbbf24]',
+  [OPS_REVIEW]: 'bg-[#fbbf24]',
+  [AWAITING_CSC]: 'bg-[#a78bfa]',
   'Fulfilled': 'bg-[#4ade80]',
   'Denied': 'bg-[#f87171]',
 }
 
 const requestStatusTextColors: Record<string, string> = {
-  'Pending': 'text-[#fbbf24]',
+  [OPS_REVIEW]: 'text-[#fbbf24]',
+  [AWAITING_CSC]: 'text-[#a78bfa]',
   'Fulfilled': 'text-[#4ade80]',
   'Denied': 'text-[#f87171]',
 }
@@ -505,6 +514,13 @@ export default function RequestPage() {
 
                     {isExpanded && (
                       <div className="bg-[#0f2a4a] rounded-b-xl px-5 py-4 space-y-2 border-t border-[#1e5080]">
+                        {/* Where an open request is waiting -- with SGA or with CSC (issue #128). */}
+                        {isOpenRequestStatus(req.status) && (
+                          <div>
+                            <span className="text-xs font-medium text-[#93b8d8]">Status</span>
+                            <p className="text-sm text-[#f0f6ff]">{OPEN_STATUS_DESCRIPTIONS[req.status]}</p>
+                          </div>
+                        )}
                         <div>
                           <span className="text-xs font-medium text-[#93b8d8]">Body</span>
                           <p className="text-sm text-[#f0f6ff]">

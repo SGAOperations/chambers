@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { DIVISIONS, loadScopeContext, validateScopeSelection } from '@/lib/booking-scope'
+import { OPS_REVIEW } from '@/lib/request-status'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -184,7 +185,7 @@ export async function POST(request: Request) {
       capacity: capacityValue,
       notes: notes || null,
       requested_by: user.id,
-      status: 'Pending',
+      status: OPS_REVIEW,
     })
     .select()
     .single()

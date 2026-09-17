@@ -21,6 +21,7 @@ interface Booking {
   start_time: string
   end_time: string
   attendee_ids: string[]
+  external_attendees?: string[] | null
   creator_name: string | null
   /** The weekly series this booking is one week of (issue #112). */
   series_id: string | null
@@ -51,6 +52,7 @@ interface EditBooking {
   start: string
   end: string
   attendees: { id: string; full_name: string; email: string }[]
+  externalAttendees: string[]
   seriesId: string | null
 }
 
@@ -285,6 +287,7 @@ export default function SGASpacesPage() {
       start: booking.start_time,
       end: booking.end_time,
       attendees,
+      externalAttendees: booking.external_attendees ?? [],
       seriesId: booking.series_id ?? null,
     })
   }, [spaces])
@@ -495,6 +498,7 @@ export default function SGASpacesPage() {
             editBookingId={editBooking.id}
             initialTitle={editBooking.title}
             initialAttendees={editBooking.attendees}
+            initialExternalAttendees={editBooking.externalAttendees}
             spaces={spaces}
             minHoursAdvance={minHoursAdvance}
             onClose={() => setEditBooking(null)}
