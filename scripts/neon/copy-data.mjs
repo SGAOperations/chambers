@@ -124,8 +124,9 @@ async function importLogins() {
   for (const u of rows) {
     await target.query(
       `insert into public.auth_accounts (user_id, account_id, provider_id, password, created_at, updated_at)
-       values ($1, $1::text, 'credential', $2, coalesce($3, now()), coalesce($4, now()))`,
-      [u.id, u.encrypted_password, u.created_at, u.updated_at]
+       values ($1, $2, 'credential', $3, coalesce($4, now()), coalesce($5, now()))`,
+      // The id twice: Postgres will not type one parameter as both uuid and text.
+      [u.id, u.id, u.encrypted_password, u.created_at, u.updated_at]
     )
   }
   return rows.length
