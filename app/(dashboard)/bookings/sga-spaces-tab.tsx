@@ -41,6 +41,7 @@ interface SpaceBooking {
   start_time: string
   end_time: string
   attendee_ids: string[]
+  external_attendees?: string[] | null
   creator_name: string | null
   /** The weekly series this booking is one week of (issue #112). */
   series_id: string | null
@@ -308,7 +309,7 @@ function AdminBookingsPanel({ spaces }: { spaces: Space[] }) {
                   <td className="px-4 py-3 text-[#93b8d8]">{b.creator_name ?? '—'}</td>
                   <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.start_time)}</td>
                   <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(b.end_time)}</td>
-                  <td className="px-4 py-3 text-[#93b8d8]">{(b.attendee_ids ?? []).length + 1}</td>
+                  <td className="px-4 py-3 text-[#93b8d8]">{(b.attendee_ids ?? []).length + (b.external_attendees ?? []).length + 1}</td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => cancelBooking(b.id)}

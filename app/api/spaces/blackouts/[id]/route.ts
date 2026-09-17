@@ -3,7 +3,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
-import { cancellationAddressing, resolveSpacesAddresses } from '@/lib/spaces-email'
+import { attendeeKeys, cancellationAddressing, resolveSpacesAddresses } from '@/lib/spaces-email'
 import { waitUntil } from '@vercel/functions'
 
 const adminSupabase = createAdminClient(
@@ -14,7 +14,7 @@ const adminSupabase = createAdminClient(
 async function cascadeCancelBookings(spaceId: string | null, startTime: string, endTime: string) {
   let q = adminSupabase
     .from('space_bookings')
-    .select('id, title, start_time, end_time, creator_id, attendee_ids, spaces(name)')
+    .select('id, title, start_time, end_time, creator_id, attendee_ids, external_attendees, spaces(name)')
     .lt('start_time', endTime)
     .gt('end_time', startTime)
   if (spaceId) q = q.eq('space_id', spaceId)
@@ -25,8 +25,8 @@ async function cascadeCancelBookings(spaceId: string | null, startTime: string, 
   // Wherever each affected person chose to receive SGA Spaces emails (issue #109).
   const addresses = await resolveSpacesAddresses(
     adminSupabase,
-    affected.flatMap((b: { creator_id: string; attendee_ids: string[] }) =>
-      [b.creator_id, ...(b.attendee_ids ?? [])]
+    affected.flatMap((b: { creator_id: string; attendee_ids: string[]; external_attendees: string[] | null }) =>
+      [b.creator_id, ...attendeeKeys(b)]
     )
   )
 
@@ -34,8 +34,8 @@ async function cascadeCancelBookings(spaceId: string | null, startTime: string, 
 
   // Bookings are already deleted; notifying is a post-commit side effect.
   waitUntil(
-    Promise.all(affected.map(async (b: { id: string; title: string; start_time: string; end_time: string; creator_id: string; attendee_ids: string[]; spaces: { name: string }[] | null }) => {
-      const { to, bcc } = cancellationAddressing(addresses, b.creator_id, b.attendee_ids)
+    Promise.all(affected.map(async (b: { id: string; title: string; start_time: string; end_time: string; creator_id: string; attendee_ids: string[]; external_attendees: string[] | null; spaces: { name: string }[] | null }) => {
+      const { to, bcc } = cancellationAddressing(addresses, b.creator_id, attendeeKeys(b))
       await sendSpaceBookingCancelledEmail({
         bookingId: b.id,
         title: b.title,

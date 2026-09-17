@@ -10,6 +10,7 @@ interface Booking {
   start_time: string
   end_time: string
   attendee_ids: string[]
+  external_attendees?: string[] | null
   creator_name: string | null
   series_id: string | null
 }

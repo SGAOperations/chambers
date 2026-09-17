@@ -5,6 +5,7 @@ import TimePicker from '../bookings/time-picker'
 import DateField from '@/app/_components/date-field'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
 import { SERIES_CONFLICT_LABELS, addDays, weekdayOf, type SeriesConflict } from '@/lib/space-series'
+import { isSgaEmail } from '@/lib/spaces-email'
 
 interface User {
   id: string
@@ -29,6 +30,8 @@ interface SpaceBookingModalProps {
   editBookingId?: string
   initialTitle?: string
   initialAttendees?: User[]
+  /** Attendees without a Chambers account, by address (issue #132). */
+  initialExternalAttendees?: string[]
   onCancelBooking?: () => Promise<void>
   spaces?: Space[]
   /**
@@ -56,6 +59,7 @@ interface SeriesInfo {
   space_id: string
   title: string
   attendee_ids: string[]
+  external_attendees: string[]
   start_time: string
   end_time: string
   ends_on: string
@@ -99,6 +103,7 @@ export default function SpaceBookingModal({
   editBookingId,
   initialTitle = '',
   initialAttendees = [],
+  initialExternalAttendees = [],
   onCancelBooking,
   spaces,
   busySpaceIds,
@@ -118,6 +123,7 @@ export default function SpaceBookingModal({
   const [startTime, setStartTime] = useState(initStartTime)
   const [endTime, setEndTime] = useState(initEndTime)
   const [attendees, setAttendees] = useState<User[]>(initialAttendees)
+  const [externalAttendees, setExternalAttendees] = useState<string[]>(initialExternalAttendees)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<User[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -149,6 +155,7 @@ export default function SpaceBookingModal({
   const [conflicts, setConflicts] = useState<{ key: string; list: SeriesConflict[]; applicable: number } | null>(null)
   const formKey = JSON.stringify([
     scope, selectedSpaceId, title.trim(), date, startTime, endTime, repeat, until, attendees.map(a => a.id),
+    externalAttendees,
   ])
   const activeConflicts = conflicts?.key === formKey ? conflicts : null
 
@@ -189,6 +196,31 @@ export default function SpaceBookingModal({
   }
 
   /**
+   * Someone without a Chambers account (issue #132), added by their university
+   * address. Offered only when the search found no Chambers user with that exact
+   * address -- someone who has an account should be added as themselves, so
+   * their own choice of inbox applies.
+   */
+  const typedEmail = searchQuery.trim().toLowerCase()
+  const canAddExternal =
+    isSgaEmail(typedEmail) &&
+    !searchLoading &&
+    !externalAttendees.includes(typedEmail) &&
+    !attendees.some(a => a.email.toLowerCase() === typedEmail) &&
+    !searchResults.some(u => u.email.toLowerCase() === typedEmail)
+
+  const addExternalAttendee = () => {
+    if (!canAddExternal) return
+    setExternalAttendees(prev => [...prev, typedEmail])
+    setSearchQuery('')
+    setSearchResults([])
+  }
+
+  const removeExternalAttendee = (email: string) => {
+    setExternalAttendees(prev => prev.filter(e => e !== email))
+  }
+
+  /**
    * Switches between editing this week and editing the series, loading each
    * one's own values into the form. The series' values can differ from this
    * week's -- the week may have been edited on its own -- and the form should
@@ -207,6 +239,7 @@ export default function SpaceBookingModal({
       setStartTime(initStartTime)
       setEndTime(initEndTime)
       setAttendees(initialAttendees)
+      setExternalAttendees(initialExternalAttendees)
       return
     }
 
@@ -238,6 +271,7 @@ export default function SpaceBookingModal({
       setEndTime(info.end_time)
       setUntil(info.ends_on)
       setAttendees(seriesAttendees)
+      setExternalAttendees(info.external_attendees ?? [])
       setScope('series')
     } finally {
       setSeriesLoading(false)
@@ -286,6 +320,7 @@ export default function SpaceBookingModal({
     setSubmitting(true)
     try {
       const attendee_ids = attendees.map(a => a.id)
+      const external_attendees = externalAttendees
       let res: Response
 
       if (editingSeries && seriesId) {
@@ -294,7 +329,7 @@ export default function SpaceBookingModal({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: title.trim(), start_time: startTime, end_time: endTime, until, attendee_ids,
-            skip_conflicts: skipConflicts,
+            external_attendees, skip_conflicts: skipConflicts,
           }),
         })
       } else if (creatingSeries) {
@@ -303,7 +338,7 @@ export default function SpaceBookingModal({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             space_id: selectedSpaceId, title: title.trim(), date, start_time: startTime, end_time: endTime, until,
-            attendee_ids, skip_conflicts: skipConflicts,
+            attendee_ids, external_attendees, skip_conflicts: skipConflicts,
           }),
         })
       } else {
@@ -313,12 +348,12 @@ export default function SpaceBookingModal({
           ? await fetch(`/api/spaces/bookings/${editBookingId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ space_id: selectedSpaceId, title: title.trim(), start_time, end_time, attendee_ids }),
+              body: JSON.stringify({ space_id: selectedSpaceId, title: title.trim(), start_time, end_time, attendee_ids, external_attendees }),
             })
           : await fetch('/api/spaces/bookings', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ space_id: selectedSpaceId, title: title.trim(), start_time, end_time, attendee_ids }),
+              body: JSON.stringify({ space_id: selectedSpaceId, title: title.trim(), start_time, end_time, attendee_ids, external_attendees }),
             })
       }
 
@@ -523,8 +558,15 @@ export default function SpaceBookingModal({
                 placeholder="Search by name or email..."
                 className={inputCls}
                 autoComplete="off"
+                onKeyDown={e => {
+                  // Enter adds a typed address rather than submitting the form.
+                  if (e.key === 'Enter' && canAddExternal) {
+                    e.preventDefault()
+                    addExternalAttendee()
+                  }
+                }}
               />
-              {(searchResults.length > 0 || searchLoading) && (
+              {(searchResults.length > 0 || searchLoading || canAddExternal) && (
                 <div className="absolute z-10 mt-1 w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg shadow-xl overflow-hidden">
                   {searchLoading && (
                     <div className="px-3 py-2 text-sm text-[#93b8d8]">Searching…</div>
@@ -540,12 +582,26 @@ export default function SpaceBookingModal({
                       <div className="text-xs text-[#93b8d8]">{u.email}</div>
                     </button>
                   ))}
+                  {canAddExternal && (
+                    <button
+                      type="button"
+                      onClick={addExternalAttendee}
+                      className="w-full text-left px-3 py-2 hover:bg-white/10 transition-colors border-t border-[#1e5080] first:border-t-0"
+                    >
+                      <div className="text-sm text-[#f0f6ff] font-medium">Add {typedEmail}</div>
+                      <div className="text-xs text-[#93b8d8]">No Chambers account — they&apos;ll get the invite by email</div>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
 
+            <p className="text-xs text-[#6a96bb] mt-1">
+              Not on Chambers? Type their @northeastern.edu email.
+            </p>
+
             {/* Attendee chips */}
-            {attendees.length > 0 && (
+            {(attendees.length > 0 || externalAttendees.length > 0) && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {attendees.map(a => (
                   <div
@@ -556,6 +612,25 @@ export default function SpaceBookingModal({
                     <button
                       type="button"
                       onClick={() => removeAttendee(a.id)}
+                      className="text-[#93b8d8] hover:text-[#c8102e] transition-colors"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+                {externalAttendees.map(email => (
+                  <div
+                    key={email}
+                    className="flex items-center gap-1.5 bg-[#0f2a4a] border border-dashed border-[#1e5080] rounded-full pl-3 pr-2 py-1"
+                    title="No Chambers account"
+                  >
+                    <span className="text-xs text-[#f0f6ff]">{email}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeExternalAttendee(email)}
+                      aria-label={`Remove ${email}`}
                       className="text-[#93b8d8] hover:text-[#c8102e] transition-colors"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
