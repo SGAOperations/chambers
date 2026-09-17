@@ -1,4 +1,4 @@
--- Rollback for 20260916000000_request_review_statuses.sql.
+-- Rollback for 20260917150907_request_review_statuses.sql.
 --
 -- Both open statuses fold back into 'Pending'. Whether a request had been passed
 -- to CSC is lost. 'Awaiting CSC' notifications already sent stay in user_alerts;
