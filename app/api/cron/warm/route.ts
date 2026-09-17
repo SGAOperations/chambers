@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
-import { getAuthedUser } from '@/lib/auth'
+import { pool } from '@/lib/db/pool'
 import { getActiveSemesterId } from '@/lib/active-semester'
 import { rateLimiter } from '@/lib/rate-limit'
 
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const supabase = await createClient()
 
   const warmed = await Promise.allSettled([
-    getAuthedUser(supabase), // warms the JWKS fetch
+    pool.query('select 1'), // warms the Postgres pool that Better Auth and the live role checks use
     getActiveSemesterId(supabase), // warms the Supabase pooler + primes the semester cache
     rateLimiter.limit('cron:warm'), // warms the Upstash connection
   ])

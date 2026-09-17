@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { createPasswordUser, revokeUserSessions } from '@/lib/auth-admin'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { randomBytes, createHash } from 'crypto'
 import { sendOtpInviteEmail } from '@/lib/emails/otp-invite'
@@ -79,27 +80,18 @@ export async function POST(request: Request) {
   const otpHash = createHash('sha256').update(otp).digest('hex')
   const otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
-  const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
-    email,
-    password: otp,
-    email_confirm: true,
-    user_metadata: { full_name },
-  })
-
-  if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
-
-  // Set auth metadata (admin and IEMS are mutually exclusive)
-  if (admin_role || iems_role) {
-    await adminSupabase.auth.admin.updateUserById(authData.user.id, {
-      app_metadata: {
-        is_admin: !!admin_role,
-        admin_role: admin_role || null,
-        iems_role: iems_role || null,
-      },
-    })
+  // The invite's one-time password is their password until onboarding sets a
+  // real one. Roles live only on the users row now (issue #136) -- there is no
+  // token copy to keep in step.
+  let newUserId: string
+  try {
+    newUserId = await createPasswordUser({ email, fullName: full_name, password: otp })
+  } catch (e) {
+    console.error('Invite account creation failed:', e)
+    return NextResponse.json({ error: 'Could not create the account. Does it already exist?' }, { status: 500 })
   }
 
-  // Update users table (trigger creates the row)
+  // createPasswordUser created the row; add the roles and the invite code.
   const { error: updateError } = await adminSupabase
     .from('users')
     .update({
@@ -109,7 +101,7 @@ export async function POST(request: Request) {
       otp_hash: otpHash,
       otp_expires_at: otpExpiresAt,
     })
-    .eq('id', authData.user.id)
+    .eq('id', newUserId)
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
 
@@ -164,36 +156,20 @@ export async function PATCH(request: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Sync auth metadata when role changes
-  if ('admin_role' in body || 'iems_role' in body) {
-    const isSettingAdmin = 'admin_role' in body && !!body.admin_role
-    const isSettingIEMS = 'iems_role' in body && !!body.iems_role
-    await adminSupabase.auth.admin.updateUserById(id, {
-      app_metadata: {
-        is_admin: isSettingAdmin,
-        admin_role: isSettingAdmin ? body.admin_role : null,
-        iems_role: isSettingIEMS ? body.iems_role : null,
-      },
-    })
-  }
-
   // End every session this user holds when their standing changes.
   //
-  // Not just on revocation: a grant goes through here too, so that whatever they
-  // were carrying is replaced by a token minted under the new role. The cost is a
-  // forced sign-in after a change that happens rarely, and it means there is no
-  // case where someone is walking around with a token that disagrees with the
-  // users row.
+  // Roles are read live on every request now, so a grant would take effect
+  // without this. It stays on grants as well as revocations so that any change
+  // to someone's standing starts them on a fresh session, which keeps the rule
+  // simple to state.
   //
   // Deliberately after the writes above, so a failure to revoke cannot leave the
   // role change itself unapplied -- and reported, rather than swallowed, because
   // an admin who thinks they cut someone off needs to know if they did not.
   if ('admin_role' in body || 'iems_role' in body || 'is_active' in body) {
-    const { error: revokeError } = await adminSupabase.rpc('revoke_user_sessions', {
-      target: id,
-    })
+    const revokeError = await revokeUserSessions(id).then(() => null, (e: unknown) => e)
     if (revokeError) {
-      console.error('revoke_user_sessions failed:', revokeError)
+      console.error('revokeUserSessions failed:', revokeError)
       return NextResponse.json(
         {
           error:
@@ -202,12 +178,6 @@ export async function PATCH(request: Request) {
         { status: 500 }
       )
     }
-  }
-
-  if ('full_name' in updateData) {
-    await adminSupabase.auth.admin.updateUserById(id, {
-      user_metadata: { full_name: updateData.full_name },
-    })
   }
 
   return NextResponse.json({ success: true })

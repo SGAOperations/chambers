@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { AuthedUser } from '@/lib/auth'
+import type { AuthedUser } from '@/lib/auth-types'
 import { getActiveSemesterId } from '@/lib/active-semester'
 import { canManageScoped, loadScopeContext, type ScopedRow } from '@/lib/booking-scope'
 

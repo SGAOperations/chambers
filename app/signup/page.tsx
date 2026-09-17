@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { authClient } from '@/lib/auth-client'
 
 export default function SignupPage() {
   const [step, setStep] = useState<1 | 2>(1)
@@ -13,7 +13,6 @@ export default function SignupPage() {
   const [submitting, setSubmitting] = useState(false)
 
   const router = useRouter()
-  const supabase = createClient()
 
   const inputClass =
     'w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition'
@@ -70,9 +69,9 @@ export default function SignupPage() {
       return
     }
     const { email: userEmail, temp_password } = await res.json()
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email: userEmail, password: temp_password })
+    const { error: signInError } = await authClient.signIn.email({ email: userEmail, password: temp_password })
     if (signInError) {
-      setError(signInError.message)
+      setError(signInError.message ?? 'Sign in failed.')
       return
     }
     router.push('/onboarding')

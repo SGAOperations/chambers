@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { authClient } from '@/lib/auth-client'
 
 type Body = { id: string; name: string; division: string; body_open: boolean }
 
@@ -26,47 +26,36 @@ export default function OnboardingPage() {
   const [confirm, setConfirm] = useState('')
 
   const router = useRouter()
-  const supabase = createClient()
 
-  // Auth guard + onboarding check
+  // Auth guard + onboarding check, answered by the server (issue #136).
   useEffect(() => {
     const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      const user = session?.user ?? null
-      if (!user) {
+      const res = await fetch('/api/onboarding/state', { cache: 'no-store' })
+
+      if (res.status === 401) {
         router.push('/')
         return
       }
-
-      const { data: profile } = await supabase
-        .from('users')
-        .select('full_name, is_active, has_completed_onboarding')
-        .eq('id', user.id)
-        .single()
-
-      if (!profile?.is_active) {
-        // Global scope deliberately: the account is deactivated, so every
-        // session it holds should end, not only this browser's. See
-        // dashboard-shell for the ordinary 'local' sign-out.
-        await supabase.auth.signOut()
+      if (res.status === 403) {
+        // Deactivated. The server already refuses this account a new session;
+        // this clears the one in this browser.
+        await authClient.signOut().catch(() => {})
         router.push('/')
         return
       }
-
-      if (profile?.has_completed_onboarding) {
+      if (res.status === 409) {
         router.push('/my-rooms')
         return
       }
+      if (!res.ok) {
+        setError('We could not load your account. Please refresh and try again.')
+        setLoading(false)
+        return
+      }
 
-      setFullName(profile?.full_name ?? '')
-
-      const { data: memberships } = await supabase
-        .from('board_memberships')
-        .select('id')
-        .eq('user_id', user.id)
-        .limit(1)
-      if (memberships && memberships.length > 0) setHasMemberships(true)
-
+      const state: { full_name: string; has_memberships: boolean } = await res.json()
+      setFullName(state.full_name)
+      setHasMemberships(state.has_memberships)
       setLoading(false)
     }
     init()
@@ -142,9 +131,14 @@ export default function OnboardingPage() {
     }
     setSubmitting(true)
 
-    const { error: authError } = await supabase.auth.updateUser({ password })
-    if (authError) {
-      setError(authError.message)
+    const passwordRes = await fetch('/api/onboarding/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    })
+    if (!passwordRes.ok) {
+      const data = await passwordRes.json().catch(() => ({}))
+      setError(data.error ?? 'Something went wrong.')
       setSubmitting(false)
       return
     }

@@ -1,17 +1,30 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { authClient } from '@/lib/auth-client'
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordForm />
+    </Suspense>
+  )
+}
+
+const INVALID_LINK = 'This reset link is invalid or has expired. Request a new one from the login page.'
+
+function ResetPasswordForm() {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
+  // Better Auth sends the reset link through /api/auth/reset-password/<token>,
+  // which checks the token and redirects here with ?token=... or, when it is
+  // invalid or expired, ?error=INVALID_TOKEN (issue #136).
+  const token = useSearchParams().get('token')
 
   const handleSubmit = async () => {
     setError('')
@@ -23,11 +36,15 @@ export default function ResetPasswordPage() {
       setError('Passwords do not match.')
       return
     }
+    if (!token) {
+      setError(INVALID_LINK)
+      return
+    }
     setLoading(true)
-    const { error } = await supabase.auth.updateUser({ password })
+    const { error } = await authClient.resetPassword({ newPassword: password, token })
     setLoading(false)
     if (error) {
-      setError(error.message)
+      setError(error.message ?? INVALID_LINK)
       return
     }
     setSuccess(true)
@@ -70,7 +87,7 @@ export default function ResetPasswordPage() {
                 className="w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
               />
             </div>
-            {error && <p className="text-[#c8102e] text-sm">{error}</p>}
+            {(error || !token) && <p className="text-[#c8102e] text-sm">{error || INVALID_LINK}</p>}
             <button
               onClick={handleSubmit}
               disabled={loading}

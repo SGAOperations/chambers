@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { hasLiveAdmin, type AuthedUser } from './auth'
+import { hasLiveAdmin, type AuthedUser } from './auth-types'
 import { DEFAULT_WEEKLY_HOURS, weekBoundsOf, type PlanInput } from './space-series'
 
 /**

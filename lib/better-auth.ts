@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth'
 import { nextCookies } from 'better-auth/next-js'
+import { APIError } from 'better-auth/api'
 import bcrypt from 'bcryptjs'
 import { pool } from './db/pool'
 import { sendPasswordResetEmail } from './emails/password-reset'
@@ -57,9 +58,14 @@ export const auth = betterAuth({
       createdAt: 'created_at',
       updatedAt: 'updated_at',
     },
-    // Matches the 12-hour idle sign-out the dashboard already enforces in the
-    // browser; a session that is used is extended at most once an hour.
-    expiresIn: 60 * 60 * 12,
+    // Two days, matching the dashboard's idle sign-out (dashboard-shell.tsx).
+    //
+    // It is two days of *inactivity*, not two days total: a session in use is
+    // extended, at most once an hour, so someone working every day is not
+    // signed out mid-week. Come back after a long weekend and the session is
+    // gone -- which is what the idle timer already did in the browser, now
+    // enforced by the server as well.
+    expiresIn: 60 * 60 * 24 * 2,
     updateAge: 60 * 60,
   },
   account: {
@@ -108,12 +114,17 @@ export const auth = betterAuth({
       create: {
         // A deactivated account cannot start a session at all. Before this, the
         // login page signed a deactivated user in and then straight back out.
+        // Thrown rather than returning false so the login page can show why.
         before: async session => {
           const { rows } = await pool.query<{ is_active: boolean | null }>(
             'select is_active from public.users where id = $1',
             [session.userId]
           )
-          if (!rows[0] || rows[0].is_active === false) return false
+          if (!rows[0] || rows[0].is_active === false) {
+            throw new APIError('FORBIDDEN', {
+              message: 'Your account has been deactivated. Please contact an administrator.',
+            })
+          }
         },
       },
     },

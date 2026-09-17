@@ -137,12 +137,6 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
   }
 
-  if (updates.full_name) {
-    await adminSupabase.auth.admin.updateUserById(user.id, {
-      user_metadata: { full_name: updates.full_name },
-    })
-  }
-
   const { error } = await adminSupabase.from('users').update(updates).eq('id', user.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

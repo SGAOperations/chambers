@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { hasLiveAdmin, type AuthedUser } from './auth'
+import { hasLiveAdmin, type AuthedUser } from './auth-types'
 import { wantsAnySenateSession } from './senate-types'
 
 /**
