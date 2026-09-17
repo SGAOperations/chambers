@@ -19,6 +19,7 @@ import {
   syncBookingBodies,
   type ScopedRow,
 } from '@/lib/booking-scope'
+import { OPEN_REQUEST_STATUSES } from '@/lib/request-status'
 
 /**
  * One occurrence as the editor submits it (issue #55).
@@ -516,7 +517,7 @@ export async function PATCH(request: Request) {
     .from('revision_requests')
     .update({ status: 'Done' })
     .eq('booking_id', booking_id)
-    .eq('status', 'Pending')
+    .in('status', OPEN_REQUEST_STATUSES)
 
   // Which weeks this save actually marked Missed.
   //

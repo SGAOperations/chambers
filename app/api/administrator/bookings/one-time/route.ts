@@ -17,6 +17,7 @@ import {
   syncBookingBodies,
   type ScopedRow,
 } from '@/lib/booking-scope'
+import { OPEN_REQUEST_STATUSES } from '@/lib/request-status'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -365,7 +366,7 @@ export async function PATCH(request: Request) {
     .from('revision_requests')
     .update({ status: 'Done' })
     .eq('booking_id', booking_id)
-    .eq('status', 'Pending')
+    .in('status', OPEN_REQUEST_STATUSES)
 
   if (firstSession.status === 'Missed') {
     waitUntil(

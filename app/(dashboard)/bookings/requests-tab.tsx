@@ -7,6 +7,14 @@ import { Skeleton } from '@/app/_components/skeleton'
 import ScopeLabel from '@/app/_components/scope-label'
 import type { BookingScope, Division } from '@/lib/booking-scope'
 import { usePendingActionsWatch } from '../pending-actions-watch'
+import {
+  AWAITING_CSC,
+  OPS_REVIEW,
+  isOpenRequestStatus,
+  type OpenRequestStatus,
+  type RevisionRequestStatus,
+  type RoomRequestStatus,
+} from '@/lib/request-status'
 
 function RequestsTabSkeleton() {
   const card = (wide: boolean) => (
@@ -38,8 +46,6 @@ function RequestsTabSkeleton() {
   )
 }
 
-type RequestStatus = 'Pending' | 'Fulfilled' | 'Denied'
-
 interface RevisionRequest {
   id: string
   change_type: 'Time' | 'Room' | 'Both'
@@ -47,6 +53,7 @@ interface RevisionRequest {
   new_end_time: string | null
   new_room: string | null
   more_info: string
+  status: RevisionRequestStatus
   created_at: string
   bookings: {
     id: string
@@ -64,7 +71,7 @@ interface RoomRequest {
   purpose: string
   /** Null on tabling, and on room requests made before issue #76. */
   capacity: number | null
-  status: RequestStatus
+  status: RoomRequestStatus
   notes: string | null
   created_at: string
   scope: BookingScope
@@ -100,10 +107,30 @@ function formatDate(date: string) {
   })
 }
 
-const statusColors: Record<RequestStatus, string> = {
-  Pending: 'bg-[#3d2200] text-[#fb923c]',
+const statusColors: Record<RoomRequestStatus | RevisionRequestStatus, string> = {
+  [OPS_REVIEW]: 'bg-[#3d2200] text-[#fb923c]',
+  [AWAITING_CSC]: 'bg-[#2a1f4d] text-[#a78bfa]',
   Fulfilled: 'bg-[#0f3d20] text-[#4ade80]',
+  Done: 'bg-[#0f3d20] text-[#4ade80]',
   Denied: 'bg-[#3d0f0f] text-[#f87171]',
+}
+
+const primaryBtn = 'px-3 py-1 text-sm bg-[#7c3aed] text-white rounded-lg hover:bg-[#6d28d9] disabled:opacity-60'
+const secondaryBtn = 'px-3 py-1 text-sm border border-[#1e5080] text-[#93b8d8] rounded-lg hover:text-[#f0f6ff] hover:border-[#93b8d8] disabled:opacity-60'
+
+/**
+ * The open status an admin can move a request to from the other one (issue
+ * #128). From Ops Review it is the suggested next step and is drawn as the
+ * primary action; from Awaiting CSC it is the way back, and is secondary to
+ * Fulfill and Deny. The order is a suggestion, not a rule.
+ */
+const OTHER_OPEN_STATUS: Record<OpenRequestStatus, OpenRequestStatus> = {
+  [OPS_REVIEW]: AWAITING_CSC,
+  [AWAITING_CSC]: OPS_REVIEW,
+}
+const MOVE_LABELS: Record<OpenRequestStatus, string> = {
+  [OPS_REVIEW]: 'Back to Ops Review',
+  [AWAITING_CSC]: 'Mark Sent to CSC',
 }
 
 interface RequestsTabProps {
@@ -129,6 +156,8 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   linkedBodies: { id: string; name: string }[]
 } | null>(null)
   const [typeFilter, setTypeFilter] = useState<'all' | BookingScope>('all')
+  const [moving, setMoving] = useState<string | null>(null)
+  const [moveError, setMoveError] = useState<{ id: string; message: string } | null>(null)
 
   const fetchRequests = async () => {
     const [reqRes, revRes] = await Promise.all([
@@ -145,6 +174,29 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   useEffect(() => {
     fetchRequests()
   }, [])
+
+  /** Moves a room or revision request to an open status, e.g. Ops Review -> Awaiting CSC. */
+  const moveTo = async (kind: 'request' | 'revision', id: string, status: OpenRequestStatus) => {
+    setMoving(id)
+    setMoveError(null)
+    try {
+      const res = await fetch(kind === 'revision' ? '/api/administrator/revisions' : '/api/administrator/requests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setMoveError({ id, message: data.error || 'Something went wrong.' })
+      }
+      // Refetched either way: a 409 means the row moved underneath this admin,
+      // and the list should show where it went.
+      await fetchRequests()
+      onCountChange()
+    } finally {
+      setMoving(null)
+    }
+  }
 
   if (loading) return <RequestsTabSkeleton />
 
@@ -176,9 +228,14 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
                   <span className="mx-2 text-[#1e5080]">·</span>
                   <span className="text-sm text-[#93b8d8]">{rv.bookings?.type === 'One-Time Room' ? 'One-Time/Multiple Room' : rv.bookings?.type}</span>
                 </div>
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#0e2f4f] text-[#4285f4]">
-                  Revision Request
-                </span>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#0e2f4f] text-[#4285f4]">
+                    Revision Request
+                  </span>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[rv.status]}`}>
+                    {rv.status}
+                  </span>
+                </div>
               </div>
               <div className="text-sm text-[#93b8d8] space-y-1">
                 <p><span className="font-medium text-[#f0f6ff]">Requested by:</span> {rv.users?.full_name || 'Unknown'}</p>
@@ -207,7 +264,16 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
                 is no "Approve" here to pair with this: it would have nothing to
                 do that opening the booking does not already do.
               */}
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-1 flex-wrap">
+                {isOpenRequestStatus(rv.status) && (
+                  <button
+                    onClick={() => moveTo('revision', rv.id, OTHER_OPEN_STATUS[rv.status as OpenRequestStatus])}
+                    disabled={moving === rv.id}
+                    className={rv.status === OPS_REVIEW ? primaryBtn : secondaryBtn}
+                  >
+                    {MOVE_LABELS[OTHER_OPEN_STATUS[rv.status as OpenRequestStatus]]}
+                  </button>
+                )}
                 <button
                   onClick={() => setDenyingRevision(rv.id)}
                   className="px-3 py-1.5 text-sm border border-[#1e5080] text-[#f87171] rounded-lg hover:bg-[#3d0f0f] hover:border-[#f87171] transition-colors"
@@ -215,6 +281,10 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
                   Deny
                 </button>
               </div>
+              {rv.status === AWAITING_CSC && (
+                <p className="text-xs text-[#6a96bb]">Once CSC responds, edit the booking to grant this, or deny it.</p>
+              )}
+              {moveError?.id === rv.id && <p className="text-xs text-[#f87171]">{moveError.message}</p>}
             </div>
           ))}
         </div>
@@ -316,7 +386,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
           </div>
 
           {/* Actions */}
-          {r.status === 'Pending' && (
+          {isOpenRequestStatus(r.status) && (
             confirmingDenial === r.id ? (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-[#93b8d8]">Are you sure?</span>
@@ -334,7 +404,18 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
                 </button>
               </div>
             ) : (
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-1 flex-wrap">
+                {/*
+                  The suggested next step leads (issue #128): a request in Ops
+                  Review goes to CSC first, and one back from CSC is fulfilled or
+                  denied. Fulfill and Deny stay available from either, since not
+                  every request needs CSC.
+                */}
+                {r.status === OPS_REVIEW && (
+                  <button onClick={() => moveTo('request', r.id, AWAITING_CSC)} disabled={moving === r.id} className={primaryBtn}>
+                    {MOVE_LABELS[AWAITING_CSC]}
+                  </button>
+                )}
                 <button
                   onClick={() => setFulfillingRequest({
                     id: r.id,
@@ -356,9 +437,23 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
                 >
                   Deny
                 </button>
+                {r.status === AWAITING_CSC && (
+                  <button onClick={() => moveTo('request', r.id, OPS_REVIEW)} disabled={moving === r.id} className={secondaryBtn}>
+                    {MOVE_LABELS[OPS_REVIEW]}
+                  </button>
+                )}
               </div>
             )
           )}
+          {/* A denial can be reversed; a fulfilment cannot, since a booking is linked to it. */}
+          {r.status === 'Denied' && (
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => moveTo('request', r.id, OPS_REVIEW)} disabled={moving === r.id} className={secondaryBtn}>
+                Reopen
+              </button>
+            </div>
+          )}
+          {moveError?.id === r.id && <p className="text-xs text-[#f87171]">{moveError.message}</p>}
         </div>
       ))}
         </div>
@@ -382,7 +477,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
           kind="revision"
           requestId={denyingRevision}
           onClose={() => setDenyingRevision(null)}
-          // fetchRequests drops the row (the GET only returns Pending) and
+          // fetchRequests drops the row (the GET only returns open ones) and
           // onCountChange clears the pending action it was driving.
           onDenied={() => { setDenyingRevision(null); fetchRequests(); onCountChange() }}
         />
