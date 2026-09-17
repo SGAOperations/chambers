@@ -36,11 +36,7 @@ export default function DenyModal({ requestId, onClose, onDenied, kind = 'reques
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(
-          isRevision
-            // The revisions route only ever denies, so it takes no status --
-            // there is no other transition to ask it for.
-            ? { id: requestId, denial_reason: reason.trim() || null }
-            : { id: requestId, status: 'Denied', denial_reason: reason.trim() || null }
+          { id: requestId, status: 'Denied', denial_reason: reason.trim() || null }
         ),
       }
     )

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isManagementRole } from './admin-roles'
+import { OPS_REVIEW } from './request-status'
 
 /**
  * The admin "Pending Actions" model (issue #38).
@@ -297,11 +298,13 @@ export async function fetchPendingActions(
     adminSupabase
       .from('room_requests')
       .select('id, type, purpose, bodies(name), room_request_details(start_date), tabling_request_sessions(session_date)')
-      .eq('status', 'Pending'),
+      // Only Ops Review is waiting on an admin. Awaiting CSC is waiting on CSC
+      // Operations, so it is not a task (issue #128).
+      .eq('status', OPS_REVIEW),
     adminSupabase
       .from('revision_requests')
       .select(`id, booking_id, bookings(${BOOKING_CHILD_SELECT})`)
-      .eq('status', 'Pending'),
+      .eq('status', OPS_REVIEW),
     adminSupabase
       .from('cancellation_requests')
       .select(`id, booking_id, occurrence_id, bookings(${BOOKING_CHILD_SELECT})`)
