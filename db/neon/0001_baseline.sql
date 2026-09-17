@@ -1,0 +1,544 @@
+-- Chambers on Neon: baseline schema (issue #136).
+--
+-- Generated from the live Supabase catalog on 2026-09-17, after the #128 and
+-- #132 migrations, so it is the production `public` schema as it stands -- not a
+-- replay of supabase/migrations, which also carries Supabase-only pieces.
+--
+-- What is deliberately different from Supabase:
+--
+--   * Foreign keys that pointed at Supabase's auth.users now point at
+--     public.users. Every one of those ids was already a public.users id, because
+--     the on_auth_user_created trigger created the row with the same id.
+--   * No row-level security policies, helper functions (is_admin, my_body_ids,
+--     ...), or the on_auth_user_created trigger. They all asked Supabase Auth who
+--     the caller was, which does not exist here. Every route already enforces
+--     access in application code before it queries.
+--   * RLS is still ENABLED on every table, with no policies. The application
+--     connects as the table owner, which RLS does not apply to, so this changes
+--     nothing for Chambers -- but any other role that is ever granted access (the
+--     Neon Data API's `authenticated`/`anonymous`, a read-only analyst role) sees
+--     no rows until a policy is written for it. Default deny, on purpose.
+--   * revoke_user_sessions() is gone: sessions are rows in auth_sessions now (see
+--     0002), and revoking them is a delete from application code.
+--   * Column comments are not carried over; they remain in supabase/migrations.
+--
+-- Run 0001 then 0002 on an empty Neon database, then scripts/neon/copy-data.mjs.
+
+create extension if not exists pgcrypto;
+
+create table public.app_settings (
+  id integer not null default 1,
+  min_days_advance_room integer not null default 2,
+  min_days_advance_tabling integer not null default 23,
+  min_hours_advance_spaces integer not null default 24,
+  pa_warning_lead_days integer not null default 7,
+  pa_event_trigger_weeks integer not null default 10,
+  pa_request_room_danger_start integer not null default 17,
+  pa_request_room_danger_end integer not null default 11,
+  pa_request_tabling_danger_start integer not null default 17,
+  pa_request_tabling_danger_end integer not null default 14,
+  pa_revision_danger_start integer not null default 17,
+  pa_revision_danger_end integer not null default 11,
+  pa_cancellation_regular_danger_days integer not null default 0,
+  pa_cancellation_event_danger_start integer not null default 21,
+  pa_cancellation_event_danger_end integer not null default 14,
+  pa_event_mgmt_danger_start integer not null default 35,
+  pa_event_mgmt_danger_end integer not null default 28,
+  pa_event_engage_danger_start integer not null default 28,
+  pa_event_engage_danger_end integer not null default 21,
+  constraint app_settings_pkey PRIMARY KEY (id),
+  constraint single_row CHECK ((id = 1))
+);
+
+create table public.audit_logs (
+  id uuid not null default gen_random_uuid(),
+  booking_id uuid not null,
+  admin_id uuid not null,
+  new_status text not null,
+  created_at timestamp with time zone not null default now(),
+  constraint audit_logs_pkey PRIMARY KEY (id)
+);
+
+create table public.board_memberships (
+  id uuid not null default gen_random_uuid(),
+  user_id uuid,
+  body_id uuid,
+  role text not null,
+  created_at timestamp with time zone default now(),
+  constraint board_memberships_user_id_body_id_key UNIQUE (user_id, body_id),
+  constraint board_memberships_pkey PRIMARY KEY (id),
+  constraint board_memberships_role_check CHECK ((role = ANY (ARRAY['Leadership'::text, 'Member'::text])))
+);
+
+create table public.bodies (
+  id uuid not null default gen_random_uuid(),
+  name text not null,
+  division text not null,
+  is_active boolean default true,
+  created_at timestamp with time zone default now(),
+  body_open boolean not null default false,
+  body_type text not null default 'Other'::text,
+  slack_channel_id text,
+  slack_reminders_enabled boolean not null default true,
+  sga_emails text[] not null default '{}'::text[],
+  constraint bodies_name_key UNIQUE (name),
+  constraint bodies_pkey PRIMARY KEY (id),
+  constraint bodies_body_type_check CHECK ((body_type = ANY (ARRAY['Committee'::text, 'Board'::text, 'Advisory Board'::text, 'Working Group'::text, 'Team'::text, 'Other'::text]))),
+  constraint bodies_division_check CHECK ((division = ANY (ARRAY['Office of the President'::text, 'Academic Affairs'::text, 'Campus Affairs'::text, 'DEI'::text, 'Student Success'::text, 'Operational Affairs'::text, 'External Affairs'::text, 'Student Involvement'::text, 'Senate'::text, 'Non-Divisional'::text])))
+);
+
+create table public.booking_bodies (
+  booking_id uuid not null,
+  body_id uuid not null,
+  created_at timestamp with time zone not null default now(),
+  id uuid not null default gen_random_uuid(),
+  constraint booking_bodies_booking_id_body_id_key UNIQUE (booking_id, body_id),
+  constraint booking_bodies_pkey PRIMARY KEY (id)
+);
+
+create table public.bookings (
+  id uuid not null default gen_random_uuid(),
+  request_id uuid,
+  body_id uuid not null,
+  type text not null,
+  purpose text not null,
+  created_by uuid,
+  created_at timestamp with time zone default now(),
+  semester_id uuid,
+  creator_role text,
+  is_event boolean not null default false,
+  hidden boolean not null default false,
+  scope text not null default 'single'::text,
+  division text,
+  constraint bookings_pkey PRIMARY KEY (id),
+  constraint bookings_division_check CHECK (((division IS NULL) OR (division = ANY (ARRAY['Office of the President'::text, 'Academic Affairs'::text, 'Campus Affairs'::text, 'DEI'::text, 'Student Success'::text, 'Operational Affairs'::text, 'External Affairs'::text, 'Student Involvement'::text, 'Senate'::text, 'Non-Divisional'::text])))),
+  constraint bookings_division_required_check CHECK (((scope = 'divisional'::text) = (division IS NOT NULL))),
+  constraint bookings_scope_check CHECK ((scope = ANY (ARRAY['single'::text, 'divisional'::text, 'multi'::text]))),
+  constraint bookings_type_check CHECK ((type = ANY (ARRAY['One-Time Room'::text, 'Weekly Room'::text, 'Tabling'::text])))
+);
+
+create table public.cancellation_requests (
+  id uuid not null default gen_random_uuid(),
+  booking_id uuid,
+  occurrence_id uuid,
+  requested_by uuid,
+  scope text not null,
+  status text default 'Pending'::text,
+  created_at timestamp with time zone default now(),
+  cancellation_type text not null default 'Cancellation'::text,
+  occurrence_date date,
+  constraint cancellation_requests_pkey PRIMARY KEY (id),
+  constraint cancellation_requests_cancellation_type_check CHECK ((cancellation_type = ANY (ARRAY['Cancellation'::text, 'Virtual'::text]))),
+  constraint cancellation_requests_scope_check CHECK ((scope = ANY (ARRAY['occurrence'::text, 'series'::text]))),
+  constraint cancellation_requests_status_check CHECK ((status = ANY (ARRAY['Pending'::text, 'Done'::text])))
+);
+
+create table public.event_tracking (
+  booking_id uuid not null,
+  event_management_form boolean not null default false,
+  engage_form boolean not null default false,
+  updated_at timestamp with time zone default now(),
+  occurrence_date date,
+  id uuid not null default gen_random_uuid(),
+  constraint event_tracking_target_key UNIQUE NULLS NOT DISTINCT (booking_id, occurrence_date),
+  constraint event_tracking_pkey PRIMARY KEY (id)
+);
+
+create table public.membership_requests (
+  id uuid not null default gen_random_uuid(),
+  user_id uuid not null,
+  body_id uuid not null,
+  status text not null default 'pending'::text,
+  created_at timestamp with time zone not null default now(),
+  resolved_at timestamp with time zone,
+  resolved_by uuid,
+  constraint membership_requests_user_id_body_id_key UNIQUE (user_id, body_id),
+  constraint membership_requests_pkey PRIMARY KEY (id),
+  constraint membership_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'denied'::text])))
+);
+
+create table public.one_time_room_bookings (
+  id uuid not null default gen_random_uuid(),
+  booking_id uuid,
+  room_name text not null,
+  booking_date date not null,
+  start_time time without time zone not null,
+  end_time time without time zone not null,
+  reservation_code text,
+  status text default 'Reserved'::text,
+  created_at timestamp with time zone default now(),
+  meeting_time time without time zone,
+  constraint one_time_room_bookings_pkey PRIMARY KEY (id),
+  constraint one_time_room_bookings_status_check CHECK ((status = ANY (ARRAY['Reserved'::text, 'Alternate Room'::text, 'Alternate Time'::text, 'Alternate Room and Time'::text, 'Waitlisted'::text, 'Unavailable'::text, 'Pending Cancellation'::text, 'Cancelled'::text, 'Virtual'::text, 'Missed'::text, 'Repurposed'::text, 'Tentative'::text])))
+);
+
+create table public.revision_requests (
+  id uuid not null default gen_random_uuid(),
+  booking_id uuid not null,
+  requested_by uuid not null,
+  change_type text not null,
+  new_start_time time without time zone,
+  new_end_time time without time zone,
+  new_room text,
+  more_info text not null,
+  status text not null default 'Ops Review'::text,
+  created_at timestamp with time zone not null default now(),
+  denial_reason text,
+  constraint revision_requests_pkey PRIMARY KEY (id),
+  constraint revision_requests_change_type_check CHECK ((change_type = ANY (ARRAY['Time'::text, 'Room'::text, 'Both'::text]))),
+  constraint revision_requests_status_check CHECK ((status = ANY (ARRAY['Ops Review'::text, 'Awaiting CSC'::text, 'Done'::text, 'Denied'::text])))
+);
+
+create table public.room_request_bodies (
+  request_id uuid not null,
+  body_id uuid not null,
+  created_at timestamp with time zone not null default now(),
+  id uuid not null default gen_random_uuid(),
+  constraint room_request_bodies_request_id_body_id_key UNIQUE (request_id, body_id),
+  constraint room_request_bodies_pkey PRIMARY KEY (id)
+);
+
+create table public.room_request_details (
+  id uuid not null default gen_random_uuid(),
+  request_id uuid,
+  room_name text,
+  start_date date not null,
+  start_time time without time zone not null,
+  end_time time without time zone not null,
+  end_date date,
+  created_at timestamp with time zone default now(),
+  constraint room_request_details_pkey PRIMARY KEY (id)
+);
+
+create table public.room_requests (
+  id uuid not null default gen_random_uuid(),
+  body_id uuid not null,
+  requested_by uuid,
+  type text not null,
+  purpose text not null,
+  status text default 'Ops Review'::text,
+  notes text,
+  created_at timestamp with time zone default now(),
+  scope text not null default 'single'::text,
+  division text,
+  capacity integer,
+  constraint room_requests_pkey PRIMARY KEY (id),
+  constraint room_requests_capacity_check CHECK (((capacity IS NULL) OR ((capacity > 0) AND (capacity <= 10000)))),
+  constraint room_requests_division_check CHECK (((division IS NULL) OR (division = ANY (ARRAY['Office of the President'::text, 'Academic Affairs'::text, 'Campus Affairs'::text, 'DEI'::text, 'Student Success'::text, 'Operational Affairs'::text, 'External Affairs'::text, 'Student Involvement'::text, 'Senate'::text, 'Non-Divisional'::text])))),
+  constraint room_requests_division_required_check CHECK (((scope = 'divisional'::text) = (division IS NOT NULL))),
+  constraint room_requests_scope_check CHECK ((scope = ANY (ARRAY['single'::text, 'divisional'::text, 'multi'::text]))),
+  constraint room_requests_status_check CHECK ((status = ANY (ARRAY['Ops Review'::text, 'Awaiting CSC'::text, 'Fulfilled'::text, 'Denied'::text]))),
+  constraint room_requests_type_check CHECK ((type = ANY (ARRAY['One-Time Room'::text, 'Weekly Room'::text, 'Tabling'::text])))
+);
+
+create table public.semesters (
+  id uuid not null default gen_random_uuid(),
+  name text not null,
+  is_active boolean not null default false,
+  created_at timestamp with time zone not null default now(),
+  end_date date,
+  constraint semesters_pkey PRIMARY KEY (id)
+);
+
+create table public.signup_otps (
+  id uuid not null default gen_random_uuid(),
+  email text not null,
+  otp_hash text not null,
+  otp_expires_at timestamp with time zone not null,
+  created_at timestamp with time zone not null default now(),
+  constraint signup_otps_email_key UNIQUE (email),
+  constraint signup_otps_pkey PRIMARY KEY (id)
+);
+
+create table public.slack_connect_tokens (
+  id uuid not null default gen_random_uuid(),
+  token text not null,
+  slack_user_id text not null,
+  expires_at timestamp with time zone not null,
+  created_at timestamp with time zone default now(),
+  constraint slack_connect_tokens_token_key UNIQUE (token),
+  constraint slack_connect_tokens_pkey PRIMARY KEY (id)
+);
+
+create table public.slack_connections (
+  id uuid not null default gen_random_uuid(),
+  slack_user_id text not null,
+  chambers_user_id uuid not null,
+  connected_at timestamp with time zone default now(),
+  constraint slack_connections_slack_user_id_key UNIQUE (slack_user_id),
+  constraint slack_connections_pkey PRIMARY KEY (id)
+);
+
+create table public.slack_meeting_reminders (
+  id uuid not null default gen_random_uuid(),
+  weekly_booking_id uuid not null,
+  occurrence_date date not null,
+  channel_id text not null,
+  posted_at timestamp with time zone not null default now(),
+  constraint slack_meeting_reminders_weekly_booking_id_occurrence_date_key UNIQUE (weekly_booking_id, occurrence_date),
+  constraint slack_meeting_reminders_pkey PRIMARY KEY (id)
+);
+
+create table public.space_blackouts (
+  id uuid not null default gen_random_uuid(),
+  space_id uuid,
+  start_time timestamp with time zone not null,
+  end_time timestamp with time zone not null,
+  created_by uuid not null,
+  created_at timestamp with time zone default now(),
+  constraint space_blackouts_pkey PRIMARY KEY (id)
+);
+
+create table public.space_booking_series (
+  id uuid not null default gen_random_uuid(),
+  space_id uuid not null,
+  creator_id uuid not null,
+  title text not null,
+  attendee_ids uuid[] not null default '{}'::uuid[],
+  start_time time without time zone not null,
+  end_time time without time zone not null,
+  starts_on date not null,
+  ends_on date not null,
+  cancelled_at timestamp with time zone,
+  created_at timestamp with time zone not null default now(),
+  external_attendees text[] not null default '{}'::text[],
+  constraint space_booking_series_pkey PRIMARY KEY (id),
+  constraint space_booking_series_external_attendees_size CHECK ((cardinality(external_attendees) <= 25)),
+  constraint space_booking_series_range_check CHECK ((ends_on >= starts_on))
+);
+
+create table public.space_bookings (
+  id uuid not null default gen_random_uuid(),
+  space_id uuid not null,
+  creator_id uuid not null,
+  title text not null,
+  start_time timestamp with time zone not null,
+  end_time timestamp with time zone not null,
+  attendee_ids uuid[] not null default '{}'::uuid[],
+  created_at timestamp with time zone default now(),
+  series_id uuid,
+  external_attendees text[] not null default '{}'::text[],
+  constraint space_bookings_pkey PRIMARY KEY (id),
+  constraint space_bookings_external_attendees_size CHECK ((cardinality(external_attendees) <= 25))
+);
+
+create table public.space_weekly_limit_overrides (
+  id uuid not null default gen_random_uuid(),
+  user_id uuid not null,
+  weekly_hours_limit numeric(5,2) not null,
+  created_by uuid not null,
+  created_at timestamp with time zone default now(),
+  constraint space_weekly_limit_overrides_user_id_key UNIQUE (user_id),
+  constraint space_weekly_limit_overrides_pkey PRIMARY KEY (id)
+);
+
+create table public.spaces (
+  id uuid not null default gen_random_uuid(),
+  name text not null,
+  capacity integer not null,
+  created_at timestamp with time zone default now(),
+  constraint spaces_pkey PRIMARY KEY (id)
+);
+
+create table public.tabling_bookings (
+  id uuid not null default gen_random_uuid(),
+  booking_id uuid,
+  created_at timestamp with time zone default now(),
+  reservation_code text,
+  constraint tabling_bookings_pkey PRIMARY KEY (id)
+);
+
+create table public.tabling_request_sessions (
+  id uuid not null default gen_random_uuid(),
+  request_id uuid,
+  session_date date not null,
+  start_time time without time zone not null,
+  end_time time without time zone not null,
+  created_at timestamp with time zone default now(),
+  constraint tabling_request_sessions_pkey PRIMARY KEY (id)
+);
+
+create table public.tabling_sessions (
+  id uuid not null default gen_random_uuid(),
+  tabling_booking_id uuid,
+  location text not null,
+  session_date date not null,
+  start_time time without time zone not null,
+  end_time time without time zone not null,
+  reservation_code text,
+  status text default 'Reserved'::text,
+  created_at timestamp with time zone default now(),
+  meeting_time time without time zone,
+  constraint tabling_sessions_pkey PRIMARY KEY (id),
+  constraint tabling_sessions_status_check CHECK ((status = ANY (ARRAY['Reserved'::text, 'Alternate Room'::text, 'Alternate Time'::text, 'Alternate Room and Time'::text, 'Waitlisted'::text, 'Unavailable'::text, 'Pending Cancellation'::text, 'Cancelled'::text, 'Virtual'::text, 'Missed'::text, 'Repurposed'::text, 'Tentative'::text])))
+);
+
+create table public.user_alerts (
+  id uuid not null default gen_random_uuid(),
+  user_id uuid not null,
+  audit_log_id uuid,
+  booking_id uuid,
+  booking_type text not null,
+  booking_date text,
+  start_time text,
+  dismissed boolean not null default false,
+  created_at timestamp with time zone not null default now(),
+  request_id uuid,
+  denial_reason text,
+  constraint user_alerts_pkey PRIMARY KEY (id)
+);
+
+create table public.users (
+  id uuid not null default gen_random_uuid(),
+  email text not null,
+  full_name text not null,
+  admin_role text,
+  is_active boolean default true,
+  created_at timestamp with time zone default now(),
+  iems_role text,
+  has_completed_onboarding boolean not null default false,
+  otp_hash text,
+  otp_expires_at timestamp with time zone,
+  email_preferences jsonb not null default '{}'::jsonb,
+  senate_type_preferences jsonb not null default '{}'::jsonb,
+  sessions_revoked_at timestamp with time zone,
+  spaces_email_destination text not null default 'personal'::text,
+  spaces_sga_email text,
+  constraint users_email_key UNIQUE (email),
+  constraint users_pkey PRIMARY KEY (id),
+  constraint users_admin_role_check CHECK ((admin_role = ANY (ARRAY['Executive Vice President'::text, 'Vice President of Operational Affairs'::text, 'Comptroller'::text, 'Digital Innovation Manager'::text, 'Digital Innovation Project Member'::text, 'Information Manager'::text]))),
+  constraint users_spaces_email_destination_check CHECK ((spaces_email_destination = ANY (ARRAY['personal'::text, 'sga'::text, 'both'::text])))
+);
+
+create table public.weekly_room_bookings (
+  id uuid not null default gen_random_uuid(),
+  booking_id uuid,
+  room_name text not null,
+  start_date date not null,
+  end_date date not null,
+  start_time time without time zone not null,
+  end_time time without time zone not null,
+  reservation_code text,
+  status text default 'Reserved'::text,
+  created_at timestamp with time zone default now(),
+  meeting_time time without time zone,
+  constraint weekly_room_bookings_pkey PRIMARY KEY (id),
+  constraint weekly_room_bookings_status_check CHECK ((status = ANY (ARRAY['Reserved'::text, 'Alternate Room'::text, 'Alternate Time'::text, 'Alternate Room and Time'::text, 'Waitlisted'::text, 'Unavailable'::text, 'Pending Cancellation'::text, 'Cancelled'::text, 'Virtual'::text, 'Missed'::text, 'Repurposed'::text, 'Tentative'::text])))
+);
+
+create table public.weekly_room_occurrences (
+  id uuid not null default gen_random_uuid(),
+  weekly_booking_id uuid,
+  occurrence_date date not null,
+  room_name text,
+  start_time time without time zone,
+  end_time time without time zone,
+  reservation_code text,
+  status text,
+  created_at timestamp with time zone default now(),
+  senate_type text,
+  purpose text,
+  hidden boolean,
+  is_event boolean not null default false,
+  meeting_time time without time zone,
+  constraint weekly_room_occurrences_booking_date_key UNIQUE (weekly_booking_id, occurrence_date),
+  constraint weekly_room_occurrences_pkey PRIMARY KEY (id),
+  constraint weekly_room_occurrences_senate_type_check CHECK ((senate_type = ANY (ARRAY['Weekly'::text, 'Full Body'::text, 'Office Hours'::text]))),
+  constraint weekly_room_occurrences_status_check CHECK ((status = ANY (ARRAY['Reserved'::text, 'Alternate Room'::text, 'Alternate Time'::text, 'Alternate Room and Time'::text, 'Waitlisted'::text, 'Unavailable'::text, 'Pending Cancellation'::text, 'Cancelled'::text, 'Virtual'::text, 'Missed'::text, 'Repurposed'::text, 'Tentative'::text])))
+);
+
+-- Foreign keys. The seven marked (auth) referenced auth.users on Supabase.
+alter table public.audit_logs add constraint audit_logs_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public.users(id);
+alter table public.audit_logs add constraint audit_logs_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id) ON DELETE CASCADE;
+alter table public.board_memberships add constraint board_memberships_body_id_fkey FOREIGN KEY (body_id) REFERENCES public.bodies(id) ON DELETE CASCADE;
+alter table public.board_memberships add constraint board_memberships_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+alter table public.booking_bodies add constraint booking_bodies_body_id_fkey FOREIGN KEY (body_id) REFERENCES public.bodies(id) ON DELETE RESTRICT;
+alter table public.booking_bodies add constraint booking_bodies_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id) ON DELETE CASCADE;
+alter table public.bookings add constraint bookings_body_id_fkey FOREIGN KEY (body_id) REFERENCES public.bodies(id);
+alter table public.bookings add constraint bookings_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
+alter table public.bookings add constraint bookings_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.room_requests(id);
+alter table public.bookings add constraint bookings_semester_id_fkey FOREIGN KEY (semester_id) REFERENCES public.semesters(id);
+alter table public.cancellation_requests add constraint cancellation_requests_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id) ON DELETE CASCADE;
+alter table public.cancellation_requests add constraint cancellation_requests_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.users(id);
+alter table public.event_tracking add constraint event_tracking_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id) ON DELETE CASCADE;
+alter table public.membership_requests add constraint membership_requests_body_id_fkey FOREIGN KEY (body_id) REFERENCES public.bodies(id) ON DELETE CASCADE;
+alter table public.membership_requests add constraint membership_requests_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES public.users(id);
+alter table public.membership_requests add constraint membership_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+alter table public.one_time_room_bookings add constraint one_time_room_bookings_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id) ON DELETE CASCADE;
+alter table public.revision_requests add constraint revision_requests_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id) ON DELETE CASCADE;
+alter table public.revision_requests add constraint revision_requests_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.users(id) ON DELETE CASCADE;
+alter table public.room_request_bodies add constraint room_request_bodies_body_id_fkey FOREIGN KEY (body_id) REFERENCES public.bodies(id) ON DELETE RESTRICT;
+alter table public.room_request_bodies add constraint room_request_bodies_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.room_requests(id) ON DELETE CASCADE;
+alter table public.room_request_details add constraint room_request_details_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.room_requests(id) ON DELETE CASCADE;
+alter table public.room_requests add constraint room_requests_body_id_fkey FOREIGN KEY (body_id) REFERENCES public.bodies(id);
+alter table public.room_requests add constraint room_requests_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.users(id);
+alter table public.slack_connections add constraint slack_connections_chambers_user_id_fkey FOREIGN KEY (chambers_user_id) REFERENCES public.users(id) ON DELETE CASCADE; -- (auth)
+alter table public.slack_meeting_reminders add constraint slack_meeting_reminders_weekly_booking_id_fkey FOREIGN KEY (weekly_booking_id) REFERENCES public.weekly_room_bookings(id) ON DELETE CASCADE;
+alter table public.space_blackouts add constraint space_blackouts_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id); -- (auth)
+alter table public.space_blackouts add constraint space_blackouts_space_id_fkey FOREIGN KEY (space_id) REFERENCES public.spaces(id) ON DELETE CASCADE;
+alter table public.space_booking_series add constraint space_booking_series_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES public.users(id) ON DELETE CASCADE; -- (auth)
+alter table public.space_booking_series add constraint space_booking_series_space_id_fkey FOREIGN KEY (space_id) REFERENCES public.spaces(id) ON DELETE CASCADE;
+alter table public.space_bookings add constraint space_bookings_creator_id_fkey FOREIGN KEY (creator_id) REFERENCES public.users(id) ON DELETE CASCADE; -- (auth)
+alter table public.space_bookings add constraint space_bookings_series_id_fkey FOREIGN KEY (series_id) REFERENCES public.space_booking_series(id) ON DELETE SET NULL;
+alter table public.space_bookings add constraint space_bookings_space_id_fkey FOREIGN KEY (space_id) REFERENCES public.spaces(id) ON DELETE CASCADE;
+alter table public.space_weekly_limit_overrides add constraint space_weekly_limit_overrides_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id); -- (auth)
+alter table public.space_weekly_limit_overrides add constraint space_weekly_limit_overrides_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE; -- (auth)
+alter table public.tabling_bookings add constraint tabling_bookings_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id) ON DELETE CASCADE;
+alter table public.tabling_request_sessions add constraint tabling_request_sessions_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.room_requests(id) ON DELETE CASCADE;
+alter table public.tabling_sessions add constraint tabling_sessions_tabling_booking_id_fkey FOREIGN KEY (tabling_booking_id) REFERENCES public.tabling_bookings(id) ON DELETE CASCADE;
+alter table public.user_alerts add constraint user_alerts_audit_log_id_fkey FOREIGN KEY (audit_log_id) REFERENCES public.audit_logs(id);
+alter table public.user_alerts add constraint user_alerts_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id);
+alter table public.user_alerts add constraint user_alerts_request_id_fkey FOREIGN KEY (request_id) REFERENCES public.room_requests(id);
+alter table public.user_alerts add constraint user_alerts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id); -- (auth)
+alter table public.weekly_room_bookings add constraint weekly_room_bookings_booking_id_fkey FOREIGN KEY (booking_id) REFERENCES public.bookings(id) ON DELETE CASCADE;
+alter table public.weekly_room_occurrences add constraint weekly_room_occurrences_weekly_booking_id_fkey FOREIGN KEY (weekly_booking_id) REFERENCES public.weekly_room_bookings(id) ON DELETE CASCADE;
+
+-- Indexes beyond those that back primary keys and unique constraints.
+CREATE INDEX audit_logs_admin_id_idx ON public.audit_logs USING btree (admin_id);
+CREATE INDEX audit_logs_booking_id_idx ON public.audit_logs USING btree (booking_id);
+CREATE INDEX board_memberships_body_id_idx ON public.board_memberships USING btree (body_id);
+CREATE INDEX booking_bodies_body_id_idx ON public.booking_bodies USING btree (body_id);
+CREATE INDEX bookings_body_id_idx ON public.bookings USING btree (body_id);
+CREATE INDEX bookings_created_by_idx ON public.bookings USING btree (created_by);
+CREATE INDEX bookings_divisional_idx ON public.bookings USING btree (division) WHERE (scope = 'divisional'::text);
+CREATE INDEX bookings_request_id_idx ON public.bookings USING btree (request_id);
+CREATE INDEX bookings_semester_id_idx ON public.bookings USING btree (semester_id);
+CREATE INDEX cancellation_requests_booking_date_idx ON public.cancellation_requests USING btree (booking_id, occurrence_date);
+CREATE INDEX cancellation_requests_booking_id_idx ON public.cancellation_requests USING btree (booking_id);
+CREATE INDEX cancellation_requests_requested_by_idx ON public.cancellation_requests USING btree (requested_by);
+CREATE INDEX membership_requests_body_id_idx ON public.membership_requests USING btree (body_id);
+CREATE INDEX membership_requests_resolved_by_idx ON public.membership_requests USING btree (resolved_by);
+CREATE INDEX one_time_room_bookings_booking_id_idx ON public.one_time_room_bookings USING btree (booking_id);
+CREATE INDEX revision_requests_booking_id_idx ON public.revision_requests USING btree (booking_id);
+CREATE INDEX revision_requests_requested_by_idx ON public.revision_requests USING btree (requested_by);
+CREATE INDEX room_request_bodies_body_id_idx ON public.room_request_bodies USING btree (body_id);
+CREATE INDEX room_request_details_request_id_idx ON public.room_request_details USING btree (request_id);
+CREATE INDEX room_requests_body_id_idx ON public.room_requests USING btree (body_id);
+CREATE INDEX room_requests_divisional_idx ON public.room_requests USING btree (division) WHERE (scope = 'divisional'::text);
+CREATE INDEX room_requests_requested_by_idx ON public.room_requests USING btree (requested_by);
+CREATE INDEX slack_connections_chambers_user_id_idx ON public.slack_connections USING btree (chambers_user_id);
+CREATE INDEX slack_meeting_reminders_date_idx ON public.slack_meeting_reminders USING btree (occurrence_date);
+CREATE INDEX space_blackouts_created_by_idx ON public.space_blackouts USING btree (created_by);
+CREATE INDEX space_blackouts_space_id_idx ON public.space_blackouts USING btree (space_id);
+CREATE INDEX space_bookings_creator_id_idx ON public.space_bookings USING btree (creator_id);
+CREATE INDEX space_bookings_series_id_idx ON public.space_bookings USING btree (series_id) WHERE (series_id IS NOT NULL);
+CREATE INDEX space_bookings_space_id_idx ON public.space_bookings USING btree (space_id);
+CREATE INDEX space_weekly_limit_overrides_created_by_idx ON public.space_weekly_limit_overrides USING btree (created_by);
+CREATE INDEX tabling_bookings_booking_id_idx ON public.tabling_bookings USING btree (booking_id);
+CREATE INDEX tabling_request_sessions_request_id_idx ON public.tabling_request_sessions USING btree (request_id);
+CREATE INDEX tabling_sessions_tabling_booking_id_idx ON public.tabling_sessions USING btree (tabling_booking_id);
+CREATE INDEX user_alerts_audit_log_id_idx ON public.user_alerts USING btree (audit_log_id);
+CREATE INDEX user_alerts_booking_id_idx ON public.user_alerts USING btree (booking_id);
+CREATE INDEX user_alerts_request_id_idx ON public.user_alerts USING btree (request_id);
+CREATE INDEX user_alerts_user_id_idx ON public.user_alerts USING btree (user_id);
+CREATE INDEX weekly_room_bookings_booking_id_idx ON public.weekly_room_bookings USING btree (booking_id);
+CREATE INDEX weekly_room_occurrences_weekly_booking_id_idx ON public.weekly_room_occurrences USING btree (weekly_booking_id);
+
+-- Default deny for every role but the owner. See the header.
+do $$
+declare t record;
+begin
+  for t in select tablename from pg_tables where schemaname = 'public' loop
+    execute format('alter table public.%I enable row level security', t.tablename);
+  end loop;
+end $$;

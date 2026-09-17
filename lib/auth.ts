@@ -1,29 +1,36 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { headers } from 'next/headers'
+import { auth } from './better-auth'
 
 export type AuthedUser = {
   id: string
   email?: string
   /**
-   * The token's `iat`, in epoch seconds, or null if absent.
+   * When this session was created, in epoch seconds, or null if unknown.
    *
-   * Carried so callers can tell when this session was minted. Compared against
-   * users.sessions_revoked_at to refuse tokens issued before an admin revoked
-   * someone's sessions: deleting the session rows stops the *refresh*, but the
-   * access token already in their browser keeps verifying locally against the
-   * JWKS until it expires. See getAuthedUserWithLiveRoles().
+   * Compared against users.sessions_revoked_at in getAuthedUserWithLiveRoles().
+   * Revoking deletes the sessions outright now (lib/auth-admin.ts), so this is a
+   * second lock rather than the only one: a session created before the stamp is
+   * refused even if its row somehow survived.
    */
   issuedAt: number | null
   /**
-   * True only when the role fields below were re-read from the users table by
-   * getAuthedUserWithLiveRoles(). Absent on a plain getAuthedUser(), where they
-   * are whatever the token was stamped with and may be out of date.
+   * True only when the role fields below were read from the users table by
+   * getAuthedUserWithLiveRoles(). Absent on a plain getAuthedUser(), where
+   * app_metadata is empty.
    *
-   * Shared code that grants privilege from app_metadata must require this rather
-   * than trusting the fields directly -- see loadScopeContext() and
-   * requireBookingManager(), both of which are reached from routes that use
-   * either path.
+   * Shared code that grants privilege from app_metadata must require this -- see
+   * loadScopeContext() and requireBookingManager().
    */
   rolesVerifiedLive?: true
+  /**
+   * The caller's roles, under the name Supabase gave them.
+   *
+   * Under Supabase Auth these were copied into the access token. Better Auth
+   * carries no such copy, so they are only ever filled from the users row, by
+   * getAuthedUserWithLiveRoles(). The name is kept so the thirty-odd routes that
+   * read `user.app_metadata?.is_admin` did not all have to change with the
+   * migration (issue #136).
+   */
   app_metadata: {
     is_admin?: boolean
     iems_role?: string
@@ -35,41 +42,33 @@ export type AuthedUser = {
 /**
  * Whether this user's admin flag can be trusted to grant privilege.
  *
- * Fails closed: a token-derived user is treated as non-admin rather than as an
- * admin, so a caller that forgot to resolve live roles under-privileges instead
- * of over-privileging.
+ * Fails closed: a user whose roles were not read live is treated as non-admin.
  */
 export function hasLiveAdmin(user: AuthedUser): boolean {
   return user.rolesVerifiedLive === true && !!user.app_metadata?.is_admin
 }
 
 /**
- * Verifies the caller's JWT and returns a user-shaped object, or null when
- * there is no valid session.
+ * The signed-in user for this request, or null when there is no valid session.
  *
- * Uses getClaims() rather than getUser(). This project signs tokens with ES256
- * (asymmetric), so getClaims() verifies the signature locally against a cached
- * JWKS instead of making a network round trip to the Auth server on every call.
- * The signature is still cryptographically verified -- this is not the same as
- * trusting getSession(), which does no verification at all.
+ * Server-only. Reads the Better Auth session cookie and checks the session
+ * against auth_sessions, so an expired, signed-out or revoked session is null
+ * here on its very next use.
  *
- * The return shape intentionally mirrors the parts of getUser()'s `user` that
- * this app actually reads (`id` and `app_metadata`), so call sites stay
- * unchanged apart from the call itself.
+ * The argument is ignored. It used to be the Supabase client whose cookies held
+ * the session, and is still accepted so call sites did not all have to change in
+ * the same PR as the login itself (issue #136); drop it as those call sites move
+ * off Supabase.
  */
-export async function getAuthedUser(
-  supabase: SupabaseClient
-): Promise<AuthedUser | null> {
-  const { data, error } = await supabase.auth.getClaims()
-  if (error || !data?.claims) return null
+export async function getAuthedUser(_legacyClient?: unknown): Promise<AuthedUser | null> {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session) return null
 
-  const claims = data.claims
-  if (typeof claims.sub !== 'string' || !claims.sub) return null
-
+  const created = new Date(session.session.createdAt).getTime()
   return {
-    id: claims.sub,
-    email: typeof claims.email === 'string' ? claims.email : undefined,
-    issuedAt: typeof claims.iat === 'number' ? claims.iat : null,
-    app_metadata: (claims.app_metadata ?? {}) as AuthedUser['app_metadata'],
+    id: session.user.id,
+    email: session.user.email,
+    issuedAt: Number.isFinite(created) ? Math.floor(created / 1000) : null,
+    app_metadata: {},
   }
 }

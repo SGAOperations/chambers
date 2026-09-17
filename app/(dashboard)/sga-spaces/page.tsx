@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import SpaceCalendar from './space-calendar'
 import SpaceBookingModal from './space-booking-modal'
 import { Skeleton } from '@/app/_components/skeleton'
-import { createClient } from '@/lib/supabase/client'
-import { getAuthedUser } from '@/lib/auth'
+import { useIdentity } from '../identity-context'
 
 interface Space {
   id: string
@@ -167,9 +166,8 @@ export default function SGASpacesPage() {
   const [limitHours, setLimitHours] = useState<number>(18)
   const [minHoursAdvance, setMinHoursAdvance] = useState<number>(24)
   const [semesterEndDate, setSemesterEndDate] = useState<string | null>(null)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [isLeadership, setIsLeadership] = useState(false)
+  // From the shell, which resolved them from the users row on the server.
+  const { userId: currentUserId, isAdmin, isLeadership } = useIdentity()
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null)
   const [editBooking, setEditBooking] = useState<EditBooking | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
@@ -182,21 +180,6 @@ export default function SGASpacesPage() {
     sun.setUTCDate(sun.getUTCDate() - now.getDay())
     return weekStart.getTime() === sun.getTime()
   })()
-
-  useEffect(() => {
-    const supabase = createClient()
-    getAuthedUser(supabase).then(async (user) => {
-      if (!user) return
-      if (user.app_metadata?.is_admin) setIsAdmin(true)
-      const { data: memberships } = await supabase
-        .from('board_memberships')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('role', 'Leadership')
-        .limit(1)
-      if (memberships && memberships.length > 0) setIsLeadership(true)
-    })
-  }, [])
 
   // Handled explicitly rather than via getJson: on this page an empty list is a
   // meaningful answer ("no rooms configured"), so quietly substituting one for a
@@ -243,7 +226,6 @@ export default function SGASpacesPage() {
     const data = await res.json()
     setRemainingHours(data.remaining)
     setLimitHours(data.limit)
-    if (data.user_id) setCurrentUserId(data.user_id)
     if (data.min_hours_advance != null) setMinHoursAdvance(data.min_hours_advance)
     setSemesterEndDate(data.semester_end_date ?? null)
   }, [])
