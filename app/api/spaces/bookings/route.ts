@@ -5,7 +5,13 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
 import { sendSpaceBookingConfirmedEmail } from '@/lib/emails/space-booking-confirmed'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
-import { dedupeEmails, resolveSpacesAddresses } from '@/lib/spaces-email'
+import {
+  EXTERNAL_ATTENDEES_ERROR,
+  attendeeKeys,
+  dedupeEmails,
+  parseExternalAttendees,
+  resolveSpacesAddresses,
+} from '@/lib/spaces-email'
 import { waitUntil } from '@vercel/functions'
 import { DEFAULT_WEEKLY_HOURS, minutesOf, touchesDeadZone, weekBoundsOf as getWeekBounds } from '@/lib/space-series'
 
@@ -95,11 +101,14 @@ export async function POST(request: Request) {
     }
   }
 
-  const { space_id, title, start_time, end_time, attendee_ids } = await request.json()
+  const { space_id, title, start_time, end_time, attendee_ids, external_attendees } = await request.json()
 
   if (!space_id || !title || !start_time || !end_time) {
     return NextResponse.json({ error: 'space_id, title, start_time, and end_time are required' }, { status: 400 })
   }
+
+  const externals = parseExternalAttendees(external_attendees)
+  if (!externals) return NextResponse.json({ error: EXTERNAL_ATTENDEES_ERROR }, { status: 400 })
 
   // 15-minute interval check
   if (minutesOf(start_time) % 15 !== 0 || minutesOf(end_time) % 15 !== 0) {
@@ -174,6 +183,7 @@ export async function POST(request: Request) {
       start_time,
       end_time,
       attendee_ids: attendee_ids ?? [],
+      external_attendees: externals,
     })
     .select()
     .single()
@@ -186,7 +196,7 @@ export async function POST(request: Request) {
   waitUntil(
     (async () => {
       try {
-        const allUserIds: string[] = [user.id, ...(attendee_ids ?? [])]
+        const allUserIds: string[] = [user.id, ...attendeeKeys({ attendee_ids, external_attendees: externals })]
         // Each person's own choice of inbox, creator and attendees alike (issue #109).
         const [{ data: space }, addresses] = await Promise.all([
           adminSupabase.from('spaces').select('name').eq('id', space_id).single(),

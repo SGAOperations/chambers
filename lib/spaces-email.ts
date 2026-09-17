@@ -33,6 +33,55 @@ export function isSgaEmail(v: unknown): v is string {
   return typeof v === 'string' && SGA_EMAIL_PATTERN.test(v)
 }
 
+/**
+ * Attendees without a Chambers account (issue #132) -- an interview candidate,
+ * say -- are stored on a booking by address, beside the user ids in
+ * attendee_ids. They are held to the same university domain as SGA inboxes:
+ * every one of them is sent invites from Chambers, and the booking form should
+ * not be a way to email any address at all.
+ */
+export const MAX_EXTERNAL_ATTENDEES = 25
+
+/**
+ * The external attendees in a request body, trimmed, lowercased and
+ * deduplicated -- or null when any entry is not a university address, so the
+ * route can refuse the whole request rather than quietly drop someone.
+ */
+export function parseExternalAttendees(v: unknown): string[] | null {
+  if (v === undefined || v === null) return []
+  if (!Array.isArray(v)) return null
+  const emails: string[] = []
+  for (const raw of v) {
+    if (typeof raw !== 'string') return null
+    const email = raw.trim().toLowerCase()
+    if (!isSgaEmail(email)) return null
+    if (!emails.includes(email)) emails.push(email)
+  }
+  return emails.length > MAX_EXTERNAL_ATTENDEES ? null : emails
+}
+
+export const EXTERNAL_ATTENDEES_ERROR =
+  `External attendees must be @northeastern.edu addresses, up to ${MAX_EXTERNAL_ATTENDEES} per booking.`
+
+const EXTERNAL_KEY_PREFIX = 'email:'
+
+/**
+ * Every attendee of a booking or series as one list of keys: user ids as they
+ * are, external addresses as `email:<address>`. resolveSpacesAddresses accepts
+ * both, so the code that works out who to email -- who was added, who was
+ * dropped, who gets a cancellation -- handles both kinds of attendee without
+ * knowing there are two.
+ */
+export function attendeeKeys(row: {
+  attendee_ids?: string[] | null
+  external_attendees?: string[] | null
+}): string[] {
+  return [
+    ...(row.attendee_ids ?? []),
+    ...(row.external_attendees ?? []).map(e => `${EXTERNAL_KEY_PREFIX}${e.toLowerCase()}`),
+  ]
+}
+
 /** One inbox a person may choose, with the bodies that make it available to them. */
 export interface SgaEmailOption {
   email: string
@@ -126,14 +175,19 @@ export function spacesAddressesFor(
 
 /**
  * Resolves each of `userIds` to the addresses their SGA Spaces emails go to.
- * A user with no row or no address maps to an empty list.
+ * A user with no row or no address maps to an empty list. An external
+ * attendee's key (see attendeeKeys) maps to its own address.
  */
 export async function resolveSpacesAddresses(
   adminSupabase: SupabaseClient,
   userIds: string[]
 ): Promise<Map<string, string[]>> {
-  const ids = [...new Set(userIds.filter(Boolean))]
   const result = new Map<string, string[]>()
+  const ids: string[] = []
+  for (const key of new Set(userIds.filter(Boolean))) {
+    if (key.startsWith(EXTERNAL_KEY_PREFIX)) result.set(key, [key.slice(EXTERNAL_KEY_PREFIX.length)])
+    else ids.push(key)
+  }
   if (ids.length === 0) return result
 
   const [{ data: users }, options] = await Promise.all([
