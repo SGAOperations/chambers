@@ -13,10 +13,9 @@ Issue #136. The schema, copy script and runbook for moving Chambers' database an
 ## Rehearsal (on a Neon branch, any time)
 
 1. In Neon, create a branch named `rehearsal` from an empty `main`.
-2. Apply the schema, using the **unpooled** connection string:
+2. Apply every numbered schema file in one transaction, using the **unpooled** connection string. The script refuses to run on a branch that already has tables:
    ```bash
-   psql "$NEON_UNPOOLED_URL" -f db/neon/0001_baseline.sql
-   psql "$NEON_UNPOOLED_URL" -f db/neon/0002_better_auth.sql
+   TARGET_DATABASE_URL="$NEON_UNPOOLED_URL" node scripts/neon/apply-schema.mjs
    ```
 3. Copy the data. For the source, use Supabase's direct or session-pooler string, not the transaction pooler:
    ```bash
