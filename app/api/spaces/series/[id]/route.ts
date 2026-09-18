@@ -6,7 +6,14 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { hasLiveAdmin, type AuthedUser } from '@/lib/auth'
 import { bostonWallClockNow } from '@/lib/boston-time'
-import { cancellationAddressing, dedupeEmails, resolveSpacesAddresses } from '@/lib/spaces-email'
+import {
+  EXTERNAL_ATTENDEES_ERROR,
+  attendeeKeys,
+  cancellationAddressing,
+  dedupeEmails,
+  parseExternalAttendees,
+  resolveSpacesAddresses,
+} from '@/lib/spaces-email'
 import {
   sendSpaceSeriesCancelledEmail,
   sendSpaceSeriesUpdatedEmail,
@@ -52,6 +59,7 @@ interface SeriesRow {
   creator_id: string
   title: string
   attendee_ids: string[]
+  external_attendees: string[]
   start_time: string
   end_time: string
   starts_on: string
@@ -64,6 +72,7 @@ interface WeekRow {
   start_time: string
   end_time: string
   attendee_ids: string[] | null
+  external_attendees: string[] | null
   /** Usually the series' space; a week can be moved to another on its own. */
   space_id: string
 }
@@ -71,7 +80,7 @@ interface WeekRow {
 async function loadSeries(id: string): Promise<SeriesRow | null> {
   const { data } = await adminSupabase
     .from('space_booking_series')
-    .select('id, space_id, creator_id, title, attendee_ids, start_time, end_time, starts_on, ends_on, cancelled_at')
+    .select('id, space_id, creator_id, title, attendee_ids, external_attendees, start_time, end_time, starts_on, ends_on, cancelled_at')
     .eq('id', id)
     .maybeSingle()
   return (data as SeriesRow | null) ?? null
@@ -81,7 +90,7 @@ async function loadSeries(id: string): Promise<SeriesRow | null> {
 async function loadUpcoming(seriesId: string): Promise<WeekRow[]> {
   const { data } = await adminSupabase
     .from('space_bookings')
-    .select('id, start_time, end_time, attendee_ids, space_id')
+    .select('id, start_time, end_time, attendee_ids, external_attendees, space_id')
     .eq('series_id', seriesId)
     .gte('start_time', bostonWallClockNow().toISOString())
     .order('start_time')
@@ -155,7 +164,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'This weekly booking has been cancelled.' }, { status: 400 })
   }
 
-  const { title, start_time, end_time, until, attendee_ids, skip_conflicts, space_id } = await request.json()
+  const { title, start_time, end_time, until, attendee_ids, external_attendees, skip_conflicts, space_id } = await request.json()
 
   if (typeof title !== 'string' || !title.trim()) {
     return NextResponse.json({ error: 'Title is required.' }, { status: 400 })
@@ -164,6 +173,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'until, start_time and end_time are required.' }, { status: 400 })
   }
   const attendees: string[] = Array.isArray(attendee_ids) ? attendee_ids.filter((a: unknown) => typeof a === 'string') : []
+  const externals = parseExternalAttendees(external_attendees)
+  if (!externals) return NextResponse.json({ error: EXTERNAL_ATTENDEES_ERROR }, { status: 400 })
 
   // Omitted means the series stays where it is.
   const spaceId: string = typeof space_id === 'string' && space_id ? space_id : series.space_id
@@ -259,6 +270,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       .update({
         title: cleanTitle,
         attendee_ids: attendees,
+        external_attendees: externals,
         ...(planned ? { start_time: planned.interval.start, end_time: planned.interval.end, space_id: spaceId } : {}),
       })
       .eq('id', r.id)
@@ -280,9 +292,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         start_time: w.interval.start,
         end_time: w.interval.end,
         attendee_ids: attendees,
+        external_attendees: externals,
         series_id: id,
       })))
-      .select('id, start_time, end_time, attendee_ids, space_id')
+      .select('id, start_time, end_time, attendee_ids, external_attendees, space_id')
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     inserted = (data as WeekRow[] | null) ?? []
   }
@@ -294,7 +307,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { error: seriesError } = await adminSupabase
     .from('space_booking_series')
-    .update({ space_id: spaceId, title: cleanTitle, attendee_ids: attendees, start_time, end_time, ends_on: until })
+    .update({ space_id: spaceId, title: cleanTitle, attendee_ids: attendees, external_attendees: externals, start_time, end_time, ends_on: until })
     .eq('id', id)
   if (seriesError) return NextResponse.json({ error: seriesError.message }, { status: 500 })
 
@@ -313,13 +326,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           nameOtherSpaces(removed.map(withSpace), spaceId),
         ])
 
+        // Chambers users and external addresses alike, as keys (see attendeeKeys).
+        const currentAttendees = attendeeKeys({ attendee_ids: attendees, external_attendees: externals })
         const previousAttendees = new Set([
-          ...series.attendee_ids,
-          ...upcoming.flatMap(r => r.attendee_ids ?? []),
+          ...attendeeKeys(series),
+          ...upcoming.flatMap(r => attendeeKeys(r)),
         ])
-        const droppedAttendees = [...previousAttendees].filter(a => !attendees.includes(a) && a !== series.creator_id)
+        const droppedAttendees = [...previousAttendees].filter(a => !currentAttendees.includes(a) && a !== series.creator_id)
 
-        const currentIds = [series.creator_id, ...attendees]
+        const currentIds = [series.creator_id, ...currentAttendees]
         const [{ data: space }, addresses] = await Promise.all([
           adminSupabase.from('spaces').select('name').eq('id', spaceId).single(),
           resolveSpacesAddresses(adminSupabase, [...currentIds, ...droppedAttendees]),
@@ -402,8 +417,8 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
         try {
           // Anyone on any upcoming week, including one added to a single week.
           const attendees = [...new Set([
-            ...series.attendee_ids,
-            ...upcoming.flatMap(r => r.attendee_ids ?? []),
+            ...attendeeKeys(series),
+            ...upcoming.flatMap(r => attendeeKeys(r)),
           ])].filter(a => a !== series.creator_id)
 
           const [{ data: space }, addresses] = await Promise.all([
