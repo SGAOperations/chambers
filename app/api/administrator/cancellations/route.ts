@@ -124,16 +124,58 @@ export async function PATCH(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { id } = await request.json()
+  // `action` defaults to 'done', which is what every caller sent before issue
+  // #139 added the other one.
+  const { id, action = 'done' } = await request.json()
   if (!id) return NextResponse.json({ error: 'A cancellation request id is required.' }, { status: 400 })
+  if (action !== 'done' && action !== 'dismiss') {
+    return NextResponse.json({ error: "action must be 'done' or 'dismiss'." }, { status: 400 })
+  }
 
   const { data: req } = await adminSupabase
     .from('cancellation_requests')
-    .select('id')
+    .select('id, status, booking_id')
     .eq('id', id)
     .maybeSingle()
 
   if (!req) return NextResponse.json({ error: 'Cancellation request not found.' }, { status: 404 })
+
+  if (action === 'dismiss') {
+    // Closes the request without acting on it (issue #139) -- for one that
+    // cannot be carried out as asked, most often because it came in too late
+    // for CSC to release the room.
+    //
+    // The booking is deliberately left exactly as it is, still Pending
+    // Cancellation. What should happen to it instead -- back to Reserved,
+    // Missed, something else -- depends on why the request could not go ahead,
+    // and that is the admin's call to make in the booking editor, not something
+    // this can infer.
+    //
+    // Only an open request: a Done one has already cancelled its booking and
+    // been acted on, and relabelling it would misstate what happened.
+    if (req.status !== 'Pending') {
+      return NextResponse.json({ error: 'Only a pending cancellation request can be dismissed.' }, { status: 409 })
+    }
+
+    if (req.booking_id) {
+      const { error: auditError } = await adminSupabase.from('audit_logs').insert({
+        booking_id: req.booking_id,
+        admin_id: user.id,
+        new_status: 'Cancellation Dismissed',
+      })
+      if (auditError) console.error('Cancellation dismiss audit log failed:', auditError)
+    }
+
+    const { error } = await adminSupabase
+      .from('cancellation_requests')
+      .update({ status: 'Dismissed' })
+      .eq('id', id)
+      .eq('status', 'Pending')
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    return NextResponse.json({ success: true, dismissed: true })
+  }
 
   // Which dated reservations this request covers, and what each is due. Read
   // from the same collector Auto-Cancel uses, so the two agree about whose row a

@@ -35,7 +35,7 @@ function CancellationsTabSkeleton() {
 interface CancellationRequest {
   id: string
   scope: 'occurrence' | 'series'
-  status: 'Pending' | 'Done'
+  status: 'Pending' | 'Done' | 'Dismissed'
   created_at: string
   cancellation_type: string
   bookings: {
@@ -66,6 +66,11 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [showAutoCancel, setShowAutoCancel] = useState(false)
+  // Dismissing is a two-step click: it closes a request without asking CSC for
+  // anything, which is easy to confuse with Mark as Done at a glance.
+  const [confirmingDismiss, setConfirmingDismiss] = useState<string | null>(null)
+  // A failed dismissal, keyed by request, so the error shows on that card.
+  const [dismissError, setDismissError] = useState<Record<string, string>>({})
   const { isDanger, registerOrigin } = usePendingActionsWatch()
 
   const fetchCancellations = async () => {
@@ -86,6 +91,33 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     })
+    await fetchCancellations()
+    onCountChange()
+    setUpdating(null)
+  }
+
+  /**
+   * Closes a request without acting on it (issue #139). The booking stays at
+   * Pending Cancellation for the admin to resolve in the booking editor.
+   */
+  const dismiss = async (id: string) => {
+    setUpdating(id)
+    setConfirmingDismiss(null)
+    const res = await fetch('/api/administrator/cancellations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, action: 'dismiss' }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setDismissError(prev => ({ ...prev, [id]: data.error ?? 'Could not dismiss this request.' }))
+    } else {
+      setDismissError(prev => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+    }
     await fetchCancellations()
     onCountChange()
     setUpdating(null)
@@ -133,7 +165,9 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
             <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
               c.status === 'Pending'
                 ? 'bg-[#3d2200] text-[#fb923c]'
-                : 'bg-[#0f3d20] text-[#4ade80]'
+                : c.status === 'Dismissed'
+                  ? 'bg-[#0f2a4a] text-[#93b8d8]'
+                  : 'bg-[#0f3d20] text-[#4ade80]'
             }`}>
               {c.status}
             </span>
@@ -152,16 +186,66 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
             <p><span className="font-medium text-[#f0f6ff]">Submitted:</span> {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
           </div>
 
+          {dismissError[c.id] && (
+            <p className="mt-3 text-sm text-[#fb923c]">{dismissError[c.id]}</p>
+          )}
+
+          {/*
+            Dismissing leaves the booking at Pending Cancellation on purpose, so
+            the card keeps saying so: otherwise a closed request reads as though
+            nothing is left to do.
+          */}
+          {c.status === 'Dismissed' && (
+            <p className="mt-3 text-sm text-[#93b8d8]">
+              Dismissed without cancelling. The booking is left at Pending Cancellation for an admin to set in the booking editor.
+            </p>
+          )}
+
           {c.status === 'Pending' && (
-            <div className="mt-4">
-              <button
-                onClick={() => markDone(c.id)}
-                disabled={updating === c.id}
-                className="px-3 py-1.5 text-sm bg-[#0a1628] hover:bg-[#0f2040] text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                {updating === c.id ? 'Updating...' : 'Mark as Done'}
-              </button>
-            </div>
+            confirmingDismiss === c.id ? (
+              <div className="mt-4 rounded-lg border border-[#1e5080] bg-[#0f2a4a] p-3 space-y-2">
+                <p className="text-sm text-[#93b8d8]">
+                  Close this request <span className="text-[#f0f6ff] font-medium">without acting on it</span>?
+                  Its status is not applied and CSC is not asked to release anything. The booking stays at Pending Cancellation for you to set in the booking editor.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => dismiss(c.id)}
+                    className="px-3 py-1.5 text-sm bg-[#c8102e] hover:bg-[#a50d26] text-white rounded-lg font-medium transition-colors"
+                  >
+                    Dismiss request
+                  </button>
+                  <button
+                    onClick={() => setConfirmingDismiss(null)}
+                    className="px-3 py-1.5 text-sm text-[#93b8d8] hover:text-[#f0f6ff] rounded-lg font-medium transition-colors"
+                  >
+                    Keep it
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  onClick={() => markDone(c.id)}
+                  disabled={updating === c.id}
+                  className="px-3 py-1.5 text-sm bg-[#0a1628] hover:bg-[#0f2040] text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  {updating === c.id ? 'Updating...' : 'Mark as Done'}
+                </button>
+                {/*
+                  For a request that cannot be acted on -- most often one made
+                  too late for CSC to release the room -- so it closes without
+                  the booking being cancelled (issue #139).
+                */}
+                <button
+                  onClick={() => setConfirmingDismiss(c.id)}
+                  disabled={updating === c.id}
+                  className="px-3 py-1.5 text-sm bg-[#0f2a4a] border border-[#1e5080] text-[#93b8d8] hover:text-[#f0f6ff] hover:border-[#93b8d8] rounded-lg font-medium transition-colors disabled:opacity-50"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )
           )}
         </div>
       ))}
