@@ -69,8 +69,8 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
   // Dismissing is a two-step click: it closes a request without asking CSC for
   // anything, which is easy to confuse with Mark as Done at a glance.
   const [confirmingDismiss, setConfirmingDismiss] = useState<string | null>(null)
-  // What a dismissal could not do, keyed by request, so it shows on that card.
-  const [dismissNotice, setDismissNotice] = useState<Record<string, string>>({})
+  // A failed dismissal, keyed by request, so the error shows on that card.
+  const [dismissError, setDismissError] = useState<Record<string, string>>({})
   const { isDanger, registerOrigin } = usePendingActionsWatch()
 
   const fetchCancellations = async () => {
@@ -97,8 +97,8 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
   }
 
   /**
-   * Closes a request without cancelling its booking (issue #139), putting back
-   * the status the booking had before the request was made.
+   * Closes a request without acting on it (issue #139). The booking stays at
+   * Pending Cancellation for the admin to resolve in the booking editor.
    */
   const dismiss = async (id: string) => {
     setUpdating(id)
@@ -108,27 +108,16 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, action: 'dismiss' }),
     })
-    const data = await res.json().catch(() => ({}))
-
-    // Anything short of a clean restore is worth saying, because the admin
-    // otherwise has no reason to go and look at the booking.
-    let notice = ''
     if (!res.ok) {
-      notice = data.error ?? 'Could not dismiss this request.'
-    } else if (data.noPriorStatusRecorded) {
-      notice = 'Dismissed. This request predates status tracking, so the booking is still Pending Cancellation. Set its status in the booking editor.'
-    } else if (data.statusUpdateFailed?.length) {
-      notice = 'Dismissed, but some statuses could not be restored. Check the booking in the editor.'
-    } else if (data.leftAsIs > 0) {
-      notice = `Dismissed. ${data.leftAsIs} reservation${data.leftAsIs === 1 ? ' was' : 's were'} left as ${data.leftAsIs === 1 ? 'it is' : 'they are'}: changed since the request, or covered by another open request.`
+      const data = await res.json().catch(() => ({}))
+      setDismissError(prev => ({ ...prev, [id]: data.error ?? 'Could not dismiss this request.' }))
+    } else {
+      setDismissError(prev => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
     }
-    setDismissNotice(prev => {
-      const next = { ...prev }
-      if (notice) next[id] = notice
-      else delete next[id]
-      return next
-    })
-
     await fetchCancellations()
     onCountChange()
     setUpdating(null)
@@ -197,16 +186,27 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
             <p><span className="font-medium text-[#f0f6ff]">Submitted:</span> {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
           </div>
 
-          {dismissNotice[c.id] && (
-            <p className="mt-3 text-sm text-[#fb923c]">{dismissNotice[c.id]}</p>
+          {dismissError[c.id] && (
+            <p className="mt-3 text-sm text-[#fb923c]">{dismissError[c.id]}</p>
+          )}
+
+          {/*
+            Dismissing leaves the booking at Pending Cancellation on purpose, so
+            the card keeps saying so: otherwise a closed request reads as though
+            nothing is left to do.
+          */}
+          {c.status === 'Dismissed' && (
+            <p className="mt-3 text-sm text-[#93b8d8]">
+              Dismissed without cancelling. The booking is left at Pending Cancellation for an admin to set in the booking editor.
+            </p>
           )}
 
           {c.status === 'Pending' && (
             confirmingDismiss === c.id ? (
               <div className="mt-4 rounded-lg border border-[#1e5080] bg-[#0f2a4a] p-3 space-y-2">
                 <p className="text-sm text-[#93b8d8]">
-                  Close this request <span className="text-[#f0f6ff] font-medium">without cancelling the booking</span>?
-                  It goes back to the status it had before the request, and CSC is not asked to release anything.
+                  Close this request <span className="text-[#f0f6ff] font-medium">without acting on it</span>?
+                  Its status is not applied and CSC is not asked to release anything. The booking stays at Pending Cancellation for you to set in the booking editor.
                 </p>
                 <div className="flex gap-2">
                   <button

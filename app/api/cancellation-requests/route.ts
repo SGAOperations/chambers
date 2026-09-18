@@ -4,7 +4,6 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { requireBookingManager } from '@/lib/booking-scope'
-import type { PreviousStatus, StatusTable } from '@/lib/pending-cancellations'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -56,46 +55,6 @@ export async function POST(request: Request) {
     }
   }
 
-  // Which rows this request sets to Pending Cancellation (issue #139).
-  //
-  // Worked out before anything is written, so their current statuses can be
-  // recorded on the request. Dismissing a request puts those back; without
-  // them, dismissal could only leave the booking pending, and Auto-Cancel would
-  // cancel it anyway.
-  //
-  // A series-level request on a weekly booking writes to the series row, not to
-  // its weeks, which inherit from it -- so the series row is what is recorded.
-  let target: { table: StatusTable; column: string; value: string } | null = null
-  if (scope === 'occurrence' && occurrence_id) {
-    const table: StatusTable =
-      bookingType === 'One-Time Room' ? 'one_time_room_bookings'
-      : bookingType === 'Tabling' ? 'tabling_sessions'
-      : 'weekly_room_occurrences'
-    target = { table, column: 'id', value: occurrence_id }
-  } else if (bookingType === 'One-Time Room') {
-    target = { table: 'one_time_room_bookings', column: 'booking_id', value: booking_id }
-  } else if (bookingType === 'Weekly Room') {
-    target = { table: 'weekly_room_bookings', column: 'booking_id', value: booking_id }
-  } else if (bookingType === 'Tabling') {
-    const { data: tablingBooking } = await adminSupabase
-      .from('tabling_bookings')
-      .select('id')
-      .eq('booking_id', booking_id)
-      .single()
-    if (tablingBooking) target = { table: 'tabling_sessions', column: 'tabling_booking_id', value: tablingBooking.id }
-  }
-
-  let previousStatuses: PreviousStatus[] = []
-  if (target) {
-    const { data: rows, error } = await adminSupabase
-      .from(target.table)
-      .select('id, status')
-      .eq(target.column, target.value)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    previousStatuses = ((rows ?? []) as { id: string; status: string | null }[])
-      .map(r => ({ table: target!.table, id: r.id, status: r.status }))
-  }
-
   // Create cancellation request
   const { error: requestError } = await adminSupabase
     .from('cancellation_requests')
@@ -107,20 +66,58 @@ export async function POST(request: Request) {
       scope,
       status: 'Pending',
       cancellation_type,
-      previous_statuses: previousStatuses,
     })
 
   if (requestError) return NextResponse.json({ error: requestError.message }, { status: 500 })
 
-  // Update booking/occurrence status to Pending Cancellation. Only the rows
-  // recorded above, by id, so what was recorded and what was changed cannot
-  // drift apart if a session is added in between.
-  if (previousStatuses.length) {
-    const { error } = await adminSupabase
-      .from(target!.table)
-      .update({ status: 'Pending Cancellation' })
-      .in('id', previousStatuses.map(p => p.id))
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Update booking/occurrence status to Pending Cancellation
+  if (scope === 'occurrence' && occurrence_id) {
+    if (bookingType === 'One-Time Room') {
+      const { error } = await adminSupabase
+        .from('one_time_room_bookings')
+        .update({ status: 'Pending Cancellation' })
+        .eq('id', occurrence_id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    } else if (bookingType === 'Tabling') {
+      const { error } = await adminSupabase
+        .from('tabling_sessions')
+        .update({ status: 'Pending Cancellation' })
+        .eq('id', occurrence_id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    } else {
+      // Weekly Room — update the specific occurrence
+      const { error } = await adminSupabase
+        .from('weekly_room_occurrences')
+        .update({ status: 'Pending Cancellation' })
+        .eq('id', occurrence_id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+  } else {
+    // Series scope — update all sessions for the booking
+    if (bookingType === 'One-Time Room') {
+      await adminSupabase
+        .from('one_time_room_bookings')
+        .update({ status: 'Pending Cancellation' })
+        .eq('booking_id', booking_id)
+    } else if (bookingType === 'Weekly Room') {
+      await adminSupabase
+        .from('weekly_room_bookings')
+        .update({ status: 'Pending Cancellation' })
+        .eq('booking_id', booking_id)
+    } else if (bookingType === 'Tabling') {
+      const { data: tablingBooking } = await adminSupabase
+        .from('tabling_bookings')
+        .select('id')
+        .eq('booking_id', booking_id)
+        .single()
+
+      if (tablingBooking) {
+        await adminSupabase
+          .from('tabling_sessions')
+          .update({ status: 'Pending Cancellation' })
+          .eq('tabling_booking_id', tablingBooking.id)
+      }
+    }
   }
 
   return NextResponse.json({ success: true })
