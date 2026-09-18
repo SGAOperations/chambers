@@ -1,4 +1,4 @@
--- Rollback for 20260915000000_meeting_time.sql.
+-- Rollback for 20260916005401_meeting_time.sql.
 --
 -- Drops all four columns. Any meeting times that had been set are lost, and
 -- every booking falls back to reporting its start_time as the time it meets --
