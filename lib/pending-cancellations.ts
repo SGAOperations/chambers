@@ -449,3 +449,114 @@ export function cancellationAuditRows(rows: OutcomeTarget[], adminId: string) {
       ])
   ).values()]
 }
+
+// ── Dismissing a request (issue #139) ─────────────────────────────────────────
+
+/** The tables a cancellation request can write Pending Cancellation to. */
+export type StatusTable =
+  | 'one_time_room_bookings'
+  | 'tabling_sessions'
+  | 'weekly_room_occurrences'
+  | 'weekly_room_bookings'
+
+/**
+ * One row a request overwrote, and what it held before.
+ *
+ * `status` may be null: a weekly occurrence with no status of its own was
+ * inheriting from its series, and restoring null is what puts it back.
+ */
+export interface PreviousStatus {
+  table: StatusTable
+  id: string
+  status: string | null
+}
+
+/** Narrows the stored jsonb back to entries this code wrote, dropping anything else. */
+export function parsePreviousStatuses(value: unknown): PreviousStatus[] | null {
+  if (!Array.isArray(value)) return null
+  const tables: StatusTable[] = ['one_time_room_bookings', 'tabling_sessions', 'weekly_room_occurrences', 'weekly_room_bookings']
+  return value.filter((e): e is PreviousStatus =>
+    !!e && typeof e === 'object'
+    && tables.includes((e as PreviousStatus).table)
+    && typeof (e as PreviousStatus).id === 'string'
+    && ((e as PreviousStatus).status === null || typeof (e as PreviousStatus).status === 'string')
+  )
+}
+
+/**
+ * Which of `entries` a dismissal should actually put back.
+ *
+ * Two things disqualify a row, and both are about not undoing something the
+ * dismissal was not asked about:
+ *
+ *   - It is no longer Pending Cancellation. An admin has since set it to
+ *     something else in the editor, and that later decision wins over a status
+ *     recorded before it.
+ *   - Another still-Pending request also covers it. Restoring it would quietly
+ *     withdraw that other request, which the admin has not looked at.
+ *
+ * `currentStatus` maps `${table}:${id}` to what the row holds now; a missing key
+ * means the row is gone, which also disqualifies it.
+ */
+export function restorableStatuses(
+  entries: PreviousStatus[],
+  currentStatus: Map<string, string | null>,
+  heldByOtherPending: Set<string>,
+): PreviousStatus[] {
+  return entries.filter(e => {
+    const key = `${e.table}:${e.id}`
+    return currentStatus.get(key) === PENDING && !heldByOtherPending.has(key)
+  })
+}
+
+/**
+ * Puts back the statuses a request overwrote, for the rows `restorableStatuses`
+ * allows, and returns what it restored and what failed.
+ *
+ * Each write is also guarded on the row still being Pending Cancellation, so a
+ * status changed between the read and the write is not overwritten either.
+ */
+export async function restorePreviousStatuses(
+  requestId: string,
+  entries: PreviousStatus[],
+): Promise<{ restored: PreviousStatus[]; failures: string[] }> {
+  if (!entries.length) return { restored: [], failures: [] }
+
+  // What each row holds now.
+  const currentStatus = new Map<string, string | null>()
+  for (const table of new Set(entries.map(e => e.table))) {
+    const ids = entries.filter(e => e.table === table).map(e => e.id)
+    const { data } = await adminSupabase.from(table).select('id, status').in('id', ids)
+    for (const r of (data ?? []) as { id: string; status: string | null }[]) {
+      currentStatus.set(`${table}:${r.id}`, r.status)
+    }
+  }
+
+  // Rows another open request is also waiting on.
+  const { data: others } = await adminSupabase
+    .from('cancellation_requests')
+    .select('previous_statuses')
+    .eq('status', 'Pending')
+    .neq('id', requestId)
+  const heldByOtherPending = new Set<string>()
+  for (const o of (others ?? []) as { previous_statuses: unknown }[]) {
+    for (const e of parsePreviousStatuses(o.previous_statuses) ?? []) heldByOtherPending.add(`${e.table}:${e.id}`)
+  }
+
+  const restored: PreviousStatus[] = []
+  const failures: string[] = []
+  for (const e of restorableStatuses(entries, currentStatus, heldByOtherPending)) {
+    const { error } = await adminSupabase
+      .from(e.table)
+      .update({ status: e.status })
+      .eq('id', e.id)
+      .eq('status', PENDING)
+    if (error) {
+      console.error(`Could not restore ${e.table} ${e.id}:`, error)
+      failures.push(`${e.table} ${e.id}`)
+    } else {
+      restored.push(e)
+    }
+  }
+  return { restored, failures }
+}

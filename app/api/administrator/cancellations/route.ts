@@ -9,6 +9,8 @@ import {
   applyCancellationOutcomes,
   cancellationAuditRows,
   collectPending,
+  parsePreviousStatuses,
+  restorePreviousStatuses,
 } from '@/lib/pending-cancellations'
 
 const adminSupabase = createAdminClient(
@@ -124,16 +126,76 @@ export async function PATCH(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { id } = await request.json()
+  // `action` defaults to 'done', which is what every caller sent before issue
+  // #139 added the other one.
+  const { id, action = 'done' } = await request.json()
   if (!id) return NextResponse.json({ error: 'A cancellation request id is required.' }, { status: 400 })
+  if (action !== 'done' && action !== 'dismiss') {
+    return NextResponse.json({ error: "action must be 'done' or 'dismiss'." }, { status: 400 })
+  }
 
   const { data: req } = await adminSupabase
     .from('cancellation_requests')
-    .select('id')
+    .select('id, status, booking_id, previous_statuses')
     .eq('id', id)
     .maybeSingle()
 
   if (!req) return NextResponse.json({ error: 'Cancellation request not found.' }, { status: 404 })
+
+  if (action === 'dismiss') {
+    // Closes the request without cancelling anything (issue #139) -- for a
+    // request that cannot be acted on, most often because it came in too late
+    // for CSC to release the room, so the booking stands.
+    //
+    // Only an open request: dismissing one already marked Done would put back
+    // statuses from before it was cancelled, reversing an outcome that has
+    // already been acted on and emailed.
+    if (req.status !== 'Pending') {
+      return NextResponse.json({ error: 'Only a pending cancellation request can be dismissed.' }, { status: 409 })
+    }
+
+    // The statuses this request overwrote, put back where nothing has changed
+    // them since. Calendar invites need nothing: Pending Cancellation leaves an
+    // event exactly as it was (issue #69), so going back to the status before
+    // it changes nobody's calendar.
+    //
+    // A request from before #139 recorded nothing, and its prior statuses
+    // cannot be recovered. It is still closed, and the booking is left where
+    // it is for the admin to set by hand -- which the response says, so the
+    // UI can tell them.
+    const recorded = parsePreviousStatuses(req.previous_statuses)
+    const { restored, failures } = recorded
+      ? await restorePreviousStatuses(id, recorded)
+      : { restored: [], failures: [] }
+
+    if (req.booking_id) {
+      const { error: auditError } = await adminSupabase.from('audit_logs').insert({
+        booking_id: req.booking_id,
+        admin_id: user.id,
+        new_status: 'Cancellation Dismissed',
+      })
+      if (auditError) console.error('Cancellation dismiss audit log failed:', auditError)
+    }
+
+    const { error } = await adminSupabase
+      .from('cancellation_requests')
+      .update({ status: 'Dismissed' })
+      .eq('id', id)
+      .eq('status', 'Pending')
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    return NextResponse.json({
+      success: true,
+      dismissed: true,
+      restored: restored.length,
+      // Rows recorded but left alone: changed by an admin since, or also held
+      // by another open request.
+      leftAsIs: recorded ? recorded.length - restored.length - failures.length : 0,
+      noPriorStatusRecorded: recorded === null,
+      ...(failures.length ? { statusUpdateFailed: failures } : {}),
+    })
+  }
 
   // Which dated reservations this request covers, and what each is due. Read
   // from the same collector Auto-Cancel uses, so the two agree about whose row a
