@@ -1,0 +1,13 @@
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "x": "WPOeCKMg4Pko26XhfnreLqCOJpkYJKsusxKahGpu3Nc",
+      "y": "qMisn1O5Jbco8oV4zHCMk94_UbLFpkOpO4zpNTFrP_s",
+      "crv": "P-256",
+      "kid": "chambers-server-8918b495",
+      "alg": "ES256",
+      "use": "sig"
+    }
+  ]
+}

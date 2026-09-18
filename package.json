@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/postgrest-js": "^2.116.0",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.1",
     "@upstash/ratelimit": "^2.0.8",
@@ -17,6 +18,7 @@
     "@vercel/speed-insights": "^2.0.0",
     "bcryptjs": "^3.0.3",
     "better-auth": "^1.7.5",
+    "jose": "^5.10.0",
     "next": "16.1.6",
     "next-pwa": "^5.6.0",
     "pg": "^8.23.0",
