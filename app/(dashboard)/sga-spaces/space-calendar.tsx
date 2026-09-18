@@ -10,6 +10,7 @@ interface Booking {
   start_time: string
   end_time: string
   attendee_ids: string[]
+  external_attendees?: string[] | null
   creator_name: string | null
   series_id: string | null
 }
@@ -41,7 +42,14 @@ interface SpaceCalendarProps {
   spaces?: CalendarSpace[]
   /** `freeSpaceIds` are the spaces free for the whole selection -- only filled in the All spaces view. */
   onSlotClick: (startIso: string, endIso: string, freeSpaceIds: string[]) => void
+  /** A booking of yours was clicked: opens it to edit. */
   onBookingClick?: (booking: Booking) => void
+  /**
+   * Someone else's booking was clicked: opens it read-only (issue #142). A block
+   * can often fit only the start of its title, and before this there was no way
+   * to see the rest.
+   */
+  onViewBooking?: (booking: Booking) => void
 }
 
 // Total slots: 24 hours * 4 slots/hour = 96
@@ -56,6 +64,31 @@ const DEAD_ZONE_END = 28   // slot index 28 = 07:00 (7 * 4)
  * no drag, only a tap -- meant fixing the time in the form every time.
  */
 const CLICK_SLOTS = 4
+
+/**
+ * The line height of text inside a booking block, in px. The block's height is
+ * known exactly (slots x SLOT_HEIGHT), so this is what decides how many lines of
+ * title fit before it has to clamp (issue #142).
+ */
+const BLOCK_LINE_PX = 10
+
+/**
+ * How a booking block spends its lines: the title gets as many as fit, and the
+ * host's name one more only if there is room for both.
+ *
+ * Blocks used to truncate the title to a single line whatever their height, so
+ * an hour-long booking read "Website Creat" with four empty lines under it. A
+ * half-hour block was worse: it laid title and name side by side, the name kept
+ * its full width, and the title was left with "W." (issue #142). The title is
+ * what distinguishes one booking from another, so it comes first; the name is
+ * one click away in the booking's details.
+ */
+function blockLines(slots: number, hasCreator: boolean): { titleLines: number; showCreator: boolean } {
+  // 4px of the block goes to its border and top padding.
+  const lines = Math.max(1, Math.floor((slots * SLOT_HEIGHT - 4) / BLOCK_LINE_PX))
+  const showCreator = hasCreator && lines >= 2
+  return { titleLines: showCreator ? lines - 1 : lines, showCreator }
+}
 
 /**
  * One colour per space in the All spaces view, in the order the spaces are
@@ -124,6 +157,7 @@ export default function SpaceCalendar({
   spaces,
   onSlotClick,
   onBookingClick,
+  onViewBooking,
 }: SpaceCalendarProps) {
   const [now, setNow] = useState(() => new Date())
 
@@ -348,12 +382,20 @@ export default function SpaceCalendar({
     return Math.max(0, Math.min(laneCount - 1, lane))
   }, [laneCount])
 
-  /** Your own booking under the pointer, which opens rather than starting a new one. */
-  const ownBookingAt = useCallback((dayIdx: number, lane: number, slot: number) => {
-    return bookingsByDay[dayIdx].find(
-      bs => bs.lane === lane && slot >= bs.startSlot && slot < bs.endSlot && bs.booking.creator_id === currentUserId
+  /**
+   * The booking under the pointer that a click would open, if any: yours to
+   * edit, or anyone else's to view (issue #142). Either way it opens rather than
+   * starting a new booking. A click on an empty lane beside it still books.
+   */
+  const openableBookingAt = useCallback((dayIdx: number, lane: number, slot: number) => {
+    const hit = bookingsByDay[dayIdx].find(
+      bs => bs.lane === lane && slot >= bs.startSlot && slot < bs.endSlot
     )
-  }, [bookingsByDay, currentUserId])
+    if (!hit) return undefined
+    const isOwn = !!currentUserId && hit.booking.creator_id === currentUserId
+    if (isOwn ? !onBookingClick : !onViewBooking) return undefined
+    return { span: hit, isOwn }
+  }, [bookingsByDay, currentUserId, onBookingClick, onViewBooking])
 
   // ── Mouse interaction ────────────────────────────────────────────────────────
   const handleOverlayMouseMove = useCallback((e: React.MouseEvent, dayIdx: number) => {
@@ -364,10 +406,10 @@ export default function SpaceCalendar({
     // (issue #94). Deciding this here rather than in the guards keeps a blackout
     // or the notice window from swallowing the click on a booking sitting inside
     // it, which is what made such a booking impossible to touch at all.
-    const ownBooking = ownBookingAt(dayIdx, laneFromEvent(e), slot)
-    if (ownBooking) {
+    const hit = openableBookingAt(dayIdx, laneFromEvent(e), slot)
+    if (hit) {
       setOverlayCursor('pointer')
-      setHoveredBookingId(ownBooking.booking.id)
+      setHoveredBookingId(hit.span.booking.id)
     } else if (!canBook || !isSlotOpen(dayIdx, slot)) {
       setOverlayCursor('default')
       setHoveredBookingId(null)
@@ -375,7 +417,7 @@ export default function SpaceCalendar({
       setOverlayCursor('crosshair')
       setHoveredBookingId(null)
     }
-  }, [canBook, slotFromClientY, isSlotOpen, ownBookingAt, laneFromEvent])
+  }, [canBook, slotFromClientY, isSlotOpen, openableBookingAt, laneFromEvent])
 
   /**
    * How far a selection from `startSlot` can run toward `rawEnd`: as far as the
@@ -408,20 +450,20 @@ export default function SpaceCalendar({
   const handleColumnMouseDown = useCallback((e: React.MouseEvent, dayIdx: number) => {
     e.preventDefault()
     const slot = slotFromClientY(e.clientY)
-    // Same order as the hover handler above: your own booking opens even inside
-    // the notice window (issue #94).
-    if (currentUserId && onBookingClick) {
-      const hit = ownBookingAt(dayIdx, laneFromEvent(e), slot)
-      if (hit) {
-        onBookingClick(hit.booking)
-        return
-      }
+    // Same order as the hover handler above: a booking opens even inside the
+    // notice window (issue #94), and even for someone who cannot book, since
+    // viewing one claims no time (issue #142).
+    const hit = openableBookingAt(dayIdx, laneFromEvent(e), slot)
+    if (hit) {
+      if (hit.isOwn) onBookingClick!(hit.span.booking)
+      else onViewBooking!(hit.span.booking)
+      return
     }
     if (!isSlotOpen(dayIdx, slot)) return
     if (!canBook) return
     dragRef.current = { dayIdx, startSlot: slot, currentSlot: slot }
     setDragPreview({ dayIdx, startSlot: slot, endSlot: clampEndSlot(dayIdx, slot, slot + CLICK_SLOTS) })
-  }, [canBook, slotFromClientY, isSlotOpen, currentUserId, onBookingClick, ownBookingAt, laneFromEvent, clampEndSlot])
+  }, [canBook, slotFromClientY, isSlotOpen, onBookingClick, onViewBooking, openableBookingAt, laneFromEvent, clampEndSlot])
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -646,7 +688,7 @@ export default function SpaceCalendar({
 
                 {/* Booking overlays */}
                 {bookingsByDay[dayIdx].map((bs, i) => {
-                  const isShort = (bs.endSlot - bs.startSlot) <= 2
+                  const { titleLines, showCreator } = blockLines(bs.endSlot - bs.startSlot, !!bs.booking.creator_name)
                   const color = LANE_COLORS[bs.lane % LANE_COLORS.length]
                   const hovered = hoveredBookingId === bs.booking.id
                   return (
@@ -658,21 +700,36 @@ export default function SpaceCalendar({
                         top: bs.startSlot * SLOT_HEIGHT,
                         height: (bs.endSlot - bs.startSlot) * SLOT_HEIGHT,
                       }}
-                      title={laneSpaces ? `${bs.booking.title} · ${laneSpaces[bs.lane].name}` : undefined}
+                      title={laneSpaces ? `${bs.booking.title} · ${laneSpaces[bs.lane].name}` : bs.booking.title}
                     >
                       <div
-                        className={`h-full mx-0.5 rounded border flex px-1 overflow-hidden transition-opacity ${
-                          isShort ? 'flex-row items-center gap-1' : 'flex-col items-start pt-0.5'
-                        } ${hovered ? 'opacity-80' : ''}`}
+                        className={`h-full mx-0.5 rounded border flex flex-col items-stretch px-1 pt-0.5 overflow-hidden transition-opacity ${
+                          hovered ? 'opacity-80' : ''
+                        }`}
                         style={{ borderColor: color, backgroundColor: `${color}${hovered ? '99' : 'cc'}` }}
                       >
-                        <span className="text-[9px] text-white font-semibold truncate leading-none min-w-0">
+                        {/*
+                          Wraps, and clamps at however many lines the block has
+                          room for. overflow-wrap: anywhere so a long word still
+                          breaks in a narrow All spaces lane rather than being cut.
+                        */}
+                        <span
+                          className="text-[9px] text-white font-semibold min-w-0"
+                          style={{
+                            lineHeight: `${BLOCK_LINE_PX}px`,
+                            display: '-webkit-box',
+                            WebkitBoxOrient: 'vertical',
+                            WebkitLineClamp: titleLines,
+                            overflow: 'hidden',
+                            overflowWrap: 'anywhere',
+                          }}
+                        >
                           {/* Marks one week of a weekly booking (issue #112). */}
                           {bs.booking.series_id && <span aria-label="Repeats weekly" title="Repeats weekly">↻ </span>}
                           {bs.booking.title}
                         </span>
-                        {bs.booking.creator_name && (
-                          <span className={`text-[8px] text-white/70 leading-none ${isShort ? 'flex-shrink-0 truncate' : 'truncate w-full'}`}>
+                        {showCreator && (
+                          <span className="text-[8px] text-white/70 truncate flex-shrink-0" style={{ lineHeight: `${BLOCK_LINE_PX}px` }}>
                             {bs.booking.creator_name}
                           </span>
                         )}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useCounts } from '../counts-context'
 import type { AlertRow as Alert } from '@/lib/dashboard-data'
+import { AWAITING_CSC_ALERT, REVISION_AWAITING_CSC_ALERT } from '@/lib/request-status'
 
 function formatTime(time: string) {
   const [h, m] = time.split(':')
@@ -116,6 +117,17 @@ export default function NotificationBell() {
                         {alert.denial_reason && (
                           <> <span className="text-[#93b8d8]">Reason: {alert.denial_reason}</span></>
                         )}
+                      </>
+                    ) : alert.booking_type === AWAITING_CSC_ALERT ? (
+                      <>
+                        Your{alert.room_requests?.bodies?.name ? ` ${alert.room_requests.bodies.name}` : ''} room request
+                        has been sent to CSC Operations. <span className="text-[#93b8d8]">It is now awaiting their response.</span>
+                      </>
+                    ) : alert.booking_type === REVISION_AWAITING_CSC_ALERT ? (
+                      <>
+                        Your revision request
+                        {alert.bookings?.bodies?.name ? ` for ${alert.bookings.bodies.name}` : ''} has been sent to CSC
+                        Operations. <span className="text-[#93b8d8]">It is now awaiting their response.</span>
                       </>
                     ) : alert.booking_type === 'Revision Denied' ? (
                       // Linked to the booking rather than a room request, so it

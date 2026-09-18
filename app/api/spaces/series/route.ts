@@ -4,7 +4,13 @@ import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
-import { dedupeEmails, resolveSpacesAddresses } from '@/lib/spaces-email'
+import {
+  EXTERNAL_ATTENDEES_ERROR,
+  attendeeKeys,
+  dedupeEmails,
+  parseExternalAttendees,
+  resolveSpacesAddresses,
+} from '@/lib/spaces-email'
 import { sendSpaceSeriesConfirmedEmail } from '@/lib/emails/space-series'
 import {
   addDays,
@@ -45,7 +51,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Only Leadership members and administrators may create space bookings.' }, { status: 403 })
   }
 
-  const { space_id, title, date, start_time, end_time, until, attendee_ids, skip_conflicts } = await request.json()
+  const { space_id, title, date, start_time, end_time, until, attendee_ids, external_attendees, skip_conflicts } = await request.json()
 
   if (!space_id || typeof title !== 'string' || !title.trim()) {
     return NextResponse.json({ error: 'space_id and title are required.' }, { status: 400 })
@@ -54,6 +60,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'date, until, start_time and end_time are required.' }, { status: 400 })
   }
   const attendees: string[] = Array.isArray(attendee_ids) ? attendee_ids.filter((a: unknown) => typeof a === 'string') : []
+  const externals = parseExternalAttendees(external_attendees)
+  if (!externals) return NextResponse.json({ error: EXTERNAL_ATTENDEES_ERROR }, { status: 400 })
 
   const first = intervalFor(date, start_time, end_time)
   if (new Date(first.start).getUTCMinutes() % 15 !== 0 || new Date(first.end).getUTCMinutes() % 15 !== 0) {
@@ -107,6 +115,7 @@ export async function POST(request: Request) {
       creator_id: user.id,
       title: title.trim(),
       attendee_ids: attendees,
+      external_attendees: externals,
       start_time,
       end_time,
       starts_on: date,
@@ -128,6 +137,7 @@ export async function POST(request: Request) {
       start_time: w.interval.start,
       end_time: w.interval.end,
       attendee_ids: attendees,
+      external_attendees: externals,
       series_id: series.id,
     })))
     .select('id, start_time, end_time')
@@ -142,7 +152,7 @@ export async function POST(request: Request) {
   waitUntil(
     (async () => {
       try {
-        const userIds = [user.id, ...attendees]
+        const userIds = [user.id, ...attendeeKeys({ attendee_ids: attendees, external_attendees: externals })]
         const [{ data: space }, addresses] = await Promise.all([
           adminSupabase.from('spaces').select('name').eq('id', space_id).single(),
           resolveSpacesAddresses(adminSupabase, userIds),

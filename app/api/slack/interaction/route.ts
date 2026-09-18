@@ -2,6 +2,7 @@ import { waitUntil } from '@vercel/functions'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { verifySlackRequest } from '@/lib/slack-verify'
 import { checkRateLimit } from '@/lib/check-rate-limit'
+import { OPS_REVIEW } from '@/lib/request-status'
 
 const adminSupabase = createAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -123,7 +124,7 @@ export async function POST(request: Request) {
       purpose,
       notes: notes || null,
       requested_by: connection.chambers_user_id,
-      status: 'Pending',
+      status: OPS_REVIEW,
     })
     .select()
     .single()

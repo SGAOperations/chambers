@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment } from 'react'
-import type { BookingScope, Division } from '@/lib/booking-scope'
+import { formatScopeLabel, type BookingScope, type Division } from '@/lib/booking-scope'
 
 interface WeeklyOccurrence {
   id: string
@@ -162,8 +162,14 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
                   </tr>
                 )}
                 <tr>
+                  {/*
+                    Named for who the booking is for, not the body that owns the
+                    row: a divisional booking shows its division, and a multi-body
+                    one its owner plus the others (issue #133).
+                  */}
                   <td className="pr-4 text-[#93b8d8] whitespace-nowrap py-0.5">
-                    {b.bodies?.name} — {formatTime(w.start_time)}
+                    {formatScopeLabel(b, (b.booking_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))).short}
+                    {' — '}{formatTime(w.start_time)}
                   </td>
                   {weeks.map(wk => {
                     const occ = occMap.get(wk)

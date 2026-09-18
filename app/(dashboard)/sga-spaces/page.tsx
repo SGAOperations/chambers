@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import SpaceCalendar from './space-calendar'
 import SpaceBookingModal from './space-booking-modal'
+import SpaceBookingDetails from './space-booking-details'
 import { Skeleton } from '@/app/_components/skeleton'
 import { createClient } from '@/lib/supabase/client'
 import { getAuthedUser } from '@/lib/auth'
@@ -21,6 +22,7 @@ interface Booking {
   start_time: string
   end_time: string
   attendee_ids: string[]
+  external_attendees?: string[] | null
   creator_name: string | null
   /** The weekly series this booking is one week of (issue #112). */
   series_id: string | null
@@ -51,6 +53,7 @@ interface EditBooking {
   start: string
   end: string
   attendees: { id: string; full_name: string; email: string }[]
+  externalAttendees: string[]
   seriesId: string | null
 }
 
@@ -170,6 +173,8 @@ export default function SGASpacesPage() {
   const [isLeadership, setIsLeadership] = useState(false)
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null)
   const [editBooking, setEditBooking] = useState<EditBooking | null>(null)
+  // Someone else's booking, opened read-only (issue #142).
+  const [viewBooking, setViewBooking] = useState<Booking | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
 
   const canBook = isAdmin || isLeadership
@@ -285,6 +290,7 @@ export default function SGASpacesPage() {
       start: booking.start_time,
       end: booking.end_time,
       attendees,
+      externalAttendees: booking.external_attendees ?? [],
       seriesId: booking.series_id ?? null,
     })
   }, [spaces])
@@ -461,6 +467,7 @@ export default function SGASpacesPage() {
               spaces={showingAll ? spaces : undefined}
               onSlotClick={canBook ? (start, end, freeSpaceIds) => setModalSlot({ start, end, freeSpaceIds }) : () => {}}
               onBookingClick={handleBookingClick}
+              onViewBooking={setViewBooking}
             />
           )}
           </div>
@@ -485,6 +492,15 @@ export default function SGASpacesPage() {
           />
         )}
 
+        {/* Read-only view of someone else's booking (issue #142) */}
+        {viewBooking && (
+          <SpaceBookingDetails
+            booking={viewBooking}
+            spaceName={spaces.find(s => s.id === viewBooking.space_id)?.name ?? 'SGA Space'}
+            onClose={() => setViewBooking(null)}
+          />
+        )}
+
         {/* Edit booking modal */}
         {editBooking && (
           <SpaceBookingModal
@@ -495,6 +511,7 @@ export default function SGASpacesPage() {
             editBookingId={editBooking.id}
             initialTitle={editBooking.title}
             initialAttendees={editBooking.attendees}
+            initialExternalAttendees={editBooking.externalAttendees}
             spaces={spaces}
             minHoursAdvance={minHoursAdvance}
             onClose={() => setEditBooking(null)}

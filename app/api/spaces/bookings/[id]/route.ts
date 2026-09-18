@@ -6,7 +6,14 @@ import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cance
 import { sendSpaceBookingUpdatedEmail, type SpaceBookingDetails } from '@/lib/emails/space-booking-updated'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
-import { cancellationAddressing, dedupeEmails, resolveSpacesAddresses } from '@/lib/spaces-email'
+import {
+  EXTERNAL_ATTENDEES_ERROR,
+  attendeeKeys,
+  cancellationAddressing,
+  dedupeEmails,
+  parseExternalAttendees,
+  resolveSpacesAddresses,
+} from '@/lib/spaces-email'
 import { waitUntil } from '@vercel/functions'
 import { DEFAULT_WEEKLY_HOURS, minutesOf, touchesDeadZone, weekBoundsOf as getWeekBounds } from '@/lib/space-series'
 
@@ -38,11 +45,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { title, start_time, end_time, attendee_ids, space_id } = await request.json()
+  const { title, start_time, end_time, attendee_ids, external_attendees, space_id } = await request.json()
 
   if (!title || !start_time || !end_time) {
     return NextResponse.json({ error: 'title, start_time, and end_time are required' }, { status: 400 })
   }
+
+  const nextExternals = parseExternalAttendees(external_attendees)
+  if (!nextExternals) return NextResponse.json({ error: EXTERNAL_ATTENDEES_ERROR }, { status: 400 })
 
   if (minutesOf(start_time) % 15 !== 0 || minutesOf(end_time) % 15 !== 0) {
     return NextResponse.json({ error: 'Bookings must start and end on 15-minute intervals.' }, { status: 400 })
@@ -123,11 +133,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const cleanTitle = title.trim()
-  const nextAttendees: string[] = Array.isArray(attendee_ids) ? attendee_ids : []
+  const nextAttendeeIds: string[] = Array.isArray(attendee_ids) ? attendee_ids : []
 
   const { data: updated, error: updateError } = await adminSupabase
     .from('space_bookings')
-    .update({ title: cleanTitle, start_time, end_time, attendee_ids: nextAttendees, space_id: spaceId })
+    .update({
+      title: cleanTitle, start_time, end_time, attendee_ids: nextAttendeeIds, external_attendees: nextExternals, space_id: spaceId,
+    })
     .eq('id', id)
     .select()
     .single()
@@ -156,7 +168,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     Date.parse(booking.startTime) !== Date.parse(previous.startTime) ||
     Date.parse(booking.endTime) !== Date.parse(previous.endTime)
 
-  const previousAttendees: string[] = existing.attendee_ids ?? []
+  // Chambers users and external addresses alike, as keys (see attendeeKeys).
+  const nextAttendees = attendeeKeys({ attendee_ids: nextAttendeeIds, external_attendees: nextExternals })
+  const previousAttendees = attendeeKeys(existing)
   const addedAttendees = nextAttendees.filter(a => !previousAttendees.includes(a))
   const removedAttendees = previousAttendees.filter(a => !nextAttendees.includes(a) && a !== existing.creator_id)
 
@@ -244,9 +258,9 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
         // Sent wherever each person chose to receive SGA Spaces emails (issue #109),
         // so the cancellation reaches the same inbox the invite did.
         const addresses = await resolveSpacesAddresses(
-          adminSupabase, [booking.creator_id, ...(booking.attendee_ids ?? [])]
+          adminSupabase, [booking.creator_id, ...attendeeKeys(booking)]
         )
-        const { to, bcc } = cancellationAddressing(addresses, booking.creator_id, booking.attendee_ids)
+        const { to, bcc } = cancellationAddressing(addresses, booking.creator_id, attendeeKeys(booking))
         const spaceName = (booking.spaces as { name: string } | null)?.name ?? 'SGA Space'
         await sendSpaceBookingCancelledEmail({
           bookingId: id,

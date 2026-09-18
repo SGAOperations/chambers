@@ -7,6 +7,7 @@ import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import ScopeLabel from '@/app/_components/scope-label'
 import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
+import { isOpenRequestStatus } from '@/lib/request-status'
 
 const STATUSES = [
   'Reserved',
@@ -112,7 +113,7 @@ export default function TablingForm({ bodies, semesters, onClose, onSuccess }: T
     getJson<{ requests?: PendingRequest[] }>('/api/administrator/requests', {})
       .then(({ requests }) => {
         setPendingRequests(
-          (requests ?? []).filter((r: PendingRequest) => r.status === 'Pending' && r.type === 'Tabling')
+          (requests ?? []).filter((r: PendingRequest) => isOpenRequestStatus(r.status) && r.type === 'Tabling')
         )
       })
   }, [])
