@@ -30,7 +30,13 @@ import { sendPasswordResetEmail } from './emails/password-reset'
  */
 export const auth = betterAuth({
   appName: 'Chambers',
-  secret: process.env.BETTER_AUTH_SECRET,
+  // `next build` loads this module while prerendering, and Better Auth refuses to
+  // start in production on its default secret. The build never signs or reads a
+  // session, so it gets a placeholder; a running server still requires the real
+  // BETTER_AUTH_SECRET and fails loudly without it.
+  secret:
+    process.env.BETTER_AUTH_SECRET ||
+    (process.env.NEXT_PHASE === 'phase-production-build' ? 'build-time-placeholder-never-used-to-sign-anything' : undefined),
   baseURL: process.env.BETTER_AUTH_URL,
   database: pool,
 

@@ -63,24 +63,27 @@ async function serverToken(): Promise<string> {
  * these are live reads and writes, never something to serve stale.
  */
 const authedFetch: typeof fetch = async (input, init) => {
+  if (!process.env.NEON_DATA_API_URL) throw new Error('NEON_DATA_API_URL is not set.')
   const headers = new Headers(init?.headers)
   headers.set('Authorization', `Bearer ${await serverToken()}`)
   return fetch(input, { ...init, headers, cache: 'no-store' })
 }
 
+/**
+ * A missing NEON_DATA_API_URL or signing key surfaces as an ordinary query error
+ * -- `{ error }` from the query, like any failed request -- rather than a throw
+ * when the client is first touched. So a page that already handles a failed
+ * read (the homepage, the FAQ) still renders, which is what lets `next build`
+ * prerender in CI with no database configured.
+ */
 function create(): Db {
-  const url = process.env.NEON_DATA_API_URL
-  if (!url) throw new Error('NEON_DATA_API_URL is not set.')
+  const url = process.env.NEON_DATA_API_URL || 'http://data-api-not-configured.invalid'
   return new PostgrestClient(url.replace(/\/+$/, ''), { fetch: authedFetch })
 }
 
 const globalForDb = globalThis as unknown as { chambersDb?: Db }
 
-/**
- * The client. Created on first use rather than at import, so a build that never
- * queries -- and a missing variable in an environment that does not need it --
- * does not fail at module load.
- */
+/** The client, created on first use rather than at import. */
 export const db: Db = new Proxy({} as Db, {
   get(_target, prop) {
     const real = (globalForDb.chambersDb ??= create())

@@ -35,12 +35,26 @@ To start over, delete the branch and repeat. The copy script refuses to write in
 
 ## Cutover
 
-1. Announce a short window. Stop writes by putting the site in maintenance or pausing traffic in Vercel.
-2. Create a fresh `main` state on Neon, then run steps 2–3 above against it.
-3. Set production `DATABASE_URL`, `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` in Vercel, then deploy.
-4. Everyone signs in again, since sessions aren't copied. Passwords are unchanged.
-5. Leave Supabase untouched. To roll back, restore the old environment variables and redeploy the last Supabase build. Anything written to Neon in between would need copying back by hand.
+Target: September 19. About 30 minutes, at a quiet hour.
 
-## Not done yet
+**Before the window**
+1. On the Neon **production** branch, enable the Data API (no Managed Better Auth, no public schema grant). Add an **Other Provider** with the JWKS URL `https://raw.githubusercontent.com/SGAOperations/chambers/feat/issue-136-neon-migration/public/data-api-jwks-production.json`. It holds only the production key; the test key in `data-api-jwks.json` is never trusted by production. After the deploy, switch it to `https://chambers.northeasternsga.com/data-api-jwks-production.json`.
+2. Set Vercel **Production** variables: `DATABASE_URL` (prod pooled), `NEON_DATA_API_URL` (prod Data API URL), `DATA_API_PRIVATE_JWK`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL=https://chambers.northeasternsga.com`. The generated secrets are in a local file outside the repo.
+3. Dry-check the load; it writes nothing:
+   ```bash
+   SOURCE_DATABASE_URL=... TARGET_DATABASE_URL=<prod unpooled> node scripts/neon/cutover.mjs --target-endpoint=<prod ep-...> --check
+   ```
 
-The login lives in Neon, but most server routes still query through the Supabase client (`lib/supabase/server.ts` and the service-role clients). Before cutover, that query layer has to move to Neon as well. See the #136 plan.
+**In the window**
+1. Load production. Add `--reset-target` only if the branch holds an old copy:
+   ```bash
+   SOURCE_DATABASE_URL=... TARGET_DATABASE_URL=<prod unpooled> node scripts/neon/cutover.mjs --target-endpoint=<prod ep-...>
+   ```
+2. Neon console, production branch: **Refresh schema cache**. Then run `scripts/neon/test-data-api.mjs` against prod with the production key.
+3. Merge to `main`, so Vercel deploys.
+4. On the live site, check sign-in, a page of bookings, and one email.
+5. Run `scripts/neon/compare-counts.mjs`. Any table marked **MISSING ON NEON** was written to Supabase after the copy; copy those rows by hand. It can't see edits to existing rows, which is why the window should be short and quiet.
+
+**Rollback:** restore the previous Vercel variables and redeploy the last Supabase build. Supabase is untouched throughout; anything written to Neon in the meantime would need copying back.
+
+**After:** keep Supabase for a few weeks, rotate its database password, then retire it and remove `SUPABASE_DB_URL`.
