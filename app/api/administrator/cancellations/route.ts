@@ -5,6 +5,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { notifyCancelledReservations } from '@/lib/room-invites'
 import { waitUntil } from '@vercel/functions'
+import { insertAuditRows, type AuditTarget } from '@/lib/audit'
 import {
   applyCancellationOutcomes,
   cancellationAuditRows,
@@ -134,7 +135,7 @@ export async function PATCH(request: Request) {
 
   const { data: req } = await adminSupabase
     .from('cancellation_requests')
-    .select('id, status, booking_id')
+    .select('id, status, booking_id, scope, occurrence_date, bookings(type)')
     .eq('id', id)
     .maybeSingle()
 
@@ -157,13 +158,27 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Only a pending cancellation request can be dismissed.' }, { status: 409 })
     }
 
+    // Logged against what the request covered, in the Audit tab's own terms
+    // (issue #120): one week or session by its date, or the series or booking
+    // as a whole. The status is the booking's real one afterwards -- still
+    // Pending Cancellation -- and there are no changes, because nothing on the
+    // booking moved.
     if (req.booking_id) {
-      const { error: auditError } = await adminSupabase.from('audit_logs').insert({
+      const bookingType = (Array.isArray(req.bookings) ? req.bookings[0] : req.bookings)?.type
+      const isWeekly = bookingType === 'Weekly Room'
+      const oneDate = req.scope === 'occurrence'
+      const target: AuditTarget = oneDate
+        ? (isWeekly ? 'occurrence' : 'session')
+        : (isWeekly ? 'series' : 'booking')
+      await insertAuditRows(adminSupabase, [{
         booking_id: req.booking_id,
         admin_id: user.id,
-        new_status: 'Cancellation Dismissed',
-      })
-      if (auditError) console.error('Cancellation dismiss audit log failed:', auditError)
+        new_status: 'Pending Cancellation',
+        target,
+        target_date: oneDate ? req.occurrence_date ?? null : null,
+        action: 'dismissed',
+        changes: null,
+      }])
     }
 
     const { error } = await adminSupabase
