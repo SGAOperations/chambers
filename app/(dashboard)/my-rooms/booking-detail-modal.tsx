@@ -103,8 +103,8 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
             (issue #126).
           */}
           <div className="flex gap-2">
-            <span className="text-[#6a96bb] w-24 flex-shrink-0">Meeting Time</span>
-            <span className="text-[#f0f6ff] font-semibold">{formatTime(booking.meetingTime)}</span>
+            <span className="text-[#6a96bb] w-24 flex-shrink-0">Start Time</span>
+            <span className="text-[#f0f6ff]">{formatTime(booking.meetingTime)}</span>
           </div>
           <div className="flex gap-2">
             <span className="text-[#6a96bb] w-24 flex-shrink-0">Reserved</span>

@@ -267,30 +267,29 @@ export default function MyRoomsClient({
                   <p className="text-sm text-[#93b8d8] mt-0.5 truncate" title={`${b.scopeLabel} · ${b.location}`}>
                     {b.scopeLabel} <span className="text-[#4a7ba7]">·</span> {b.location}
                   </p>
-                  <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
-                  {/*
-                    The meeting time leads, because it is the one a member acts
-                    on -- the reservation window is when the room is held, which
-                    is Chambers' concern rather than theirs (issue #126). When no
-                    distinct meeting time is set the two are the same, so the
-                    line reads exactly as it always did with the start bolded;
-                    only a booking that genuinely meets later spends the extra
-                    words saying what the room is held for. Either way it is one
-                    line, so the card keeps the height issue #78 settled on.
-                  */}
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm text-[#6a96bb]">
-                      <span className="text-[#f0f6ff] font-semibold">{formatTime(b.meetingTime)}</span>
-                      {meetingTimeMatchesStart(b.meetingTime, b.startTime) ? (
-                        <> – {formatTime(b.endTime)}</>
-                      ) : (
-                        <> <span className="text-[#4a7ba7]">·</span> reserved {formatTime(b.startTime)} – {formatTime(b.endTime)}</>
-                      )}
-                    </p>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <p className="text-sm text-[#6a96bb]">{formatDate(b.date)}</p>
                     {b.senateType && (
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
                     )}
                   </div>
+                  {/*
+                    Start Time and the reservation window on lines of their own,
+                    each labelled, rather than run together with the start in
+                    bold (issue #126). The start time is when members should
+                    arrive; the reservation is when the room is held, often
+                    earlier for setup. "Start Time" is the name members already
+                    use for it, as the issue allows.
+
+                    Both lines always show, even when the two start together, so
+                    every card in the grid has the same shape.
+                  */}
+                  <dl className="mt-0.5 text-sm grid grid-cols-[auto_1fr] gap-x-2">
+                    <dt className="text-[#6a96bb]">Start Time</dt>
+                    <dd className="text-[#93b8d8]">{formatTime(b.meetingTime)}</dd>
+                    <dt className="text-[#6a96bb]">Reserved</dt>
+                    <dd className="text-[#93b8d8]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</dd>
+                  </dl>
                 </div>
               )
             })}
@@ -396,11 +395,11 @@ export default function MyRoomsClient({
                               </div>
                               <p className="text-sm text-[#6a96bb]">
                                 {b.location} · {formatDate(b.date)} ·{' '}
-                                <span className="text-[#93b8d8] font-medium">{formatTime(b.meetingTime)}</span>
                                 {meetingTimeMatchesStart(b.meetingTime, b.startTime) ? (
-                                  <> – {formatTime(b.endTime)}</>
+                                  <>{formatTime(b.startTime)} – {formatTime(b.endTime)}</>
                                 ) : (
-                                  <> (reserved {formatTime(b.startTime)} – {formatTime(b.endTime)})</>
+                                  // Labelled once they differ: two unmarked times in a row would not say which is which.
+                                  <>Start Time {formatTime(b.meetingTime)} · Reserved {formatTime(b.startTime)} – {formatTime(b.endTime)}</>
                                 )}
                               </p>
                             </div>

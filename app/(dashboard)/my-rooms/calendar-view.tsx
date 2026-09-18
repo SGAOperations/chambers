@@ -169,14 +169,14 @@ export default function CalendarView({ bookings, onSelect, today }: CalendarView
                         <span className="text-xs text-[#93b8d8] truncate">{b.scopeLabel}</span>
                       )}
                     </div>
-                    {/* Meeting time first, reservation window only when it differs (issue #126). */}
+                    {/* The reservation window as always; the start time is named only when it differs from it (issue #126). */}
                     <p className="text-sm text-[#6a96bb]">
                       {b.location} ·{' '}
-                      <span className="text-[#93b8d8] font-medium">{formatTime(b.meetingTime)}</span>
                       {meetingTimeMatchesStart(b.meetingTime, b.startTime) ? (
-                        <> – {formatTime(b.endTime)}</>
+                        <>{formatTime(b.startTime)} – {formatTime(b.endTime)}</>
                       ) : (
-                        <> (reserved {formatTime(b.startTime)} – {formatTime(b.endTime)})</>
+                        // Labelled once they differ: two unmarked times in a row would not say which is which.
+                        <>Start Time {formatTime(b.meetingTime)} · Reserved {formatTime(b.startTime)} – {formatTime(b.endTime)}</>
                       )}
                     </p>
                   </div>
