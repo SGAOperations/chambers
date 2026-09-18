@@ -6,6 +6,8 @@ Issue #136. The schema, copy script and runbook for moving Chambers' database an
 |---|---|
 | `0001_baseline.sql` | Production `public` schema, generated from the live Supabase catalog on 2026-09-17. Foreign keys to `auth.users` are repointed at `public.users`. It has no row-level security policies or Supabase helper functions; RLS is enabled with no policies, so it defaults to deny. |
 | `0002_better_auth.sql` | Better Auth on top: three columns on `users`, plus `auth_sessions`, `auth_accounts` and `auth_verifications`. |
+| `0003_data_api_server_role.sql` | The `chambers_server` role the server's Data API tokens use: full access to app tables, none to `auth_*`. |
+| `after-data-api.sql` | Run on each branch once its Data API is enabled. |
 | `../../scripts/neon/copy-data.mjs` | Copies every table in one transaction, imports logins with their bcrypt hashes, and checks row counts. Has a `--dry-run` flag. |
 
 ## Rehearsal (on a Neon branch, any time)
@@ -21,8 +23,14 @@ Issue #136. The schema, copy script and runbook for moving Chambers' database an
    SOURCE_DATABASE_URL="$SUPABASE_DIRECT_URL" TARGET_DATABASE_URL="$NEON_UNPOOLED_URL" node scripts/neon/copy-data.mjs --dry-run
    SOURCE_DATABASE_URL="$SUPABASE_DIRECT_URL" TARGET_DATABASE_URL="$NEON_UNPOOLED_URL" node scripts/neon/copy-data.mjs
    ```
-4. Point a Vercel preview at the branch: set `DATABASE_URL` (pooled), `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` (the preview's origin).
-5. Check that an existing account signs in with its **current** password. That proves the bcrypt import worked. Also check a password reset, an invite, and deactivating a user.
+4. Set up the Data API on the branch:
+   - In the Neon console, go to **Postgres database → Data API** and click enable. Leave **Use Managed Better Auth** and **Grant public schema access** unchecked.
+   - Under the Data API **Settings**, choose **Other Provider** and set the JWKS URL to the app's `/data-api-jwks.json`.
+   - Run `db/neon/after-data-api.sql`, which lets the Data API switch into `chambers_server`.
+   - **Refresh schema cache.** Neon's Data API ignores PostgREST's `notify pgrst`, so this has to be done after **every** schema change, on every branch.
+   - Verify with `node scripts/neon/test-data-api.mjs`, with `NEON_DATA_API_URL` and `DATA_API_PRIVATE_JWK` set.
+5. Point a Vercel preview at the branch: set `DATABASE_URL` (pooled), `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` (the preview's origin).
+6. Check that an existing account signs in with its **current** password. That proves the bcrypt import worked. Also check a password reset, an invite, and deactivating a user.
 
 To start over, delete the branch and repeat. The copy script refuses to write into tables that already have rows.
 
