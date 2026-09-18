@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Db } from './db/data-api'
 import { hasLiveAdmin, type AuthedUser } from './auth-types'
 import { DEFAULT_WEEKLY_HOURS, weekBoundsOf, type PlanInput } from './space-series'
 
@@ -9,7 +9,7 @@ import { DEFAULT_WEEKLY_HOURS, weekBoundsOf, type PlanInput } from './space-seri
  */
 
 /** The active semester's last day, or null when none is set. */
-export async function loadActiveSemesterEnd(adminSupabase: SupabaseClient): Promise<string | null> {
+export async function loadActiveSemesterEnd(adminSupabase: Db): Promise<string | null> {
   const { data } = await adminSupabase
     .from('semesters')
     .select('end_date')
@@ -26,7 +26,7 @@ export async function loadActiveSemesterEnd(adminSupabase: SupabaseClient): Prom
  * Sunday after `to`, so the first and last weeks' hours totals are complete.
  */
 export async function loadPlanContext(
-  adminSupabase: SupabaseClient,
+  adminSupabase: Db,
   opts: { spaceId: string; creatorId: string; from: string; to: string }
 ): Promise<Omit<PlanInput, 'weeks' | 'now'>> {
   const { weekStart } = weekBoundsOf(opts.from)
@@ -64,7 +64,7 @@ export async function loadPlanContext(
  * booking. The admin half requires a live-verified role, per hasLiveAdmin.
  */
 export async function canBookSpaces(
-  adminSupabase: SupabaseClient,
+  adminSupabase: Db,
   user: AuthedUser
 ): Promise<boolean> {
   if (hasLiveAdmin(user)) return true

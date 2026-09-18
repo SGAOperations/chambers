@@ -1,5 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { sendMissedReservationEmail } from '@/lib/emails/missed-reservation'
 import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
@@ -17,13 +16,10 @@ import {
 } from '@/lib/booking-scope'
 import { OPEN_REQUEST_STATUSES } from '@/lib/request-status'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
@@ -161,7 +157,7 @@ interface Session {
 }
 
 export async function PATCH(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {

@@ -1,4 +1,4 @@
-import { anonSupabase } from '@/lib/supabase/anon'
+import { db as anonSupabase } from '@/lib/db/data-api'
 import LoginCard from '@/app/_components/LoginCard'
 
 /**
@@ -40,12 +40,10 @@ function FactDisplay({ fact }: { fact: Fact }) {
 }
 
 export default async function LoginPage() {
-  // Anonymous client, not the cookie-scoped one -- see lib/supabase/anon.ts and
-  // the revalidate note above. Reading as `anon` is also the more correct
-  // reading here: "Bookings this semester" means all of them, whereas the
-  // cookie client would have counted only what the visitor's RLS lets them see,
-  // so a signed-in visitor and a signed-out one saw different numbers for a
-  // figure that is supposed to describe the whole organisation.
+  // No cookies are read here, so the page stays static and revalidates on the
+  // timer above. The figures describe the whole organisation -- "Bookings this
+  // semester" means all of them -- and every visitor sees the same numbers. The
+  // queries name exactly the columns the page shows.
   const [comptrollerResult, semResult] = await Promise.allSettled([
     anonSupabase.from('users').select('full_name').eq('admin_role', 'Comptroller').eq('is_active', true).limit(1).single(),
     anonSupabase.from('semesters').select('id').eq('is_active', true).single(),

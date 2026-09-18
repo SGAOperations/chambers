@@ -1,5 +1,5 @@
+import { db } from '@/lib/db/data-api'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { getAuthedUser } from '@/lib/auth'
 import { fetchMyRooms } from '@/lib/my-rooms-data'
 import { flattenMyRooms, todayInAppZone, type MyRoomsResponse } from './shared'
@@ -21,7 +21,7 @@ import MyRoomsClient from './my-rooms-client'
  * than by both happening to read compatible clocks. See todayInAppZone().
  */
 export default async function MyRoomsPage() {
-  const supabase = await createClient()
+  const supabase = db
 
   // The layout above already established there is a valid session; this is only
   // to get the user object fetchMyRooms needs. getClaims() verifies locally, so

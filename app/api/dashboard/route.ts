@@ -1,5 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { fetchUserAlerts } from '@/lib/dashboard-data'
@@ -12,13 +11,10 @@ import { fetchPendingActions, type PendingActionsResult } from '@/lib/pending-ac
 // middleware already gates it, and /api/alerts (which this replaces on the read
 // path) never had one -- adding it only cost a cold Upstash round trip on the
 // paint path.
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 export async function GET() {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

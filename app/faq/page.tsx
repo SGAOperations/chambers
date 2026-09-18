@@ -1,10 +1,7 @@
 import Link from 'next/link'
-import { createClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 
-const adminSupabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 export default async function FaqPage() {
   const { data: roles } = await adminSupabase

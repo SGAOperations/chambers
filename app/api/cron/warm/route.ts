@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { getActiveSemesterId } from '@/lib/active-semester'
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = await createClient()
+  const supabase = db
 
   const warmed = await Promise.allSettled([
     pool.query('select 1'), // warms the Postgres pool that Better Auth and the live role checks use

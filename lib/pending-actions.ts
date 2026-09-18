@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Db } from './db/data-api'
 import { isManagementRole } from './admin-roles'
 import { OPS_REVIEW } from './request-status'
 
@@ -278,7 +278,7 @@ export interface PendingActionsFetchOptions {
 }
 
 export async function fetchPendingActions(
-  adminSupabase: SupabaseClient,
+  adminSupabase: Db,
   { adminRole = null, now = new Date() }: PendingActionsFetchOptions = {}
 ): Promise<PendingActionsResult> {
   const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
