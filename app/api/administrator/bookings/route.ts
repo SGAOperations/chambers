@@ -42,7 +42,7 @@ export async function GET(request: Request) {
       bodies(name),
       booking_bodies(body_id, bodies(name)),
       creator_role,
-      one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
+      one_time_room_bookings(id, room_name, booking_date, start_time, end_time, meeting_time, status, reservation_code)
     `)
     .eq('type', 'One-Time Room')
     .order('created_at', { ascending: false })
@@ -55,8 +55,8 @@ export async function GET(request: Request) {
       bodies(name),
       booking_bodies(body_id, bodies(name)),
       creator_role,
-      weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
-        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type, purpose, hidden, is_event)
+      weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, meeting_time, status, reservation_code,
+        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, meeting_time, status, reservation_code, senate_type, purpose, hidden, is_event)
       )
     `)
     .eq('type', 'Weekly Room')
@@ -71,7 +71,7 @@ export async function GET(request: Request) {
       booking_bodies(body_id, bodies(name)),
       creator_role,
       tabling_bookings(id, reservation_code,
-        tabling_sessions(id, location, session_date, start_time, end_time, status, reservation_code)
+        tabling_sessions(id, location, session_date, start_time, end_time, meeting_time, status, reservation_code)
       )
     `)
     .eq('type', 'Tabling')

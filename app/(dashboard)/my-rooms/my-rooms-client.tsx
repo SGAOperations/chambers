@@ -22,6 +22,7 @@ import {
   formatTime,
   formatDate,
 } from './shared'
+import { meetingTimeMatchesStart } from '@/lib/meeting-time'
 
 function MyRoomsSkeleton() {
   return (
@@ -266,13 +267,29 @@ export default function MyRoomsClient({
                   <p className="text-sm text-[#93b8d8] mt-0.5 truncate" title={`${b.scopeLabel} · ${b.location}`}>
                     {b.scopeLabel} <span className="text-[#4a7ba7]">·</span> {b.location}
                   </p>
-                  <p className="text-sm text-[#6a96bb] mt-1">{formatDate(b.date)}</p>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm text-[#6a96bb]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                  <div className="flex items-center justify-between gap-2 mt-1">
+                    <p className="text-sm text-[#6a96bb]">{formatDate(b.date)}</p>
                     {b.senateType && (
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
                     )}
                   </div>
+                  {/*
+                    Start Time and the reservation window on lines of their own,
+                    each labelled, rather than run together with the start in
+                    bold (issue #126). The start time is when members should
+                    arrive; the reservation is when the room is held, often
+                    earlier for setup. "Start Time" is the name members already
+                    use for it, as the issue allows.
+
+                    Both lines always show, even when the two start together, so
+                    every card in the grid has the same shape.
+                  */}
+                  <dl className="mt-0.5 text-sm grid grid-cols-[auto_1fr] gap-x-2">
+                    <dt className="text-[#6a96bb]">Start Time</dt>
+                    <dd className="text-[#93b8d8]">{formatTime(b.meetingTime)}</dd>
+                    <dt className="text-[#6a96bb]">Reserved</dt>
+                    <dd className="text-[#93b8d8]">{formatTime(b.startTime)} – {formatTime(b.endTime)}</dd>
+                  </dl>
                 </div>
               )
             })}
@@ -376,7 +393,15 @@ export default function MyRoomsClient({
                                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${senateTypeBadgeColors[b.senateType] || DEFAULT_SENATE_BADGE}`}>{b.senateType}</span>
                                 )}
                               </div>
-                              <p className="text-sm text-[#6a96bb]">{b.location} · {formatDate(b.date)} · {formatTime(b.startTime)} – {formatTime(b.endTime)}</p>
+                              <p className="text-sm text-[#6a96bb]">
+                                {b.location} · {formatDate(b.date)} ·{' '}
+                                {meetingTimeMatchesStart(b.meetingTime, b.startTime) ? (
+                                  <>{formatTime(b.startTime)} – {formatTime(b.endTime)}</>
+                                ) : (
+                                  // Labelled once they differ: two unmarked times in a row would not say which is which.
+                                  <>Start Time {formatTime(b.meetingTime)} · Reserved {formatTime(b.startTime)} – {formatTime(b.endTime)}</>
+                                )}
+                              </p>
                             </div>
                             <span className="hidden md:inline text-xs text-[#6a96bb] flex-shrink-0">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
                             <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>

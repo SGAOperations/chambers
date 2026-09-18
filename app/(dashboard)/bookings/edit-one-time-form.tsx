@@ -38,6 +38,8 @@ interface OneTimeSession {
   booking_date: string
   start_time: string
   end_time: string
+  /** Blank means the session meets when its reservation starts (issue #126). */
+  meeting_time: string
   status: string
   reservation_code: string
 }
@@ -47,6 +49,7 @@ const emptySession = (): OneTimeSession => ({
   booking_date: '',
   start_time: '',
   end_time: '',
+  meeting_time: '',
   status: 'Reserved',
   reservation_code: '',
 })
@@ -65,6 +68,7 @@ interface EditOneTimeFormProps {
       booking_date: string
       start_time: string
       end_time: string
+      meeting_time: string | null
       status: string
       reservation_code: string | null
     }[] | null
@@ -96,6 +100,7 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
       booking_date: d.booking_date ?? '',
       start_time: d.start_time.slice(0, 5) ?? '',
       end_time: d.end_time.slice(0, 5) ?? '',
+      meeting_time: d.meeting_time?.slice(0, 5) ?? '',
       status: d.status ?? 'Reserved',
       reservation_code: d.reservation_code ?? '',
     })) ?? [emptySession()]
@@ -218,6 +223,19 @@ export default function EditOneTimeForm({ booking, bodies, onClose, onSuccess }:
               <div className="flex-1 min-w-0">
                 <label className={labelCls}>End Time *</label>
                 <TimePicker value={s.end_time} onChange={v => updateSession(i, 'end_time', v)} />
+              </div>
+            </div>
+
+            {/* When the meeting itself starts, as opposed to when the room is
+                held. Tracks the start time until touched; the server stores
+                nothing when the two agree (issue #126). */}
+            <div>
+              <label className={labelCls}>Meeting Time</label>
+              <div className="sm:w-1/2 sm:pr-1.5">
+                <TimePicker
+                  value={s.meeting_time || s.start_time}
+                  onChange={v => updateSession(i, 'meeting_time', v)}
+                />
               </div>
             </div>
 

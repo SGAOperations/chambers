@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { sendMissedReservationEmail } from '@/lib/emails/missed-reservation'
 import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { sendBookingCreatedEmail } from '@/lib/emails/booking-created'
+import { meetingTimeForStorage, resolveMeetingTime } from '@/lib/meeting-time'
 import { changed, collectChanges, formatDate, formatTime } from '@/lib/emails/changes'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { planInvites } from '@/lib/room-calendar'
@@ -32,6 +33,8 @@ interface OneTimeSession {
   booking_date: string
   start_time: string
   end_time: string
+  /** Blank means the session meets when its reservation starts (issue #126). */
+  meeting_time: string
   status: string
   reservation_code: string
 }
@@ -97,6 +100,7 @@ export async function POST(request: Request) {
     booking_date: s.booking_date,
     start_time: s.start_time,
     end_time: s.end_time,
+    meeting_time: meetingTimeForStorage(s.meeting_time, s.start_time),
     reservation_code: s.reservation_code || null,
     status: s.status,
   }))
@@ -150,10 +154,11 @@ export async function POST(request: Request) {
             purpose,
             roomOrTable: sessionRows[0]?.room_name || 'N/A',
             status: sessionRows[0]?.status ?? 'Reserved',
-            sessions: sessionRows.map((r: { booking_date: string; start_time: string; end_time: string; room_name: string | null }) => ({
+            sessions: sessionRows.map((r: { booking_date: string; start_time: string; end_time: string; meeting_time: string | null; room_name: string | null }) => ({
               date: r.booking_date,
               startTime: r.start_time,
               endTime: r.end_time,
+              meetingTime: resolveMeetingTime(r.meeting_time, r.start_time),
               roomOrTable: r.room_name,
             })),
             recipients: audience.recipients,
@@ -193,7 +198,7 @@ export async function PATCH(request: Request) {
     adminSupabase.from('bookings').select('purpose').eq('id', booking_id).single(),
     adminSupabase
       .from('one_time_room_bookings')
-      .select('id, room_name, booking_date, start_time, end_time, status, reservation_code')
+      .select('id, room_name, booking_date, start_time, end_time, meeting_time, status, reservation_code')
       .eq('booking_id', booking_id)
       .order('booking_date', { ascending: true }),
   ])
@@ -222,6 +227,7 @@ export async function PATCH(request: Request) {
     booking_date: s.booking_date,
     start_time: s.start_time,
     end_time: s.end_time,
+    meeting_time: meetingTimeForStorage(s.meeting_time, s.start_time),
     reservation_code: s.reservation_code || null,
     status: s.status,
   }))
@@ -274,13 +280,15 @@ export async function PATCH(request: Request) {
   // on id, which they now keep across saves (issue #69), so a session is
   // compared with itself rather than with whichever one happened to sort first.
   type SessionValues = {
-    room: string | null; date: string; start: string; end: string; status: string; code: string | null
+    room: string | null; date: string; start: string; end: string; meeting: string; status: string; code: string | null
   }
-  const sessionValues = (r: { room_name: string | null; booking_date: string; start_time: string; end_time: string; status: string; reservation_code: string | null }): SessionValues => ({
+  const sessionValues = (r: { room_name: string | null; booking_date: string; start_time: string; end_time: string; meeting_time: string | null; status: string; reservation_code: string | null }): SessionValues => ({
     room: r.room_name || null,
     date: r.booking_date,
     start: r.start_time,
     end: r.end_time,
+    // Resolved, so a blank meeting time reads as the start time it means (#126).
+    meeting: resolveMeetingTime(r.meeting_time, r.start_time),
     status: r.status,
     code: r.reservation_code || null,
   })
@@ -289,11 +297,12 @@ export async function PATCH(request: Request) {
     { label: 'Date', get: v => v.date, format: formatDate },
     { label: 'Start time', get: v => v.start, format: formatTime },
     { label: 'End time', get: v => v.end, format: formatTime },
+    { label: 'Meeting time', get: v => v.meeting, format: formatTime },
     { label: 'Status', get: v => v.status },
     { label: 'Reservation code', get: v => v.code },
   ]
 
-  type PrevSession = { id: string; room_name: string | null; booking_date: string; start_time: string; end_time: string; status: string; reservation_code: string | null }
+  type PrevSession = { id: string; room_name: string | null; booking_date: string; start_time: string; end_time: string; meeting_time: string | null; status: string; reservation_code: string | null }
   const prevById = new Map(((prevSessions ?? []) as PrevSession[]).map(p => [p.id, p]))
   const auditRows: AuditRow[] = []
 
@@ -395,6 +404,14 @@ export async function PATCH(request: Request) {
           changed('Date', prevFirst?.booking_date, firstSession.booking_date, formatDate),
           changed('Start time', prevFirst?.start_time, firstSession.start_time, formatTime),
           changed('End time', prevFirst?.end_time, firstSession.end_time, formatTime),
+          // Effective values on both sides, so a session that has never set a
+          // meeting time does not report one when its start time moves (#126).
+          changed(
+            'Meeting time',
+            resolveMeetingTime(prevFirst?.meeting_time, prevFirst?.start_time),
+            resolveMeetingTime(firstSession.meeting_time, firstSession.start_time),
+            formatTime
+          ),
           changed('Status', prevFirst?.status, firstSession.status),
           changed('Reservation code', prevFirst?.reservation_code, firstSession.reservation_code),
         )
@@ -425,6 +442,7 @@ export async function PATCH(request: Request) {
             date: firstSession.booking_date,
             startTime: firstSession.start_time,
             endTime: firstSession.end_time,
+            meetingTime: resolveMeetingTime(firstSession.meeting_time, firstSession.start_time),
             status: firstSession.status,
             changes,
             recipients: audience.recipients,
