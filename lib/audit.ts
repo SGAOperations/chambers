@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Db } from './db/data-api'
 import { changed, collectChanges, type BookingChange } from '@/lib/emails/changes'
 
 /**
@@ -51,7 +51,7 @@ export interface AuditRow {
  * and failing the request over the log would invite a second, duplicate save.
  */
 export async function insertAuditRows(
-  db: SupabaseClient,
+  db: Db,
   rows: AuditRow[],
 ): Promise<string | null> {
   if (!rows.length) return null

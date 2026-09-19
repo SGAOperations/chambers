@@ -1,11 +1,8 @@
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from './db/data-api'
 import type { CancellationLine } from './emails/csc-cancellation-request'
 import type { AuditRow } from './audit'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 /**
  * An occurrence's effective values, after inheritance.

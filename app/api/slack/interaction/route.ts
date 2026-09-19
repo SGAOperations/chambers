@@ -1,13 +1,10 @@
+import { db } from '@/lib/db/data-api'
 import { waitUntil } from '@vercel/functions'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { verifySlackRequest } from '@/lib/slack-verify'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { OPS_REVIEW } from '@/lib/request-status'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 function getMinDateStr(days: number): string {
   const d = new Date()

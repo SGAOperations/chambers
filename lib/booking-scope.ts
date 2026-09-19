@@ -1,6 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Db } from './db/data-api'
 import { NextResponse } from 'next/server'
-import { hasLiveAdmin, type AuthedUser } from './auth'
+import { hasLiveAdmin, type AuthedUser } from './auth-types'
 import { wantsAnySenateSession } from './senate-types'
 
 /**
@@ -110,7 +110,7 @@ function embeddedDivision(bodies: MembershipRow['bodies']): string | null {
  * restricts board_memberships to the caller's own rows.
  */
 export async function loadScopeContext(
-  supabase: SupabaseClient,
+  supabase: Db,
   user: AuthedUser
 ): Promise<ScopeContext> {
   // hasLiveAdmin rather than reading the claim: ctx.isAdmin is what lets
@@ -276,7 +276,7 @@ export function validateScopeSelection(
  * intended -- the booking was made *for* the division.
  */
 export async function resolveBookingBodyIds(
-  adminSupabase: SupabaseClient,
+  adminSupabase: Db,
   row: ScopedRow
 ): Promise<string[]> {
   if (row.scope === 'divisional' && row.division) {
@@ -313,7 +313,7 @@ export async function resolveBookingBodyIds(
  * against moving booking creation into an RPC.
  */
 export async function syncBookingBodies(
-  adminSupabase: SupabaseClient,
+  adminSupabase: Db,
   bookingId: string,
   scope: BookingScope,
   bodyIds: string[]
@@ -388,7 +388,7 @@ interface RecipientRow {
  * sessions; nobody is filtered then.
  */
 export async function resolveBookingRecipients(
-  adminSupabase: SupabaseClient,
+  adminSupabase: Db,
   row: ScopedRow,
   opts: { leadershipOnly?: boolean; senateTypes?: (string | null | undefined)[] } = {}
 ): Promise<Recipient[]> {
@@ -467,8 +467,8 @@ export async function resolveBookingRecipients(
  * cancellation-request and request routes.
  */
 export async function requireBookingManager(
-  supabase: SupabaseClient,
-  adminSupabase: SupabaseClient,
+  supabase: Db,
+  adminSupabase: Db,
   user: AuthedUser,
   bookingId: string
 ): Promise<

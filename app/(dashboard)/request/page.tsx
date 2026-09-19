@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { getAuthedUser } from '@/lib/auth'
+import { useIdentity } from '../identity-context'
 import TimePicker from '../bookings/time-picker'
 import DateField from '@/app/_components/date-field'
 import { Skeleton } from '@/app/_components/skeleton'
@@ -183,6 +182,7 @@ function getMinDate(days: number): string {
 
 export default function RequestPage() {
   const router = useRouter()
+  const { isAdmin } = useIdentity()
   const [type, setType] = useState<RequestType>('One-Time Room')
   const [bodies, setBodies] = useState<Body[]>([])
   // The multi-body pool is every active body; leadership may request any combination.
@@ -228,12 +228,7 @@ export default function RequestPage() {
 
   useEffect(() => {
     const fetchBodies = async () => {
-      const supabase = createClient()
-      const [user, res] = await Promise.all([
-        getAuthedUser(supabase),
-        fetch('/api/request'),
-      ])
-      const isAdmin = user?.app_metadata?.is_admin ?? false
+      const res = await fetch('/api/request')
       const data = await res.json()
       setMinDaysRoom(data.minDaysRoom ?? 0)
       setMinDaysTabling(data.minDaysTabling ?? 0)

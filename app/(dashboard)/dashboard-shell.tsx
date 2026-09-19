@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
 import { signOutThisDevice as endLocalSession } from '@/lib/sign-out'
 import SettingsModal, { type Settings as SettingsData } from './settings-modal'
 import { CountsContext, EMPTY_COUNTS, paBadgeClass, type Counts } from './counts-context'
@@ -34,12 +33,12 @@ function getGreeting() {
  * Two days is a deliberate choice to make this a convenience rather than a
  * control, and it is worth being honest about what it gives up: someone who
  * signs in on a library machine on Friday afternoon is still signed in on
- * Sunday. What keeps that survivable is that this sign-out is scoped 'local'
- * (see signOutThisDevice) -- it ends the session in this browser, and it is not
- * what stands between a revoked account and its data. Deactivation, expired
- * invites and admin session revocation are all enforced server-side, against
- * users.sessions_revoked_at and the live role checks in lib/auth.ts, and none of
- * them care about this number. If that ever stops being true, this constant
+ * Sunday. What keeps that survivable is that this sign-out only ends the
+ * session in this browser (see signOutThisDevice), and it is not what stands
+ * between a revoked account and its data. Deactivation, expired invites and
+ * admin session revocation are all enforced server-side -- sessions are checked
+ * against the database on every request, alongside the live role checks in
+ * lib/authorization.ts -- and none of them care about this number. If that ever stops being true, this constant
  * becomes a security boundary and should come back down.
  *
  * Kept well inside setTimeout's ~24.8-day ceiling. A delay past 2^31-1 ms
@@ -75,9 +74,6 @@ export default function DashboardShell({
   const [settingsCache, setSettingsCache] = useState<SettingsData | null>(null)
   const router = useRouter()
   const pathname = usePathname()
-  // Memoised so the effect below has a stable dependency and we don't build a
-  // fresh GoTrue client on every render.
-  const supabase = useMemo(() => createClient(), [])
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -245,25 +241,17 @@ export default function DashboardShell({
   }, [fetchDashboard])
 
   /**
-   * Ends the session on this device only.
-   *
-   * signOut() defaults to scope 'global', which revokes every refresh token the
-   * user holds anywhere. Signing out on a laptop therefore also killed the
-   * session on their phone, in their other tab, and the copy the Edge middleware
-   * refreshes -- and each of those then failed its next refresh with a 400 and
-   * started serving 401s. Over 24h, 9 of 28 refresh attempts were failing that
-   * way, split across the browser and the middleware.
-   *
-   * 'local' is what "Sign Out" means on a shared dashboard: this browser, not
-   * every device I own. The paths that mean "this account may not be used" --
-   * deactivation in force-sign-out.tsx and LoginCard, an expired invite --
-   * deliberately keep the global scope.
+   * Ends the session on this device only: "Sign Out" on a shared dashboard means
+   * this browser, not every device someone owns. Better Auth's signOut() ends
+   * only the current session, so that is the default now (issue #136). The paths
+   * that mean "this account may not be used" end every session on the server
+   * instead (lib/auth-admin.ts).
    *
    * The call itself now lives in lib/sign-out.ts, because a bare signOut() left
    * the session in place whenever it ran without a network -- which is when the
    * idle timer below fires most often. See the note there.
    */
-  const signOutThisDevice = () => endLocalSession(supabase)
+  const signOutThisDevice = () => endLocalSession()
 
   const handleLogout = async () => {
     localStorage.removeItem('chambers_last_active')

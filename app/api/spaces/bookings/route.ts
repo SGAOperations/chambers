@@ -1,5 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
@@ -15,13 +14,10 @@ import {
 import { waitUntil } from '@vercel/functions'
 import { DEFAULT_WEEKLY_HOURS, minutesOf, touchesDeadZone, weekBoundsOf as getWeekBounds } from '@/lib/space-series'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 export async function GET(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -80,7 +76,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

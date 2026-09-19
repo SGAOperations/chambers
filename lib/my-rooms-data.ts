@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-import type { AuthedUser } from '@/lib/auth'
+import type { Db } from './db/data-api'
+import type { AuthedUser } from '@/lib/auth-types'
 import { getActiveSemesterId } from '@/lib/active-semester'
 import { canManageScoped, loadScopeContext, type ScopedRow } from '@/lib/booking-scope'
 
@@ -53,7 +53,7 @@ export class MyRoomsQueryError extends Error {}
 const SELECT_BASE = 'id, purpose, body_id, hidden, scope, division, bodies(name), booking_bodies(body_id, bodies(name))'
 
 export async function fetchMyRooms(
-  supabase: SupabaseClient,
+  supabase: Db,
   user: AuthedUser
 ): Promise<MyRoomsPayload> {
   // The scope context, the active semester and the Senate type preferences are all independent,

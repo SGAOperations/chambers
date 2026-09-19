@@ -1,15 +1,11 @@
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { getAuthedUser } from '@/lib/auth'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 export async function PATCH(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUser(supabase)
   if (!user) {
@@ -34,12 +30,6 @@ export async function PATCH(request: Request) {
     .eq('id', user.id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  const { error: metaError } = await adminSupabase.auth.admin.updateUserById(user.id, {
-    user_metadata: { full_name },
-  })
-
-  if (metaError) return NextResponse.json({ error: metaError.message }, { status: 500 })
 
   return NextResponse.json({ success: true })
 }

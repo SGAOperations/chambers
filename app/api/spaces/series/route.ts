@@ -1,5 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { checkRateLimit } from '@/lib/check-rate-limit'
@@ -31,16 +30,13 @@ import { canBookSpaces, loadActiveSemesterEnd, loadPlanContext } from '@/lib/spa
  * request with skip_conflicts books the rest.
  */
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const TIME = /^\d{2}:\d{2}$/
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

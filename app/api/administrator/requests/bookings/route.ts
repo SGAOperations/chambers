@@ -1,10 +1,10 @@
-import { createClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 
 export async function GET(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {

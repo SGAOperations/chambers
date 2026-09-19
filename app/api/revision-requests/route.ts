@@ -1,15 +1,11 @@
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { requireBookingManager } from '@/lib/booking-scope'
 import { OPEN_REQUEST_STATUSES, OPS_REVIEW } from '@/lib/request-status'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 /**
  * The open revision request on a booking, if there is one, so the booking's
@@ -18,7 +14,7 @@ const adminSupabase = createAdminClient(
  * did not file it is the one most likely to try filing it again.
  */
 export async function GET(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -42,7 +38,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

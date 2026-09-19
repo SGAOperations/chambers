@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Db } from './db/data-api'
 
 /**
  * Shared readers for the dashboard shell: the admin pending actions and the
@@ -29,7 +29,7 @@ const ALERT_SELECT =
   'id, booking_id, request_id, booking_type, booking_date, start_time, created_at, denial_reason, bookings!booking_id(bodies(name)), room_requests!request_id(bodies(name))'
 
 export async function fetchUserAlerts(
-  adminSupabase: SupabaseClient,
+  adminSupabase: Db,
   userId: string
 ): Promise<AlertRow[]> {
   const { data } = await adminSupabase
