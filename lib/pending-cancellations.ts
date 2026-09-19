@@ -1,5 +1,6 @@
 import { db } from './db/data-api'
 import type { CancellationLine } from './emails/csc-cancellation-request'
+import type { AuditRow } from './audit'
 
 const adminSupabase = db
 
@@ -430,19 +431,27 @@ export async function applyCancellationOutcomes(rows: OutcomeTarget[]): Promise<
 }
 
 /**
- * Audit rows for a set of reservations, one per booking and status.
+ * Audit entries for a set of reservations: one per week or session, naming its
+ * date and the status it moved to (issue #120).
  *
- * Keyed on booking *and* status: one booking can contribute both a cancelled
- * week and a virtual one in the same action, and a single row saying 'Cancelled'
- * would misreport the other.
+ * This used to be one row per booking and status, which recorded that
+ * *something* on the booking was cancelled without saying which week. Every
+ * row here was Pending Cancellation before -- that is what made it a line --
+ * so that is the "from".
  */
-export function cancellationAuditRows(rows: OutcomeTarget[], adminId: string) {
-  return [...new Map(
-    rows
-      .filter(l => l.bookingId)
-      .map(l => [
-        `${l.bookingId}:${l.resultingStatus}`,
-        { booking_id: l.bookingId, admin_id: adminId, new_status: l.resultingStatus },
-      ])
-  ).values()]
+export function cancellationAuditRows(
+  rows: (OutcomeTarget & { date: string })[],
+  adminId: string,
+): AuditRow[] {
+  return rows
+    .filter(l => l.bookingId)
+    .map(l => ({
+      booking_id: l.bookingId,
+      admin_id: adminId,
+      new_status: l.resultingStatus,
+      target: l.source === 'occurrence' ? 'occurrence' as const : 'session' as const,
+      target_date: l.date,
+      action: 'cancelled' as const,
+      changes: [{ label: 'Status', from: PENDING, to: l.resultingStatus }],
+    }))
 }

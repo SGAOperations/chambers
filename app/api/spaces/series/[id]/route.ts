@@ -39,7 +39,9 @@ import { loadActiveSemesterEnd, loadPlanContext } from '@/lib/space-series-data'
  *
  * A series edit overwrites each upcoming week with the series' values, including
  * weeks that had been edited on their own. That is the rule chosen for #112: the
- * series is what you see.
+ * series is what you see. That includes the space (issue #127): moving a series
+ * moves every upcoming week that can take the move, so a meeting can follow a
+ * room change without being cancelled and rebooked.
  */
 
 const adminSupabase = db
@@ -158,7 +160,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'This weekly booking has been cancelled.' }, { status: 400 })
   }
 
-  const { title, start_time, end_time, until, attendee_ids, external_attendees, skip_conflicts } = await request.json()
+  const { title, start_time, end_time, until, attendee_ids, external_attendees, skip_conflicts, space_id } = await request.json()
 
   if (typeof title !== 'string' || !title.trim()) {
     return NextResponse.json({ error: 'Title is required.' }, { status: 400 })
@@ -169,6 +171,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const attendees: string[] = Array.isArray(attendee_ids) ? attendee_ids.filter((a: unknown) => typeof a === 'string') : []
   const externals = parseExternalAttendees(external_attendees)
   if (!externals) return NextResponse.json({ error: EXTERNAL_ATTENDEES_ERROR }, { status: 400 })
+
+  // Omitted means the series stays where it is.
+  const spaceId: string = typeof space_id === 'string' && space_id ? space_id : series.space_id
+  if (spaceId !== series.space_id) {
+    const { data: space } = await adminSupabase.from('spaces').select('id').eq('id', spaceId).maybeSingle()
+    if (!space) return NextResponse.json({ error: 'That space does not exist.' }, { status: 400 })
+  }
 
   // The time pattern is validated once on the first date; every week shares it.
   const sample = intervalFor(series.starts_on, start_time, end_time)
@@ -223,12 +232,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const weeks = [...moving, ...adding]
   const ctx = await loadPlanContext(adminSupabase, {
-    spaceId: series.space_id,
+    spaceId,
     creatorId: series.creator_id,
     from: weeks[0].interval.start,
     to: weeks.reduce((max, w) => (w.interval.end > max ? w.interval.end : max), weeks[0].interval.end),
   })
-  const { ok, conflicts } = planSeries({ ...ctx, spaceId: series.space_id, weeks })
+  const { ok, conflicts } = planSeries({ ...ctx, spaceId, weeks })
 
   const movingDates = new Set(moving.map(w => w.date))
   const unchanged: SeriesConflict[] = conflicts.filter(c => movingDates.has(c.date))
@@ -246,9 +255,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const okByDate = new Map(ok.map(w => [w.date, w]))
 
   // Every kept week takes the title and attendees. Only the weeks the plan
-  // accepted take the new time -- and the series' space, since a week moved to
-  // another space on its own was checked here as moving back. The rest keep
-  // their time and space, as the email says.
+  // accepted take the new time and space -- a week sitting in any other space,
+  // whether the series is moving or the week was moved on its own, was checked
+  // as claiming all of its time here. The rest keep their time and space, as
+  // the email says.
   const updates = await Promise.all(kept.map(r => {
     const planned = okByDate.get(r.start_time.slice(0, 10))
     return adminSupabase
@@ -257,7 +267,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         title: cleanTitle,
         attendee_ids: attendees,
         external_attendees: externals,
-        ...(planned ? { start_time: planned.interval.start, end_time: planned.interval.end, space_id: series.space_id } : {}),
+        ...(planned ? { start_time: planned.interval.start, end_time: planned.interval.end, space_id: spaceId } : {}),
       })
       .eq('id', r.id)
       .select('id, start_time, end_time, space_id')
@@ -272,7 +282,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { data, error } = await adminSupabase
       .from('space_bookings')
       .insert(toInsert.map(w => ({
-        space_id: series.space_id,
+        space_id: spaceId,
         creator_id: series.creator_id,
         title: cleanTitle,
         start_time: w.interval.start,
@@ -293,7 +303,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { error: seriesError } = await adminSupabase
     .from('space_booking_series')
-    .update({ title: cleanTitle, attendee_ids: attendees, external_attendees: externals, start_time, end_time, ends_on: until })
+    .update({ space_id: spaceId, title: cleanTitle, attendee_ids: attendees, external_attendees: externals, start_time, end_time, ends_on: until })
     .eq('id', id)
   if (seriesError) return NextResponse.json({ error: seriesError.message }, { status: 500 })
 
@@ -308,8 +318,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const withSpace = (r: { id: string; start_time: string; end_time: string; space_id: string }) =>
           ({ ...toWeek(r), spaceId: r.space_id })
         const [finalWeeks, removedWeeks] = await Promise.all([
-          nameOtherSpaces(finalRows.map(withSpace), series.space_id),
-          nameOtherSpaces(removed.map(withSpace), series.space_id),
+          nameOtherSpaces(finalRows.map(withSpace), spaceId),
+          nameOtherSpaces(removed.map(withSpace), spaceId),
         ])
 
         // Chambers users and external addresses alike, as keys (see attendeeKeys).
@@ -322,7 +332,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
         const currentIds = [series.creator_id, ...currentAttendees]
         const [{ data: space }, addresses] = await Promise.all([
-          adminSupabase.from('spaces').select('name').eq('id', series.space_id).single(),
+          adminSupabase.from('spaces').select('name').eq('id', spaceId).single(),
           resolveSpacesAddresses(adminSupabase, [...currentIds, ...droppedAttendees]),
         ])
         const spaceName = space?.name ?? 'SGA Space'

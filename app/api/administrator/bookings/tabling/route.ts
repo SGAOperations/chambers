@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sendMissedReservationEmail } from '@/lib/emails/missed-reservation'
 import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { sendBookingCreatedEmail } from '@/lib/emails/booking-created'
+import { meetingTimeForStorage, resolveMeetingTime } from '@/lib/meeting-time'
 import { changed, collectChanges, formatDate, formatTime } from '@/lib/emails/changes'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
@@ -15,6 +16,8 @@ import {
   type ScopedRow,
 } from '@/lib/booking-scope'
 import { OPEN_REQUEST_STATUSES } from '@/lib/request-status'
+
+import { diffFields, insertAuditRows, pairByDate, type AuditField, type AuditRow } from '@/lib/audit'
 
 const adminSupabase = db
 
@@ -87,6 +90,7 @@ export async function POST(request: Request) {
     session_date: string
     start_time: string
     end_time: string
+    meeting_time: string | null
     reservation_code: string
     status: string
   }) => ({
@@ -95,6 +99,7 @@ export async function POST(request: Request) {
     session_date: s.session_date,
     start_time: s.start_time,
     end_time: s.end_time,
+    meeting_time: meetingTimeForStorage(s.meeting_time, s.start_time),
     reservation_code: s.reservation_code || null,
     status: s.status,
   }))
@@ -104,6 +109,13 @@ export async function POST(request: Request) {
     .insert(sessionRows)
 
   if (sessionError) return NextResponse.json({ error: sessionError.message }, { status: 500 })
+
+  // Opens the booking's history in the Audit tab (issue #120). Creating one was
+  // never logged, so a booking's trail used to start at its first edit.
+  await insertAuditRows(adminSupabase, [{
+    booking_id: booking.id, admin_id: user.id, new_status: sessionRows[0]?.status ?? 'Reserved',
+    target: 'booking', target_date: null, action: 'created', changes: null,
+  }])
 
   // Chambers emailed on update and on a missed reservation but never on
   // creation, so the first email a body received about a booking was one saying
@@ -130,10 +142,11 @@ export async function POST(request: Request) {
           purpose,
           roomOrTable: sessionRows[0]?.location || 'N/A',
           status: sessionRows[0]?.status ?? 'Reserved',
-          sessions: sessionRows.map((r: { session_date: string; start_time: string; end_time: string; location: string }) => ({
+          sessions: sessionRows.map((r: { session_date: string; start_time: string; end_time: string; meeting_time: string | null; location: string }) => ({
             date: r.session_date,
             startTime: r.start_time,
             endTime: r.end_time,
+            meetingTime: resolveMeetingTime(r.meeting_time, r.start_time),
             roomOrTable: r.location,
           })),
           recipients: recipients.map(r => r.email),
@@ -152,6 +165,8 @@ interface Session {
   session_date: string
   start_time: string
   end_time: string
+  /** Blank means the session meets when its reservation starts (issue #126). */
+  meeting_time: string | null
   status: string
   reservation_code: string | null
 }
@@ -179,7 +194,7 @@ export async function PATCH(request: Request) {
     adminSupabase.from('tabling_bookings').select('reservation_code').eq('id', tabling_id).single(),
     adminSupabase
       .from('tabling_sessions')
-      .select('location, session_date, start_time, end_time, status')
+      .select('location, session_date, start_time, end_time, meeting_time, status, reservation_code')
       .eq('tabling_booking_id', tabling_id)
       .order('session_date', { ascending: true }),
   ])
@@ -223,6 +238,7 @@ export async function PATCH(request: Request) {
     session_date: s.session_date,
     start_time: s.start_time,
     end_time: s.end_time,
+    meeting_time: meetingTimeForStorage(s.meeting_time, s.start_time),
     status: s.status,
     reservation_code: s.reservation_code || null,
   }))
@@ -234,11 +250,76 @@ export async function PATCH(request: Request) {
   if (sessionError) return NextResponse.json({ error: sessionError.message }, { status: 500 })
 
   const statusSummary = [...new Set(sessions.map((s: Session) => s.status))].join(', ')
-  const { data: auditLog } = await adminSupabase
-    .from('audit_logs')
-    .insert({ booking_id, admin_id: user.id, new_status: statusSummary })
-    .select('id')
-    .single()
+
+  // Audit entries (issue #120): one per session this save changed, added or
+  // removed, plus one for the booking if its purpose or shared reservation code
+  // moved. Tabling still replaces every session on save, so ids cannot match
+  // them up; pairByDate does it by day instead.
+  type TablingValues = {
+    location: string; date: string; start: string; end: string; meeting: string; status: string; code: string | null
+  }
+  const tablingValues = (r: { location: string; session_date: string; start_time: string; end_time: string; meeting_time: string | null; status: string; reservation_code: string | null }): TablingValues => ({
+    location: r.location,
+    date: r.session_date,
+    start: r.start_time,
+    end: r.end_time,
+    // Resolved, so a blank meeting time reads as the start time it means (#126).
+    meeting: resolveMeetingTime(r.meeting_time, r.start_time),
+    status: r.status,
+    code: r.reservation_code || null,
+  })
+  const TABLING_FIELDS: AuditField<TablingValues>[] = [
+    { label: 'Table', get: v => v.location },
+    { label: 'Start time', get: v => v.start, format: formatTime },
+    { label: 'End time', get: v => v.end, format: formatTime },
+    { label: 'Meeting time', get: v => v.meeting, format: formatTime },
+    { label: 'Status', get: v => v.status },
+    { label: 'Reservation code', get: v => v.code },
+  ]
+
+  const auditRows: AuditRow[] = []
+  const bookingChanges = collectChanges(
+    changed('Purpose', prevBooking?.purpose, purpose),
+    changed('Reservation code', prevTabling?.reservation_code, reservation_code || null),
+  )
+  if (bookingChanges.length) {
+    auditRows.push({
+      booking_id, admin_id: user.id, new_status: statusSummary,
+      target: 'booking', target_date: null, action: 'updated', changes: bookingChanges,
+    })
+  }
+
+  const pairs = pairByDate(
+    ((prevSessions ?? []) as Parameters<typeof tablingValues>[0][]).map(tablingValues),
+    (sessionRows as Parameters<typeof tablingValues>[0][]).map(tablingValues),
+    v => v.date,
+    v => v.start,
+  )
+  for (const { date, prev, next } of pairs) {
+    if (prev && next) {
+      const changes = diffFields(prev, next, TABLING_FIELDS)
+      if (changes.length) {
+        auditRows.push({
+          booking_id, admin_id: user.id, new_status: next.status,
+          target: 'session', target_date: date, action: 'updated', changes,
+        })
+      }
+    } else {
+      const row = (next ?? prev)!
+      auditRows.push({
+        booking_id, admin_id: user.id, new_status: row.status,
+        target: 'session', target_date: date, action: next ? 'added' : 'removed', changes: null,
+      })
+    }
+  }
+
+  if (!auditRows.length) {
+    auditRows.push({
+      booking_id, admin_id: user.id, new_status: statusSummary,
+      target: 'booking', target_date: null, action: 'updated', changes: [],
+    })
+  }
+  const auditLogId = await insertAuditRows(adminSupabase, auditRows)
 
   const { data: bodyData } = await adminSupabase
     .from('bodies')
@@ -257,11 +338,11 @@ export async function PATCH(request: Request) {
   }
   const recipients = await resolveBookingRecipients(adminSupabase, scopedRow)
 
-  if (recipients.length && auditLog) {
+  if (recipients.length && auditLogId) {
     await adminSupabase.from('user_alerts').insert(
       recipients.map(r => ({
         user_id: r.userId,
-        audit_log_id: auditLog.id,
+        audit_log_id: auditLogId,
         booking_id,
         booking_type: 'Tabling',
         booking_date: sessions[0]?.session_date ?? null,
@@ -285,6 +366,14 @@ export async function PATCH(request: Request) {
           changed('Date', prevFirst?.session_date, sessions[0]?.session_date, formatDate),
           changed('Start time', prevFirst?.start_time, sessions[0]?.start_time, formatTime),
           changed('End time', prevFirst?.end_time, sessions[0]?.end_time, formatTime),
+          // Effective values on both sides, so a session that has never set a
+          // meeting time does not report one when its start time moves (#126).
+          changed(
+            'Meeting time',
+            resolveMeetingTime(prevFirst?.meeting_time, prevFirst?.start_time),
+            resolveMeetingTime(sessions[0]?.meeting_time, sessions[0]?.start_time),
+            formatTime
+          ),
         )
 
         await sendBookingUpdatedEmail({
@@ -294,6 +383,7 @@ export async function PATCH(request: Request) {
           date: sessions[0]?.session_date ?? '',
           startTime: sessions[0]?.start_time ?? '',
           endTime: sessions[0]?.end_time ?? '',
+          meetingTime: resolveMeetingTime(sessions[0]?.meeting_time, sessions[0]?.start_time ?? ''),
           status: statusSummary,
           changes,
           recipients: emails,

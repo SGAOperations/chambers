@@ -8,11 +8,63 @@ interface BookingOption {
   label: string
 }
 
+interface AuditChange {
+  label: string
+  from: string
+  to: string
+}
+
 interface AuditLogEntry {
   id: string
   new_status: string
   created_at: string
+  /** Null on entries from before issue #120, which recorded a status and nothing else. */
+  target: 'booking' | 'series' | 'occurrence' | 'session' | null
+  target_date: string | null
+  action: 'created' | 'updated' | 'added' | 'removed' | 'cancelled' | 'dismissed' | null
+  changes: AuditChange[] | null
   users: { full_name: string; admin_role: string | null } | null
+}
+
+/**
+ * Entries written by one save share a created_at (they go in as one insert), so
+ * that plus the admin is what makes them one action on screen.
+ */
+interface AuditGroup {
+  key: string
+  created_at: string
+  users: AuditLogEntry['users']
+  entries: AuditLogEntry[]
+}
+
+function groupEntries(logs: AuditLogEntry[]): AuditGroup[] {
+  const groups: AuditGroup[] = []
+  for (const e of logs) {
+    const key = `${e.created_at}|${e.users?.full_name ?? ''}`
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) last.entries.push(e)
+    else groups.push({ key, created_at: e.created_at, users: e.users, entries: [e] })
+  }
+  return groups
+}
+
+/** What an entry is about, in words. */
+function targetLabel(e: AuditLogEntry): string {
+  switch (e.target) {
+    case 'series': return 'Whole series'
+    case 'occurrence': return e.target_date ? `Week of ${formatDate(e.target_date)}` : 'One week'
+    case 'session': return e.target_date ? `Session on ${formatDate(e.target_date)}` : 'One session'
+    default: return 'Booking'
+  }
+}
+
+const ACTION_LABELS: Record<NonNullable<AuditLogEntry['action']>, string> = {
+  created: 'Created',
+  updated: 'Changed',
+  added: 'Added',
+  removed: 'Removed',
+  cancelled: 'Cancelled',
+  dismissed: 'Cancellation dismissed',
 }
 
 function formatDate(date: string) {
@@ -172,22 +224,69 @@ export default function AuditTab() {
       )}
 
       {selectedId && !loadingLogs && logs.length > 0 && (
-        <div className="space-y-2">
-          {logs.map(entry => (
+        <div className="space-y-3">
+          {groupEntries(logs).map(group => (
             <div
-              key={entry.id}
-              className="border border-[#1e5080] rounded-xl px-5 py-4 bg-[#184073] flex items-center justify-between"
+              key={group.key}
+              className="border border-[#1e5080] rounded-xl bg-[#184073] overflow-hidden"
             >
-              <div className="space-y-0.5">
-                <p className="text-sm font-semibold text-[#f0f6ff]">{entry.users?.full_name ?? 'Unknown'}</p>
-                <p className="text-xs text-[#93b8d8]">{formatTimestamp(entry.created_at)}</p>
+              <div className="px-5 py-3 flex items-center justify-between gap-3 flex-wrap border-b border-[#1e5080]">
+                <div className="space-y-0.5">
+                  <p className="text-sm font-semibold text-[#f0f6ff]">{group.users?.full_name ?? 'Unknown'}</p>
+                  <p className="text-xs text-[#93b8d8]">{formatTimestamp(group.created_at)}</p>
+                </div>
+                <AdminRoleBadge role={group.users?.admin_role} />
               </div>
-              <div className="flex items-center gap-3">
-                <AdminRoleBadge role={entry.users?.admin_role} />
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[entry.new_status] ?? 'bg-[#0f2a4a] text-[#93b8d8]'}`}>
-                  {entry.new_status}
-                </span>
-              </div>
+
+              <ul className="divide-y divide-[#1e5080]">
+                {group.entries.map(entry => (
+                  <li key={entry.id} className="px-5 py-3 space-y-1.5">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                      <p className="text-sm text-[#f0f6ff]">
+                        <span className="font-medium">{targetLabel(entry)}</span>
+                        <span className="text-[#93b8d8]">
+                          {' · '}
+                          {entry.action ? ACTION_LABELS[entry.action] : 'Status set'}
+                        </span>
+                      </p>
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[entry.new_status] ?? 'bg-[#0f2a4a] text-[#93b8d8]'}`}>
+                        {entry.new_status}
+                      </span>
+                    </div>
+
+                    {entry.changes && entry.changes.length > 0 && (
+                      <dl className="text-xs grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+                        {entry.changes.map((c, i) => (
+                          <div key={i} className="contents">
+                            <dt className="text-[#93b8d8]">{c.label}</dt>
+                            <dd className="text-[#f0f6ff] min-w-0 break-words">
+                              <span className="text-[#6a96bb] line-through">{c.from}</span>
+                              <span className="text-[#6a96bb]"> → </span>
+                              {c.to}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+
+                    {entry.action === 'updated' && entry.changes?.length === 0 && (
+                      <p className="text-xs text-[#6a96bb]">Saved with no changes.</p>
+                    )}
+
+                    {/*
+                      Entries from before issue #120 recorded one status for the
+                      booking as a whole, often taken from its first session, so
+                      they are marked rather than presented as if they were as
+                      specific as the entries around them.
+                    */}
+                    {!entry.target && (
+                      <p className="text-xs text-[#6a96bb]">
+                        Recorded before per-session detail: this is one status for the booking as a whole.
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           ))}
         </div>

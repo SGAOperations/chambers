@@ -94,8 +94,20 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
             <span className="text-[#6a96bb] w-24 flex-shrink-0">Date</span>
             <span className="text-[#f0f6ff]">{formatDate(booking.date)}</span>
           </div>
+          {/*
+            Both rows, always, even when they carry the same time. This is the
+            detail view -- the one place someone comes to find out exactly what
+            was booked -- so it is worth a line to say that the meeting starts at
+            one time and the room is held from another, rather than collapsing
+            them the way the cards do and leaving the distinction unexplained
+            (issue #126).
+          */}
           <div className="flex gap-2">
-            <span className="text-[#6a96bb] w-24 flex-shrink-0">Time</span>
+            <span className="text-[#6a96bb] w-24 flex-shrink-0">Start Time</span>
+            <span className="text-[#f0f6ff]">{formatTime(booking.meetingTime)}</span>
+          </div>
+          <div className="flex gap-2">
+            <span className="text-[#6a96bb] w-24 flex-shrink-0">Reserved</span>
             <span className="text-[#f0f6ff]">{formatTime(booking.startTime)} – {formatTime(booking.endTime)}</span>
           </div>
           {booking.reservationCode && (

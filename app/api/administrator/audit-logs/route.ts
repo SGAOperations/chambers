@@ -28,9 +28,14 @@ export async function GET(request: Request) {
 
   const { data: logs } = await adminSupabase
     .from('audit_logs')
-    .select('id, new_status, created_at, users!admin_id(full_name, admin_role)')
+    // target, target_date, action and changes are issue #120's detail; they are
+    // null on entries written before it, which the tab shows as they always were.
+    .select('id, new_status, created_at, target, target_date, action, changes, users!admin_id(full_name, admin_role)')
     .eq('booking_id', booking_id)
-    .order('created_at', { ascending: true })
+    // Newest first: the question the tab is opened with is almost always "what
+    // just happened to this booking".
+    .order('created_at', { ascending: false })
+    .order('target_date', { ascending: true, nullsFirst: true })
 
   return NextResponse.json({ logs: logs || [] })
 }

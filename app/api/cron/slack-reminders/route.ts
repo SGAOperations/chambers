@@ -38,9 +38,9 @@ const adminSupabase = db
  * which is what lets the body-level filters below narrow the occurrence rows.
  */
 const SELECT = `
-  occurrence_date, room_name, start_time, end_time, status, hidden, weekly_booking_id,
+  occurrence_date, room_name, start_time, end_time, meeting_time, status, hidden, weekly_booking_id,
   weekly_room_bookings!inner(
-    room_name, start_time, end_time, status,
+    room_name, start_time, end_time, meeting_time, status,
     bookings!inner(
       hidden,
       bodies!inner(name, body_type, slack_channel_id, slack_reminders_enabled)
@@ -99,6 +99,7 @@ export async function GET(request: Request) {
       room_name: row.room_name,
       start_time: row.start_time,
       end_time: row.end_time,
+      meeting_time: row.meeting_time,
       status: row.status,
       hidden: row.hidden,
       weekly_booking_id: row.weekly_booking_id,
@@ -106,6 +107,7 @@ export async function GET(request: Request) {
         room_name: series.room_name,
         start_time: series.start_time,
         end_time: series.end_time,
+        meeting_time: series.meeting_time,
         status: series.status,
       },
       booking: { hidden: booking.hidden },

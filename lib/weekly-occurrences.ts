@@ -20,9 +20,13 @@
  * senate_type, hidden and is_event are compared even though the update email has
  * no row for them: they still say *which* week an administrator touched, which
  * is the question this module exists to answer.
+ *
+ * meeting_time is in the list for the plainer reason that the email does report
+ * it (issue #126), and a week whose only edit was to move when it meets has to
+ * count as moved or nobody is told.
  */
 export const OCCURRENCE_FIELDS = [
-  'room_name', 'start_time', 'end_time', 'status',
+  'room_name', 'start_time', 'end_time', 'meeting_time', 'status',
   'reservation_code', 'purpose', 'senate_type', 'hidden', 'is_event',
 ] as const
 
@@ -48,7 +52,9 @@ export function normalizeOccurrenceValue(field: OccurrenceField, value: unknown)
   if (typeof value === 'boolean') return value ? 'true' : 'false'
   const s = String(value).trim()
   if (!s) return null
-  return field === 'start_time' || field === 'end_time' ? s.slice(0, 5) : s
+  return field === 'start_time' || field === 'end_time' || field === 'meeting_time'
+    ? s.slice(0, 5)
+    : s
 }
 
 /**

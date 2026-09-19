@@ -132,7 +132,7 @@ export default async function FaqPage() {
           <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.0.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
-              Operational Affairs is working to standardize account management across SGA custom projects (Chambers, SenatePath, Attendance Manager, Aplio, and more). Once centralized accounts have been successfully tested on our products, they&apos;ll be implemented fully as v2.0.0.
+              Operational Affairs is working to standardize account management across SGA custom projects (Chambers, SenatePath, SenatePortal, Aplio, and more). Once centralized accounts have been successfully tested on our products, they&apos;ll be implemented fully as v2.0.0.
             </p>
           </section>
         </div>       
