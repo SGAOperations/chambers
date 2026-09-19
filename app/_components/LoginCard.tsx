@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { createClient } from '@/lib/supabase/client'
+import { authClient } from '@/lib/auth-client'
+import { finishSignOutIfPending } from '@/lib/sign-out'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { getAuthedUser } from '@/lib/auth'
 import { useOnlineStatus } from '@/lib/use-online-status'
 import {
   OFFLINE_MESSAGE,
@@ -14,6 +14,30 @@ import {
   networkErrorMessage,
   withNetworkRetry,
 } from '@/lib/network-error'
+
+interface LoginState {
+  is_active: boolean
+  has_completed_onboarding: boolean
+  otp_expires_at: string | null
+}
+
+type LoginStateResult =
+  | { ok: true; data: LoginState; error: null }
+  | { ok: false; data: null; error: unknown }
+
+/**
+ * Where the signed-in user should go next, from /api/me/login-state. Shaped as
+ * { error } so withNetworkRetry can retry it like the sign-in call.
+ */
+async function loadLoginState(): Promise<LoginStateResult> {
+  try {
+    const res = await fetch('/api/me/login-state', { cache: 'no-store' })
+    if (!res.ok) return { ok: false, data: null, error: { status: res.status } }
+    return { ok: true, data: (await res.json()) as LoginState, error: null }
+  } catch (error) {
+    return { ok: false, data: null, error }
+  }
+}
 
 export default function LoginCard() {
   const [email, setEmail] = useState('')
@@ -29,28 +53,25 @@ export default function LoginCard() {
   // get out and we are trying again", so the button can say which (issue #71).
   const [retrying, setRetrying] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
   const isOnline = useOnlineStatus()
 
   useEffect(() => {
     const checkAuth = async () => {
-      const user = await getAuthedUser(supabase)
-      if (!user) return
+      // A sign-out that could not reach the server earlier is finished first;
+      // otherwise the session it meant to end would route the user straight
+      // back in (see lib/sign-out.ts).
+      if (await finishSignOutIfPending()) return
 
-      const { data: profile, error } = await supabase
-        .from('users')
-        .select('has_completed_onboarding')
-        .eq('id', user.id)
-        .single()
+      const state = await loadLoginState()
 
-      // A failed read is not an answer. `profile?.has_completed_onboarding`
-      // being undefined used to route an already-onboarded user to /onboarding
-      // whenever this query hiccuped -- the same flaky network behind issue #71
-      // was enough to do it. Staying put is the harmless outcome: the user
-      // signs in and is routed by handleLogin, which asks again.
-      if (error || !profile) return
+      // A failed read is not an answer. Routing on a missing answer used to send
+      // an already-onboarded user to /onboarding whenever this request hiccuped
+      // -- the same flaky network behind issue #71 was enough to do it. Staying
+      // put is the harmless outcome: the user signs in and is routed by
+      // handleLogin, which asks again.
+      if (!state.ok) return
 
-      router.push(profile.has_completed_onboarding ? '/my-rooms' : '/onboarding')
+      router.push(state.data.has_completed_onboarding ? '/my-rooms' : '/onboarding')
     }
     checkAuth()
   }, [])
@@ -68,60 +89,43 @@ export default function LoginCard() {
     setRetrying(false)
     setError('')
 
-    const { data, error } = await withNetworkRetry(
-      () => supabase.auth.signInWithPassword({ email, password }),
+    const { error } = await withNetworkRetry(
+      () => authClient.signIn.email({ email: email.trim(), password }),
       () => setRetrying(true)
     )
     setRetrying(false)
 
     if (error) {
-      // error.message here is whatever the browser calls a dead socket --
+      // error.message here can be whatever the browser calls a dead socket --
       // "Failed to fetch" in Chrome. Never show that: it reads as a bug in
       // Chambers rather than as "your connection dropped". A real rejection
-      // from the server (wrong password, rate limit) is still shown verbatim.
-      setError(isNetworkError(error) ? networkErrorMessage() : error.message)
+      // from the server (wrong password, deactivated account, rate limit) is
+      // still shown verbatim. A deactivated account never gets a session at all
+      // (lib/better-auth.ts), so there is nothing to sign out of here.
+      setError(isNetworkError(error) ? networkErrorMessage() : (error.message ?? 'Sign in failed.'))
       setLoading(false)
       return
     }
 
-    const { data: profile, error: profileError } = await withNetworkRetry(
-      async () =>
-        await supabase
-          .from('users')
-          .select('is_active, has_completed_onboarding, otp_expires_at')
-          .eq('id', data.user.id)
-          .single()
-    )
+    const state = await withNetworkRetry(loadLoginState)
 
     // Not being able to read the account is not the same as the account being
-    // disabled, and this used to conflate them: a null `profile` fell into the
-    // branch below, so one dropped request told the user their account had been
-    // deactivated and globally revoked every session they held. The sign-in
-    // itself succeeded, so the session is deliberately left alone -- retrying
-    // re-runs this read rather than starting over.
-    if (profileError || !profile) {
+    // disabled. The sign-in itself succeeded, so the session is deliberately
+    // left alone -- retrying re-runs this read rather than starting over.
+    if (!state.ok) {
       setError(
-        isNetworkError(profileError)
+        isNetworkError(state.error)
           ? networkErrorMessage()
           : 'We could not load your account. Please try again.'
       )
       setLoading(false)
       return
     }
-
-    if (!profile.is_active) {
-      // Global scope kept deliberately here and below: these mean the account
-      // may not be used at all, so every session it holds should end. An
-      // ordinary sign-out (dashboard-shell) is scoped 'local' instead.
-      await supabase.auth.signOut()
-      setError('Your account has been deactivated. Please contact an administrator.')
-      setLoading(false)
-      return
-    }
+    const profile = state.data
 
     if (!profile.has_completed_onboarding) {
       if (profile.otp_expires_at && new Date(profile.otp_expires_at) < new Date()) {
-        await supabase.auth.signOut()
+        await authClient.signOut()
         setError('Your invitation has expired. Please contact an administrator for a new invite.')
         setLoading(false)
         return
@@ -152,7 +156,8 @@ export default function LoginCard() {
     setResetError('')
 
     const { error } = await withNetworkRetry(() =>
-      supabase.auth.resetPasswordForEmail(resetEmail, {
+      authClient.requestPasswordReset({
+        email: resetEmail.trim(),
         redirectTo: window.location.origin + '/reset-password',
       })
     )

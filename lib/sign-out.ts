@@ -1,93 +1,67 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { authClient } from './auth-client'
 import { isNetworkError, isOffline } from './network-error'
 
 /**
  * Ends the session on this device, including when there is no network to tell
  * the server about it.
  *
- * The idle timer's sign-out was quietly a no-op whenever it fired offline, which
- * is exactly when it fires most: the laptop wakes, the 12-hour deadline has
- * passed, and the network has not come back yet (issue #71).
+ * The idle timer's sign-out fires most often exactly when there is no network:
+ * the laptop wakes, the 12-hour deadline has passed, and the connection has not
+ * come back yet (issue #71).
  *
- * supabase-js is the reason. signOut() POSTs to /auth/v1/logout first and only
- * clears local storage afterwards, and it forgives just three failures on the
- * way -- 404, 401 and 403, all of which mean the session is already dead. A
- * network failure is none of those, so it returns early and _removeSession()
- * never runs. The session survives, signOut() resolves rather than rejecting so
- * the caller's .then() still redirects, and the user lands on the login page
- * still holding valid credentials. When the network returns, LoginCard's
- * checkAuth finds that session and sends them straight back in. The forced
- * logout had not happened at all.
+ * Under Supabase the session lived in cookies script could clear. Better Auth's
+ * session cookie is httpOnly (issue #136), so script cannot clear it, and a
+ * sign-out that never reached the server leaves the session alive. Instead the
+ * sign-out is remembered, and finishSignOutIfPending() completes it the next
+ * time the login page loads with a connection -- before it would otherwise have
+ * sent the user straight back in.
  *
- * So the local half is made to happen either way. Offline, the POST is skipped
- * outright -- it cannot succeed, and waiting for it to fail only delays the
- * redirect.
- *
- * Scope stays 'local': this ends the session in this browser, not every session
- * the user holds. The paths that mean "this account may not be used" keep the
- * global scope -- see force-sign-out.tsx and LoginCard.
+ * Scope is this device. The paths that mean "this account may not be used" end
+ * every session on the server instead (lib/auth-admin.ts revokeUserSessions).
  */
-export async function signOutThisDevice(supabase: SupabaseClient): Promise<void> {
+const PENDING_KEY = 'chambers_pending_sign_out'
+
+export async function signOutThisDevice(): Promise<void> {
   if (isOffline()) {
-    forgetLocalSession()
+    rememberPendingSignOut()
     return
   }
 
-  const { error } = await supabase.auth.signOut({ scope: 'local' })
-
-  // Anything the server actually answered has already been handled by
-  // supabase-js, which cleared storage. Only a request that never arrived
-  // leaves the session behind.
-  if (isNetworkError(error)) forgetLocalSession()
-}
-
-/**
- * Drops the stored session without asking the server's permission.
- *
- * @supabase/ssr keeps the session in cookies rather than localStorage so the
- * server can read it too, under `sb-<project ref>-auth-token`, split across
- * `.0`, `.1`, ... when it outgrows one cookie. Everything with that prefix goes.
- *
- * Reaching for the storage key directly is not lovely, but the alternative is
- * leaving a session the user asked to end -- and auth-js exposes no supported
- * way to clear it without a round trip it cannot make. auth-js re-reads storage
- * on every getSession()/getClaims() rather than caching in memory, so clearing
- * these is enough to make the session gone.
- */
-function forgetLocalSession(): void {
-  const key = authStorageKey()
-  if (!key) return
-
-  for (const entry of document.cookie.split(';')) {
-    const name = entry.split('=')[0]?.trim()
-    if (name && name.startsWith(key)) {
-      document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`
-    }
-  }
-
-  // Belt and braces: the PKCE code verifier lives beside the token, and a
-  // `userStorage` split would put part of the session in localStorage.
   try {
-    const stale = Object.keys(localStorage).filter(k => k.startsWith(key))
-    stale.forEach(k => localStorage.removeItem(k))
-  } catch {
-    // Storage can throw outright when site data is blocked. Nothing to undo.
+    const { error } = await authClient.signOut()
+    if (isNetworkError(error)) rememberPendingSignOut()
+  } catch (e) {
+    if (isNetworkError(e)) rememberPendingSignOut()
+    else throw e
   }
 }
 
 /**
- * The storage key @supabase/ssr derives for this project, `sb-<ref>-auth-token`.
- *
- * The ref is the first hostname label of the project URL, which is the same
- * thing @supabase/ssr does with it. Returns '' rather than throwing if the URL
- * is missing or malformed, so a misconfigured environment cannot take out the
- * sign-out path.
+ * Finishes a sign-out that could not reach the server. Returns true when there
+ * was one, so the caller knows not to route a session it just ended.
  */
-function authStorageKey(): string {
+export async function finishSignOutIfPending(): Promise<boolean> {
+  let pending = false
   try {
-    const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname.split('.')[0]
-    return ref ? `sb-${ref}-auth-token` : ''
+    pending = localStorage.getItem(PENDING_KEY) === '1'
   } catch {
-    return ''
+    return false
+  }
+  if (!pending || isOffline()) return pending
+
+  const { error } = await authClient.signOut()
+  if (!isNetworkError(error)) {
+    try {
+      localStorage.removeItem(PENDING_KEY)
+    } catch {}
+  }
+  return true
+}
+
+function rememberPendingSignOut(): void {
+  try {
+    localStorage.setItem(PENDING_KEY, '1')
+  } catch {
+    // Storage blocked: nothing more can be done offline.
   }
 }

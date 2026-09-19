@@ -1,5 +1,5 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAuthedUser, type AuthedUser } from './auth'
+import { pool } from './db/pool'
 
 /**
  * getAuthedUser(), but with the role fields refreshed from the users table.
@@ -34,34 +34,34 @@ import { getAuthedUser, type AuthedUser } from './auth'
  * keeps plain getAuthedUser() for that reason.
  */
 export async function getAuthedUserWithLiveRoles(
-  supabase: SupabaseClient
+  // Ignored; see getAuthedUser(). Kept so call sites did not change with #136.
+  _legacyClient?: unknown
 ): Promise<AuthedUser | null> {
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUser()
   if (!user) return null
 
-  // The RLS-scoped client is correct here: this reads only the caller's own row,
-  // which users_select_admin_or_own already permits without admin rights.
-  const { data: profile } = await supabase
-    .from('users')
-    .select('admin_role, iems_role, is_active, sessions_revoked_at')
-    .eq('id', user.id)
-    .single()
+  const { rows } = await pool.query<{
+    admin_role: string | null
+    iems_role: string | null
+    is_active: boolean | null
+    sessions_revoked_at: Date | null
+  }>(
+    'select admin_role, iems_role, is_active, sessions_revoked_at from public.users where id = $1',
+    [user.id]
+  )
+  const profile = rows[0]
 
   if (!profile || !profile.is_active) return null
 
-  // Refuse a token minted before this user's sessions were revoked.
+  // Refuse a session created before this user's sessions were revoked.
   //
-  // revoke_user_sessions() deletes the session rows, which stops the refresh --
-  // but the access token already in their browser is ES256 and verified locally
-  // against a cached JWKS, so it keeps passing until it expires. Without this
-  // comparison, revoking someone would take up to another hour to bite.
+  // Revoking deletes the sessions (lib/auth-admin.ts), and Better Auth checks the
+  // session table on every request, so this should never be what stops anyone.
+  // It stays as a second lock that costs nothing -- the row is already read.
   //
-  // `iat` is whole seconds, so the stamp is floored before comparing, and the
-  // test is strict: a token minted in the same second as the revocation is let
-  // through. That avoids rejecting the fresh token of someone who signs straight
-  // back in, and the window it opens is one second wide against an attacker who
-  // would have had to re-authenticate inside it -- at which point they hold a
-  // legitimate session anyway.
+  // Whole seconds on both sides, and strict: a session created in the same
+  // second as the revocation is let through, so someone signing straight back in
+  // is not refused.
   if (profile.sessions_revoked_at) {
     const revokedAtSeconds = Math.floor(
       new Date(profile.sessions_revoked_at).getTime() / 1000

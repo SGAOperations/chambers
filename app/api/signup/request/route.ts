@@ -1,13 +1,10 @@
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { randomBytes, createHash } from 'crypto'
 import { signupRateLimiter } from '@/lib/signup-rate-limit'
 import { sendSignupOtpEmail } from '@/lib/emails/signup-otp'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 export async function POST(request: Request) {
   const ip = request.headers.get('x-forwarded-for') ?? 'unknown'

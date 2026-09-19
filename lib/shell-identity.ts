@@ -1,5 +1,5 @@
-import { createClient } from '@/lib/supabase/server'
 import { getAuthedUser } from '@/lib/auth'
+import { pool } from '@/lib/db/pool'
 
 /**
  * The per-user facts the dashboard shell needs, resolved on the server during the
@@ -47,19 +47,23 @@ export type ShellIdentityResult =
  * try/catch around it) makes the control flow obvious at the call site.
  */
 export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
-  const supabase = await createClient()
-
-  const user = await getAuthedUser(supabase)
+  const user = await getAuthedUser()
   if (!user) return { status: 'unauthenticated' }
 
-  const [{ data: profile }, { data: memberships }] = await Promise.all([
-    supabase
-      .from('users')
-      .select('is_active, has_completed_onboarding, full_name, admin_role, iems_role')
-      .eq('id', user.id)
-      .single(),
-    supabase.from('board_memberships').select('role').eq('user_id', user.id),
+  const [{ rows: profiles }, { rows: memberships }] = await Promise.all([
+    pool.query<{
+      is_active: boolean | null
+      has_completed_onboarding: boolean
+      full_name: string | null
+      admin_role: string | null
+      iems_role: string | null
+    }>(
+      'select is_active, has_completed_onboarding, full_name, admin_role, iems_role from public.users where id = $1',
+      [user.id]
+    ),
+    pool.query<{ role: string }>('select role from public.board_memberships where user_id = $1', [user.id]),
   ])
+  const profile = profiles[0]
 
   if (!profile) return { status: 'unauthenticated' }
   if (!profile.is_active) return { status: 'deactivated' }
@@ -70,9 +74,7 @@ export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
     identity: {
       userId: user.id,
       fullName: profile.full_name ?? null,
-      isLeadership: (memberships ?? []).some(
-        (m: { role: string }) => m.role === 'Leadership'
-      ),
+      isLeadership: memberships.some(m => m.role === 'Leadership'),
       // Read from `users`, not from the JWT's app_metadata.
       //
       // Both describe the same fact, but app_metadata is a copy stamped into the
@@ -83,14 +85,8 @@ export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
       // they signed out. The users row is the fact itself, and this query is
       // already being made, so consulting it costs nothing.
       //
-      // `is_admin` in the token is exactly `admin_role != null` (see the sync in
-      // app/api/administrator/users/route.ts), so this is the same predicate read
-      // from the authoritative side.
+      // Since #136 there is no token copy at all: roles only ever come from here.
       //
-      // NOTE: this closes the gap for what the dashboard *renders*. The admin API
-      // routes and the SQL is_admin() used by RLS both still read the token, so a
-      // revoked admin can continue to call them until it expires. See the PR
-      // discussion -- that needs its own change.
       isAdmin: !!profile.admin_role,
       isIEMS: !!profile.iems_role,
       adminRole: profile.admin_role ?? null,

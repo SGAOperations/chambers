@@ -1,5 +1,5 @@
+import { db } from '@/lib/db/data-api'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
 import { getAuthedUser } from '@/lib/auth'
 import SlackConnectForm from './SlackConnectForm'
 
@@ -10,7 +10,7 @@ export default async function SlackConnectPage({
 }) {
   const { token } = await searchParams
 
-  const supabase = await createClient()
+  const supabase = db
   const user = await getAuthedUser(supabase)
 
   if (!user) {

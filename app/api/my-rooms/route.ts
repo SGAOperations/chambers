@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUser } from '@/lib/auth'
@@ -10,7 +10,7 @@ import { fetchMyRooms, MyRoomsQueryError } from '@/lib/my-rooms-data'
  * now serves re-reads after a cancel, a revision, or a Senate-preference change.
  */
 export async function GET() {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUser(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

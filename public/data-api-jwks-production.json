@@ -1,0 +1,13 @@
+{
+  "keys": [
+    {
+      "kty": "EC",
+      "x": "6JFnMOOx4JD6PRBp057JoWkpmcSCwDcuAMfAZkUgDmU",
+      "y": "J7jTbfUgDymW6Gch8KcHDt9DMV33uSBF4alk-soog0c",
+      "crv": "P-256",
+      "kid": "chambers-production-d260c3a8",
+      "alg": "ES256",
+      "use": "sig"
+    }
+  ]
+}

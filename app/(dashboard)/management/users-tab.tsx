@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
-import { createClient } from '@/lib/supabase/client'
-import { getAuthedUser } from '@/lib/auth'
+import { useIdentity } from '../identity-context'
 import { ADMIN_ROLES, MANAGEMENT_ROLES } from '@/lib/admin-roles'
 
 function UsersTabSkeleton() {
@@ -82,7 +81,8 @@ export default function UsersTab() {
   const [addingMembership, setAddingMembership] = useState<string | null>(null)
   const [newMembership, setNewMembership] = useState({ body_id: '', role: 'Member' })
   const [adminRoleError, setAdminRoleError] = useState<string | null>(null)
-  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null)
+  // Read from the shell, which resolved it from the users row on the server.
+  const { adminRole: currentUserRole } = useIdentity()
   const [togglingActive, setTogglingActive] = useState<string | null>(null)
   const [resendingInvite, setResendingInvite] = useState<string | null>(null)
   const [sentInvite, setSentInvite] = useState<Set<string>>(new Set())
@@ -111,10 +111,6 @@ export default function UsersTab() {
     fetchUsers()
     fetchBodies()
     fetchMembershipRequests()
-    const supabase = createClient()
-    getAuthedUser(supabase).then((user) => {
-      setCurrentUserRole(user?.app_metadata?.admin_role ?? null)
-    })
   }, [])
 
   const createUser = async () => {

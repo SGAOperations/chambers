@@ -1,5 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
@@ -14,10 +13,7 @@ import { sessionDatesOf, minDate, subtractDays, settingsFromRow, type SettingsRo
 //
 // So the listing runs as service role, gated by the explicit admin-or-IEMS check
 // below rather than by RLS. Same shape as /api/dashboard's alerts read.
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 /** One event_tracking row as embedded above. */
 interface TrackingRow {
@@ -51,7 +47,7 @@ interface EventOccurrenceRow {
 }
 
 export async function GET() {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || (!user.app_metadata?.is_admin && !user.app_metadata?.iems_role)) {
