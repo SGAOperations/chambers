@@ -1,5 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { checkRateLimit } from '@/lib/check-rate-limit'
@@ -45,10 +44,7 @@ import { loadActiveSemesterEnd, loadPlanContext } from '@/lib/space-series-data'
  * room change without being cancelled and rebooked.
  */
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 const TIME = /^\d{2}:\d{2}$/
@@ -125,7 +121,7 @@ async function nameOtherSpaces(
 }
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const supabase = await createClient()
+  const supabase = db
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -149,7 +145,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const supabase = await createClient()
+  const supabase = db
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -384,7 +380,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const supabase = await createClient()
+  const supabase = db
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

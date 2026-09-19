@@ -1,16 +1,27 @@
 import Link from 'next/link'
-import { createClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 
-const adminSupabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+type RoleHolder = { full_name: string; admin_role: string }
+
+/**
+ * Who currently holds the two roles the FAQ names. A failed read -- including a
+ * build with no database configured, like CI's -- falls back to the role titles
+ * below rather than failing the page.
+ */
+async function loadRoleHolders(): Promise<RoleHolder[]> {
+  try {
+    const { data } = await db
+      .from('users')
+      .select('full_name, admin_role')
+      .in('admin_role', ['Vice President of Operational Affairs', 'Digital Innovation Manager'])
+    return (data as RoleHolder[] | null) ?? []
+  } catch {
+    return []
+  }
+}
 
 export default async function FaqPage() {
-  const { data: roles } = await adminSupabase
-    .from('users')
-    .select('full_name, admin_role')
-    .in('admin_role', ['Vice President of Operational Affairs', 'Digital Innovation Manager'])
+  const roles = await loadRoleHolders()
 
   const vpName = roles?.find(u => u.admin_role === 'Vice President of Operational Affairs')?.full_name ?? 'Vice President of Operational Affairs'
   const dimName = roles?.find(u => u.admin_role === 'Digital Innovation Manager')?.full_name ?? 'Digital Innovation Manager'

@@ -1,4 +1,4 @@
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from './db/data-api'
 import { appZoneParts } from './meeting-reminders'
 import { resolveBookingRecipients, type Recipient, type ScopedRow } from './booking-scope'
 import { occurrenceUid, sessionUid, splitByAudience, type RoomSession } from './room-calendar'
@@ -14,10 +14,7 @@ import { sendBookingCancelledEmail } from './emails/booking-cancelled'
  * rather than the one its series started in.
  */
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 /** Today's date in the zone the booking tables count in. */
 export function appToday(): string {

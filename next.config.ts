@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import path from "node:path";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const withPWA = require('next-pwa')({
@@ -36,12 +35,6 @@ const withPWA = require('next-pwa')({
   publicExcludes: ['!opsemaillogo.png'],
 });
 
-// Chambers never opens a Supabase Realtime channel, but @supabase/supabase-js
-// pulls @supabase/realtime-js (a Phoenix websocket client, ~200 KB decoded) into
-// the bundle on every route regardless. Alias it to a tiny stub for both bundlers.
-// See lib/stubs/realtime-js.js.
-const realtimeStub = path.resolve(__dirname, 'lib/stubs/realtime-js.js');
-
 const nextConfig: NextConfig = {
   // /administrator became /bookings when its settings half moved to /management
   // (issue #64). Admins have had the old URL bookmarked for a year, and it is
@@ -55,18 +48,10 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: '/administrator', destination: '/bookings', permanent: false }]
   },
-  turbopack: {
-    resolveAlias: {
-      '@supabase/realtime-js': './lib/stubs/realtime-js.js',
-    },
-  },
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      '@supabase/realtime-js': realtimeStub,
-    };
-    return config;
-  },
+  // next-pwa adds a webpack config, and Next 16 refuses to run `next dev`
+  // (Turbopack) alongside one unless a turbopack config exists. Nothing needs
+  // configuring for Turbopack itself.
+  turbopack: {},
 };
 
 export default withPWA(nextConfig);

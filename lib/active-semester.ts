@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Db } from './db/data-api'
 
 /**
  * The active semester id, cached in the serverless instance's memory.
@@ -13,7 +13,7 @@ const TTL_MS = 5 * 60_000
 let cache: { id: string; at: number } | null = null
 
 export async function getActiveSemesterId(
-  supabase: SupabaseClient
+  supabase: Db
 ): Promise<string | null> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.id
 

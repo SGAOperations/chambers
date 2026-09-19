@@ -1,14 +1,11 @@
+import { db } from '@/lib/db/data-api'
 import { randomBytes } from 'crypto'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { verifySlackRequest } from '@/lib/slack-verify'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { ephemeral } from '@/lib/slack'
 import { bodyTypeGetsSlackReminders } from '@/lib/body-types'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 function generateTimeOptions() {
   const opts = []

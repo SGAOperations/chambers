@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getJson } from '@/lib/fetch-json'
-import { createBrowserClient } from '@supabase/ssr'
-import { getAuthedUser } from '@/lib/auth'
+import { useIdentity } from '../identity-context'
 import { Skeleton } from '@/app/_components/skeleton'
 
 function BookingSettingsTabSkeleton() {
@@ -93,7 +92,13 @@ export default function BookingSettingsTab() {
   const [newSemesterName, setNewSemesterName] = useState('')
   const [creatingState, setCreatingState] = useState<'idle' | 'saving' | 'error'>('idle')
   const [createError, setCreateError] = useState('')
-  const [isVP, setIsVP] = useState(false)
+  // The roles that may manage semesters, read from the shell's identity, which
+  // the server resolved from the users row.
+  const { adminRole } = useIdentity()
+  const isVP =
+    adminRole === 'Vice President of Operational Affairs' ||
+    adminRole === 'Executive Vice President' ||
+    adminRole === 'Information Manager'
 
   // Activate modal
   const [showActivateModal, setShowActivateModal] = useState(false)
@@ -131,21 +136,6 @@ export default function BookingSettingsTab() {
       })
 
     fetchSemesters()
-
-    // Check if current user is VP of Operational Affairs
-    const supabase = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    )
-    getAuthedUser(supabase).then((user) => {
-      if (
-        user?.app_metadata?.admin_role === 'Vice President of Operational Affairs' ||
-        user?.app_metadata?.admin_role === 'Executive Vice President' ||
-        user?.app_metadata?.admin_role === 'Information Manager'
-      ) {
-        setIsVP(true)
-      }
-    })
   }, [])
 
   const fetchSemesters = async () => {

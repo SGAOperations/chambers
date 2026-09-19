@@ -1,11 +1,9 @@
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
+import { createPasswordUser } from '@/lib/auth-admin'
 import { randomBytes, createHash, timingSafeEqual } from 'crypto'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 export async function POST(request: Request) {
   const { email, otp } = await request.json()
@@ -36,27 +34,14 @@ export async function POST(request: Request) {
 
   const tempPassword = randomBytes(16).toString('hex')
 
-  const { data: authData, error: authError } = await adminSupabase.auth.admin.createUser({
-    email: normalizedEmail,
-    email_confirm: true,
-    password: tempPassword,
-  })
-
-  if (authError) {
-    return NextResponse.json({ error: authError.message }, { status: 500 })
+  // Creates the users row too (issue #136). The name is filled in during
+  // onboarding; is_active defaults to true.
+  try {
+    await createPasswordUser({ email: normalizedEmail, fullName: '', password: tempPassword })
+  } catch (e) {
+    console.error('Signup account creation failed:', e)
+    return NextResponse.json({ error: 'Could not create your account. Please try again.' }, { status: 500 })
   }
-
-  const full_name = ''
-
-  // Ensure the trigger-created users row has correct defaults
-  await adminSupabase
-    .from('users')
-    .update({ is_active: true, full_name })
-    .eq('id', authData.user.id)
-
-  await adminSupabase.auth.admin.updateUserById(authData.user.id, {
-    user_metadata: { full_name },
-  })
 
   return NextResponse.json({ email: normalizedEmail, temp_password: tempPassword })
 }

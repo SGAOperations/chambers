@@ -1,4 +1,4 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Db } from './db/data-api'
 
 /**
  * Where SGA Spaces confirmation and cancellation emails go (issue #109).
@@ -104,7 +104,7 @@ interface LeadershipRow {
  * and it should be offered once, credited to all of them.
  */
 export async function loadSgaEmailOptions(
-  adminSupabase: SupabaseClient,
+  adminSupabase: Db,
   userIds: string[]
 ): Promise<Map<string, SgaEmailOption[]>> {
   const byUser = new Map<string, SgaEmailOption[]>()
@@ -179,7 +179,7 @@ export function spacesAddressesFor(
  * attendee's key (see attendeeKeys) maps to its own address.
  */
 export async function resolveSpacesAddresses(
-  adminSupabase: SupabaseClient,
+  adminSupabase: Db,
   userIds: string[]
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>()

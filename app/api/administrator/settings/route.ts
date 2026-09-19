@@ -1,14 +1,10 @@
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { isManagementRole } from '@/lib/admin-roles'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 // Legacy advance-notice knobs.
 const ADVANCE_KEYS = [
@@ -50,7 +46,7 @@ const RANGE_PAIRS: [string, string][] = [
 const ALL_KEYS = [...ADVANCE_KEYS, ...PA_KEYS]
 
 export async function GET() {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
@@ -79,7 +75,7 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {

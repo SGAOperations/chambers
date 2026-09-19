@@ -1,19 +1,16 @@
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
+import { setUserPassword } from '@/lib/auth-admin'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { randomBytes, createHash } from 'crypto'
 import { sendOtpInviteEmail } from '@/lib/emails/otp-invite'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { isManagementRole } from '@/lib/admin-roles'
 
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const adminSupabase = db
 
 export async function POST(request: Request) {
-  const supabase = await createClient()
+  const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
@@ -47,8 +44,8 @@ export async function POST(request: Request) {
   const otpHash = createHash('sha256').update(otp).digest('hex')
   const otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
-  // Update Supabase auth password to the new OTP
-  await adminSupabase.auth.admin.updateUserById(id, { password: otp })
+  // The new one-time password replaces whatever they could sign in with before.
+  await setUserPassword(id, otp)
 
   const { error } = await adminSupabase
     .from('users')
