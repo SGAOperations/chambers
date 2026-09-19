@@ -197,7 +197,7 @@ export default function MyRoomsClient({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredUpcoming.map(b => {
               // Only sessions explicitly labelled Full Body or Weekly are taken
-              // in Attendance Manager. Office Hours -- the third senate type --
+              // in SenatePortal. Office Hours -- the third senate type --
               // is not, and neither is anything outside Senate, so neither gets
               // the link (issue #78).
               const hasAttendance = b.senateType === 'Full Body' || b.senateType === 'Weekly'
@@ -236,7 +236,7 @@ export default function MyRoomsClient({
 
                     {/*
                       Was the whole card: every Senate booking was an anchor to
-                      Attendance Manager, so there was no way to open its details,
+                      the attendance app, so there was no way to open its details,
                       and Office Hours -- which AM does not track -- linked there
                       too. The click has to be kept off the parent so the modal
                       does not open behind the new tab.
@@ -257,10 +257,10 @@ export default function MyRoomsClient({
                         rel="noopener noreferrer"
                         onClick={e => e.stopPropagation()}
                         onKeyDown={e => e.stopPropagation()}
-                        aria-label="Go to Attendance Manager (opens in a new tab)"
+                        aria-label="Go to SenatePortal (opens in a new tab)"
                         className="flex-shrink-0 whitespace-nowrap text-sm font-semibold text-[#93b8d8] underline underline-offset-2 hover:text-[#f0f6ff] transition-colors"
                       >
-                        Attendance Manager
+                        Go to SenatePortal
                       </a>
                     )}
                   </div>
