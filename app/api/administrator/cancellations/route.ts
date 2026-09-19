@@ -5,6 +5,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { notifyCancelledReservations } from '@/lib/room-invites'
 import { waitUntil } from '@vercel/functions'
+import { insertAuditRows, type AuditTarget } from '@/lib/audit'
 import {
   applyCancellationOutcomes,
   cancellationAuditRows,
@@ -124,16 +125,72 @@ export async function PATCH(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { id } = await request.json()
+  // `action` defaults to 'done', which is what every caller sent before issue
+  // #139 added the other one.
+  const { id, action = 'done' } = await request.json()
   if (!id) return NextResponse.json({ error: 'A cancellation request id is required.' }, { status: 400 })
+  if (action !== 'done' && action !== 'dismiss') {
+    return NextResponse.json({ error: "action must be 'done' or 'dismiss'." }, { status: 400 })
+  }
 
   const { data: req } = await adminSupabase
     .from('cancellation_requests')
-    .select('id')
+    .select('id, status, booking_id, scope, occurrence_date, bookings(type)')
     .eq('id', id)
     .maybeSingle()
 
   if (!req) return NextResponse.json({ error: 'Cancellation request not found.' }, { status: 404 })
+
+  if (action === 'dismiss') {
+    // Closes the request without acting on it (issue #139) -- for one that
+    // cannot be carried out as asked, most often because it came in too late
+    // for CSC to release the room.
+    //
+    // The booking is deliberately left exactly as it is, still Pending
+    // Cancellation. What should happen to it instead -- back to Reserved,
+    // Missed, something else -- depends on why the request could not go ahead,
+    // and that is the admin's call to make in the booking editor, not something
+    // this can infer.
+    //
+    // Only an open request: a Done one has already cancelled its booking and
+    // been acted on, and relabelling it would misstate what happened.
+    if (req.status !== 'Pending') {
+      return NextResponse.json({ error: 'Only a pending cancellation request can be dismissed.' }, { status: 409 })
+    }
+
+    // Logged against what the request covered, in the Audit tab's own terms
+    // (issue #120): one week or session by its date, or the series or booking
+    // as a whole. The status is the booking's real one afterwards -- still
+    // Pending Cancellation -- and there are no changes, because nothing on the
+    // booking moved.
+    if (req.booking_id) {
+      const bookingType = (Array.isArray(req.bookings) ? req.bookings[0] : req.bookings)?.type
+      const isWeekly = bookingType === 'Weekly Room'
+      const oneDate = req.scope === 'occurrence'
+      const target: AuditTarget = oneDate
+        ? (isWeekly ? 'occurrence' : 'session')
+        : (isWeekly ? 'series' : 'booking')
+      await insertAuditRows(adminSupabase, [{
+        booking_id: req.booking_id,
+        admin_id: user.id,
+        new_status: 'Pending Cancellation',
+        target,
+        target_date: oneDate ? req.occurrence_date ?? null : null,
+        action: 'dismissed',
+        changes: null,
+      }])
+    }
+
+    const { error } = await adminSupabase
+      .from('cancellation_requests')
+      .update({ status: 'Dismissed' })
+      .eq('id', id)
+      .eq('status', 'Pending')
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    return NextResponse.json({ success: true, dismissed: true })
+  }
 
   // Which dated reservations this request covers, and what each is due. Read
   // from the same collector Auto-Cancel uses, so the two agree about whose row a

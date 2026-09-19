@@ -6,6 +6,8 @@ import { sendBookingUpdatedEmail } from '@/lib/emails/booking-updated'
 import { sendBookingCreatedEmail } from '@/lib/emails/booking-created'
 import { changed, collectChanges, formatDate, formatTime } from '@/lib/emails/changes'
 import { occurrenceMoved } from '@/lib/weekly-occurrences'
+import { meetingTimeForStorage, resolveMeetingTime } from '@/lib/meeting-time'
+import { diffFields, formatEvent, formatVisibility, insertAuditRows, type AuditField, type AuditRow } from '@/lib/audit'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { planInvites } from '@/lib/room-calendar'
 import { appToday, sendPerAudience, weeklyRoomSessions, type OccurrenceRow } from '@/lib/room-invites'
@@ -34,6 +36,7 @@ interface OccurrenceInput {
   room_name: string | null
   start_time: string | null
   end_time: string | null
+  meeting_time: string | null
   status: string | null
   reservation_code: string | null
   senate_type: string | null
@@ -55,6 +58,7 @@ interface PrevOccurrenceRow {
   room_name: string | null
   start_time: string | null
   end_time: string | null
+  meeting_time: string | null
   status: string | null
   reservation_code: string | null
   purpose: string | null
@@ -87,7 +91,7 @@ export async function POST(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { body_id, purpose, room_name, start_date, end_date, start_time, end_time, reservation_code, status, semester_id, scope, division, body_ids } = await request.json()
+  const { body_id, purpose, room_name, start_date, end_date, start_time, end_time, meeting_time, reservation_code, status, semester_id, scope, division, body_ids } = await request.json()
 
   const { data: semester } = await adminSupabase
     .from('semesters')
@@ -133,7 +137,10 @@ export async function POST(request: Request) {
   // Create weekly room booking
   const { data: weekly, error: weeklyError } = await adminSupabase
     .from('weekly_room_bookings')
-    .insert({ booking_id: booking.id, room_name, start_date, end_date, start_time, end_time, reservation_code: reservation_code || null, status })
+    // meeting_time collapses to null when it matches the start time, so the two
+    // stay tied together until an administrator genuinely separates them
+    // (issue #126).
+    .insert({ booking_id: booking.id, room_name, start_date, end_date, start_time, end_time, meeting_time: meetingTimeForStorage(meeting_time, start_time), reservation_code: reservation_code || null, status })
     .select()
     .single()
 
@@ -155,6 +162,13 @@ export async function POST(request: Request) {
     .select('id, occurrence_date, room_name, start_time, end_time, status, senate_type, purpose')
 
   if (occurrenceError) return NextResponse.json({ error: occurrenceError.message }, { status: 500 })
+
+  // Opens the booking's history in the Audit tab (issue #120). Creating one was
+  // never logged, so a booking's trail used to start at its first edit.
+  await insertAuditRows(adminSupabase, [{
+    booking_id: booking.id, admin_id: user.id, new_status: status,
+    target: 'booking', target_date: null, action: 'created', changes: null,
+  }])
 
   // Chambers emailed on update and on a missed reservation but never on
   // creation, so the first email a body got about a booking was one saying it
@@ -201,7 +215,12 @@ export async function POST(request: Request) {
             dateRange: { start: start_date, end: end_date },
             // Freshly generated, so every occurrence carries the series' room and
             // time -- there are no per-week overrides to report yet.
-            sessions: dates.map(d => ({ date: d, startTime: start_time, endTime: end_time })),
+            sessions: dates.map(d => ({
+              date: d,
+              startTime: start_time,
+              endTime: end_time,
+              meetingTime: resolveMeetingTime(meeting_time, start_time),
+            })),
             recipients: audience.recipients,
             invite: audience.plan,
           })
@@ -226,7 +245,7 @@ export async function PATCH(request: Request) {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { booking_id, weekly_id, body_id, purpose, room_name, start_date, end_date, start_time, end_time, reservation_code, status, occurrences, scope, division, body_ids } = await request.json()
+  const { booking_id, weekly_id, body_id, purpose, room_name, start_date, end_date, start_time, end_time, meeting_time, reservation_code, status, occurrences, scope, division, body_ids } = await request.json()
 
   const ctx = await loadScopeContext(supabase, user)
   const selection = validateScopeSelection(ctx, { scope, body_id, division, body_ids })
@@ -240,13 +259,13 @@ export async function PATCH(request: Request) {
     adminSupabase.from('bookings').select('purpose').eq('id', booking_id).single(),
     adminSupabase
       .from('weekly_room_bookings')
-      .select('room_name, start_date, end_date, start_time, end_time, status, reservation_code')
+      .select('room_name, start_date, end_date, start_time, end_time, meeting_time, status, reservation_code')
       .eq('id', weekly_id)
       .single(),
     adminSupabase
       .from('weekly_room_occurrences')
       .select(
-        'id, occurrence_date, room_name, start_time, end_time, status, reservation_code, purpose, senate_type, hidden, is_event'
+        'id, occurrence_date, room_name, start_time, end_time, meeting_time, status, reservation_code, purpose, senate_type, hidden, is_event'
       )
       .eq('weekly_booking_id', weekly_id),
   ])
@@ -273,7 +292,7 @@ export async function PATCH(request: Request) {
   // Update weekly booking base fields
   const { error: weeklyError } = await adminSupabase
     .from('weekly_room_bookings')
-    .update({ room_name, start_date, end_date, start_time, end_time, reservation_code: reservation_code || null, status })
+    .update({ room_name, start_date, end_date, start_time, end_time, meeting_time: meetingTimeForStorage(meeting_time, start_time), reservation_code: reservation_code || null, status })
     .eq('id', weekly_id)
 
   if (weeklyError) return NextResponse.json({ error: weeklyError.message }, { status: 500 })
@@ -287,6 +306,10 @@ export async function PATCH(request: Request) {
       room_name: existing?.room_name || null,
       start_time: existing?.start_time || null,
       end_time: existing?.end_time || null,
+      // Null inherits the series meeting time, which itself falls back to the
+      // start time -- so clearing this week's override restores whatever the
+      // series says rather than blanking the meeting (issue #126).
+      meeting_time: existing?.meeting_time || null,
       status: existing?.status || null,
       reservation_code: existing?.reservation_code || null,
       senate_type: existing?.senate_type ?? null,
@@ -340,12 +363,6 @@ export async function PATCH(request: Request) {
     .select('id, occurrence_date, room_name, start_time, end_time, status, senate_type, purpose')
     .eq('weekly_booking_id', weekly_id)
 
-  const { data: auditLog } = await adminSupabase
-    .from('audit_logs')
-    .insert({ booking_id, admin_id: user.id, new_status: status })
-    .select('id')
-    .single()
-
   const { data: bodyData } = await adminSupabase
     .from('bodies')
     .select('name')
@@ -388,9 +405,82 @@ export async function PATCH(request: Request) {
     changed('End date', prevWeekly?.end_date, end_date, formatDate),
     changed('Start time', prevWeekly?.start_time, start_time, formatTime),
     changed('End time', prevWeekly?.end_time, end_time, formatTime),
+    // Compared as effective values, so a series that has never set a meeting
+    // time does not report one the first time a start time moves: both sides
+    // resolve through the same fallback (issue #126).
+    changed(
+      'Meeting time',
+      resolveMeetingTime(prevWeekly?.meeting_time, prevWeekly?.start_time),
+      resolveMeetingTime(meeting_time, start_time),
+      formatTime
+    ),
     changed('Status', prevWeekly?.status, status),
     changed('Reservation code', prevWeekly?.reservation_code, reservation_code || null),
   )
+
+  // Audit entries (issue #120): one for the series if it moved, and one for each
+  // week whose own overrides moved.
+  //
+  // A week is compared with the *new* series values standing in for anything it
+  // inherits, on both sides. So a week that merely follows a changed series does
+  // not repeat what the series entry already says, while a cleared override
+  // still reads as "old override -> series value", which is what the admin did.
+  type WeekValues = {
+    room: string | null; start: string | null; end: string | null; meeting: string | null; status: string | null
+    purpose: string | null; code: string | null; senate: string | null
+    hidden: boolean | null; event: boolean
+  }
+  const weekValues = (o: Partial<PrevOccurrenceRow> | undefined): WeekValues => ({
+    room: o?.room_name ?? room_name,
+    start: o?.start_time ?? start_time,
+    end: o?.end_time ?? end_time,
+    // Resolved, so a week with no meeting time of its own reads as whatever it
+    // actually meets at -- the series' meeting time, else its start (#126).
+    meeting: resolveMeetingTime(o?.meeting_time, meeting_time, o?.start_time ?? start_time),
+    status: o?.status ?? status,
+    purpose: o?.purpose ?? purpose,
+    code: o?.reservation_code ?? (reservation_code || null),
+    senate: o?.senate_type ?? null,
+    hidden: o?.hidden ?? null,
+    event: o?.is_event ?? false,
+  })
+  const WEEK_FIELDS: AuditField<WeekValues>[] = [
+    { label: 'Room', get: v => v.room },
+    { label: 'Start time', get: v => v.start, format: formatTime },
+    { label: 'End time', get: v => v.end, format: formatTime },
+    { label: 'Meeting time', get: v => v.meeting, format: formatTime },
+    { label: 'Status', get: v => v.status },
+    { label: 'Purpose', get: v => v.purpose },
+    { label: 'Reservation code', get: v => v.code },
+    { label: 'Senate session', get: v => v.senate },
+    { label: 'Visibility', get: v => v.hidden, format: formatVisibility },
+    { label: 'Event', get: v => v.event, format: formatEvent },
+  ]
+
+  const auditRows: AuditRow[] = []
+  if (seriesChanges.length) {
+    auditRows.push({
+      booking_id, admin_id: user.id, new_status: status,
+      target: 'series', target_date: null, action: 'updated', changes: seriesChanges,
+    })
+  }
+  for (const occ of movedOccurrences) {
+    const changes = diffFields(weekValues(prevByDate.get(occ.occurrence_date)), weekValues(occ), WEEK_FIELDS)
+    if (!changes.length) continue
+    auditRows.push({
+      booking_id, admin_id: user.id, new_status: occ.status ?? status,
+      target: 'occurrence', target_date: occ.occurrence_date, action: 'updated', changes,
+    })
+  }
+  // A save that changed nothing still happened, and user_alerts needs a row to
+  // point at, so it is recorded -- as the series, with an empty change list.
+  if (!auditRows.length) {
+    auditRows.push({
+      booking_id, admin_id: user.id, new_status: status,
+      target: 'series', target_date: null, action: 'updated', changes: [],
+    })
+  }
+  const auditLogId = await insertAuditRows(adminSupabase, auditRows)
 
   // The sessions this notification is about: the weeks that moved, or -- when
   // the series itself moved -- all of them. Senate members who have deselected
@@ -408,11 +498,11 @@ export async function PATCH(request: Request) {
   // of the series when the edit was series-wide.
   const alertOcc = movedOccurrences[0] ?? newOccurrences[0]
 
-  if (recipients.length && auditLog) {
+  if (recipients.length && auditLogId) {
     await adminSupabase.from('user_alerts').insert(
       recipients.map(r => ({
         user_id: r.userId,
-        audit_log_id: auditLog.id,
+        audit_log_id: auditLogId,
         booking_id,
         booking_type: 'Weekly Room',
         booking_date: alertOcc?.occurrence_date ?? start_date,
@@ -440,6 +530,12 @@ export async function PATCH(request: Request) {
             changed('Room', prev?.room_name ?? prevWeekly?.room_name, occ.room_name ?? room_name),
             changed('Start time', prev?.start_time ?? prevWeekly?.start_time, occ.start_time ?? start_time, formatTime),
             changed('End time', prev?.end_time ?? prevWeekly?.end_time, occ.end_time ?? end_time, formatTime),
+            changed(
+              'Meeting time',
+              resolveMeetingTime(prev?.meeting_time, prevWeekly?.meeting_time, prev?.start_time ?? prevWeekly?.start_time),
+              resolveMeetingTime(occ.meeting_time, meeting_time, occ.start_time ?? start_time),
+              formatTime
+            ),
             changed('Status', prev?.status ?? prevWeekly?.status, occ.status ?? status),
             changed('Purpose', prev?.purpose ?? prevBooking?.purpose, occ.purpose ?? purpose),
             changed('Reservation code', prev?.reservation_code ?? prevWeekly?.reservation_code, occ.reservation_code ?? (reservation_code || null)),
@@ -451,6 +547,7 @@ export async function PATCH(request: Request) {
             date: occ.occurrence_date,
             startTime: occ.start_time || start_time,
             endTime: occ.end_time || end_time,
+            meetingTime: resolveMeetingTime(occ.meeting_time, meeting_time, occ.start_time || start_time),
             roomOrTable: occ.room_name || room_name || 'N/A',
             status: occ.status || status,
             purpose: occ.purpose ?? purpose,
@@ -499,6 +596,7 @@ export async function PATCH(request: Request) {
             date: start_date,
             startTime: start_time,
             endTime: end_time,
+            meetingTime: resolveMeetingTime(meeting_time, start_time),
             status,
             changes: seriesChanges,
             sessions,

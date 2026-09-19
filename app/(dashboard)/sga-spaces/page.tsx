@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import SpaceCalendar from './space-calendar'
 import SpaceBookingModal from './space-booking-modal'
+import SpaceBookingDetails from './space-booking-details'
 import { Skeleton } from '@/app/_components/skeleton'
 import { createClient } from '@/lib/supabase/client'
 import { getAuthedUser } from '@/lib/auth'
@@ -172,6 +173,8 @@ export default function SGASpacesPage() {
   const [isLeadership, setIsLeadership] = useState(false)
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null)
   const [editBooking, setEditBooking] = useState<EditBooking | null>(null)
+  // Someone else's booking, opened read-only (issue #142).
+  const [viewBooking, setViewBooking] = useState<Booking | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
 
   const canBook = isAdmin || isLeadership
@@ -464,6 +467,7 @@ export default function SGASpacesPage() {
               spaces={showingAll ? spaces : undefined}
               onSlotClick={canBook ? (start, end, freeSpaceIds) => setModalSlot({ start, end, freeSpaceIds }) : () => {}}
               onBookingClick={handleBookingClick}
+              onViewBooking={setViewBooking}
             />
           )}
           </div>
@@ -485,6 +489,15 @@ export default function SGASpacesPage() {
             }}
             spaces={spaces}
             semesterEndDate={semesterEndDate}
+          />
+        )}
+
+        {/* Read-only view of someone else's booking (issue #142) */}
+        {viewBooking && (
+          <SpaceBookingDetails
+            booking={viewBooking}
+            spaceName={spaces.find(s => s.id === viewBooking.space_id)?.name ?? 'SGA Space'}
+            onClose={() => setViewBooking(null)}
           />
         )}
 

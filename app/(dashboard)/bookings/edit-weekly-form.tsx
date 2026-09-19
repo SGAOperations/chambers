@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import TimePicker from './time-picker'
+import { resolveMeetingTime } from '@/lib/meeting-time'
 import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
@@ -33,6 +34,8 @@ interface Occurrence {
   room_name: string | null
   start_time: string | null
   end_time: string | null
+  /** Overrides the series meeting time for this date; null inherits (issue #126). */
+  meeting_time: string | null
   status: string | null
   reservation_code: string | null
   senate_type: string | null
@@ -61,6 +64,7 @@ interface EditWeeklyFormProps {
       end_date: string
       start_time: string
       end_time: string
+      meeting_time: string | null
       status: string
       reservation_code: string | null
       weekly_room_occurrences: Occurrence[]
@@ -118,6 +122,9 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
     end_date: w?.end_date ?? '',
     start_time: w?.start_time.slice(0, 5) ?? '',
     end_time: w?.end_time.slice(0, 5) ?? '',
+    // Blank means "follows the start time"; the picker below fills it in from
+    // start_time for display, and the server collapses it back (issue #126).
+    meeting_time: w?.meeting_time?.slice(0, 5) ?? '',
     reservation_code: w?.reservation_code ?? '',
     status: w?.status ?? 'Reserved',
   })
@@ -159,6 +166,7 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
       room_name: null,
       start_time: null,
       end_time: null,
+      meeting_time: null,
       status: null,
       reservation_code: null,
       senate_type: null,
@@ -249,6 +257,20 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
         </div>
       </div>
 
+      {/* See weekly-form.tsx for why this tracks the start time rather than sitting blank (issue #126). */}
+      <div>
+        <label className={labelCls}>Meeting Time</label>
+        <div className="sm:w-1/2 sm:pr-1.5">
+          <TimePicker
+            value={form.meeting_time || form.start_time}
+            onChange={v => setForm({ ...form, meeting_time: v })}
+          />
+        </div>
+        <p className="text-xs text-[#6a96bb] mt-1">
+          When the meeting itself starts. Leave it on the start time unless the room is held early for setup.
+        </p>
+      </div>
+
       <div>
         <label className={labelCls}>Reservation Code</label>
         <input type="text" placeholder="Optional" value={form.reservation_code} onChange={e => setForm({ ...form, reservation_code: e.target.value })} className={inputCls} />
@@ -267,7 +289,8 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
         {getWeeklyDates(form.start_date, form.end_date).map(date => {
           const occ = occurrences.find(o => o.occurrence_date === date)
           // `hidden != null` because false is an override, not an absence.
-          const hasOverride = occ && (occ.room_name || occ.start_time || occ.end_time || occ.status
+          const hasOverride = occ && (occ.room_name || occ.start_time || occ.end_time
+            || occ.meeting_time || occ.status
             || occ.reservation_code || occ.purpose || occ.hidden != null)
           const isExpanded = expandedOcc === date
 
@@ -316,6 +339,32 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
                       <TimePicker
                         value={occ.end_time?.slice(0, 5) ?? form.end_time}
                         onChange={v => updateOccurrence(occ.id, 'end_time', v)}
+                      />
+                    </div>
+                  </div>
+
+                  {/*
+                    Shows what this week currently resolves to -- its own meeting
+                    time, else the series', else whichever start time applies to
+                    it -- and writes an override the moment it is touched, exactly
+                    as the room and time overrides above do.
+
+                    Not run through meetingTimeForStorage on save: null here means
+                    "inherit the series", not "meet at the start time", so a week
+                    that genuinely meets at its own start time has to say so
+                    explicitly (issue #126).
+                  */}
+                  <div>
+                    <label className={labelCls}>Meeting Time Override</label>
+                    <div className="sm:w-1/2 sm:pr-1.5">
+                      <TimePicker
+                        value={resolveMeetingTime(
+                          occ.meeting_time?.slice(0, 5),
+                          form.meeting_time,
+                          occ.start_time?.slice(0, 5),
+                          form.start_time
+                        )}
+                        onChange={v => updateOccurrence(occ.id, 'meeting_time', v)}
                       />
                     </div>
                   </div>

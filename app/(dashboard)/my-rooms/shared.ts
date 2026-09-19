@@ -1,5 +1,6 @@
 import { formatScopeLabel, type BookingScope, type Division } from '@/lib/booking-scope'
 import { APP_TIME_ZONE } from '@/lib/app-zone'
+import { resolveMeetingTime } from '@/lib/meeting-time'
 
 export interface FlatBooking {
   id: string
@@ -12,6 +13,12 @@ export interface FlatBooking {
   date: string
   startTime: string
   endTime: string
+  /**
+   * When the meeting itself starts, already resolved through its inheritance
+   * chain, so a row always has one (issue #126). Falls back to startTime, which
+   * is what every surface here reported before the field existed.
+   */
+  meetingTime: string
   status: string
   reservationCode: string | null
   senateType: string | null
@@ -238,6 +245,9 @@ export function flattenMyRooms(data: MyRoomsResponse, today: string): FlatBookin
           date: d.booking_date,
           startTime: d.start_time,
           endTime: d.end_time,
+          // A one-time session has no series above it, so the chain is two
+          // levels: its own meeting time, or its own start time (issue #126).
+          meetingTime: resolveMeetingTime(d.meeting_time, d.start_time),
           status: d.status,
           reservationCode: d.reservation_code,
           senateType: null,
@@ -268,6 +278,15 @@ export function flattenMyRooms(data: MyRoomsResponse, today: string): FlatBookin
         date: occ.occurrence_date,
         startTime: occ.start_time || w.start_time,
         endTime: occ.end_time || w.end_time,
+        // Three levels, most specific first: this week's override, the series
+        // value, then the start time this week actually resolved to -- so a
+        // week that moved its start time and set no meeting time reports the
+        // moved time rather than the series' (issue #126).
+        meetingTime: resolveMeetingTime(
+          occ.meeting_time,
+          w.meeting_time,
+          occ.start_time || w.start_time
+        ),
         status: occ.status || w.status,
         reservationCode: occ.reservation_code || w.reservation_code,
         senateType: occ.senate_type ?? null,
@@ -294,6 +313,9 @@ export function flattenMyRooms(data: MyRoomsResponse, today: string): FlatBookin
         date: s.session_date,
         startTime: s.start_time,
         endTime: s.end_time,
+        // As for one-time: each tabling session carries its own date and times,
+        // so there is no parent value to inherit (issue #126).
+        meetingTime: resolveMeetingTime(s.meeting_time, s.start_time),
         status: s.status,
         reservationCode: s.reservation_code || t.reservation_code,
         senateType: null,

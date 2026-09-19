@@ -123,7 +123,7 @@ export async function fetchMyRooms(
     .from('bookings')
     .select(`
       ${SELECT_BASE},
-      one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
+      one_time_room_bookings(id, room_name, booking_date, start_time, end_time, meeting_time, status, reservation_code)
     `)
     .eq('type', 'One-Time Room')
     .eq('semester_id', activeSemesterId)
@@ -134,8 +134,8 @@ export async function fetchMyRooms(
     .from('bookings')
     .select(`
       ${SELECT_BASE},
-      weekly_room_bookings(id, room_name, start_time, end_time, status, reservation_code,
-        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, status, reservation_code, senate_type, purpose, hidden, is_event)
+      weekly_room_bookings(id, room_name, start_time, end_time, meeting_time, status, reservation_code,
+        weekly_room_occurrences(id, occurrence_date, room_name, start_time, end_time, meeting_time, status, reservation_code, senate_type, purpose, hidden, is_event)
       )
     `)
     .eq('type', 'Weekly Room')
@@ -148,7 +148,7 @@ export async function fetchMyRooms(
     .select(`
       ${SELECT_BASE},
       tabling_bookings(id, reservation_code,
-        tabling_sessions(id, location, session_date, start_time, end_time, status, reservation_code)
+        tabling_sessions(id, location, session_date, start_time, end_time, meeting_time, status, reservation_code)
       )
     `)
     .eq('type', 'Tabling')
