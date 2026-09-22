@@ -120,6 +120,26 @@ export function subtractDays(dateStr: string, days: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
 }
 
+/**
+ * An extra form's Danger Range, from the one number it carries (#161).
+ *
+ * The two standard forms have a range with two independently tunable edges: when
+ * the form is due (`_danger_end`) and, further out, when an outstanding one
+ * turns red (`_danger_start`). An extra form is only ever given a deadline -- the
+ * number the Events tab shows and the only one an event manager is asked for --
+ * so the far edge is derived: red `warningLeadDays` before it is due.
+ *
+ * That derivation is not arbitrary. The shipped defaults are 35/28 and 28/21
+ * against a 7-day lead, so an extra form due 28 days out escalates exactly like
+ * the Event Management Form, and one due 42 days out slides that same shape.
+ */
+export function customFormRange(
+  dueDays: number,
+  warningLeadDays: number
+): [number, number] {
+  return [dueDays + warningLeadDays, dueDays]
+}
+
 /** PostgREST types a to-one embed as a possible array; collapse it and read `name`. */
 type NameRef = { name: string } | { name: string }[] | null
 function nameOf(ref: NameRef): string {
@@ -225,6 +245,22 @@ export interface BookingChildDates {
     | null
 }
 
+/** One event_tracking row: a booking's checklist, or one flagged week's. */
+interface EventTrackingRow {
+  event_management_form: boolean
+  engage_form: boolean
+  occurrence_date?: string | null
+}
+
+/** One extra tracking form on an event (#161). */
+interface EventTrackingItemRow {
+  id: string
+  label: string
+  due_days: number
+  completed: boolean
+  occurrence_date?: string | null
+}
+
 /** Every session date attached to an embedded booking, flattened. */
 export function sessionDatesOf(b: BookingChildDates): string[] {
   const out: string[] = []
@@ -311,7 +347,11 @@ export async function fetchPendingActions(
       .eq('status', 'Pending'),
     adminSupabase
       .from('bookings')
-      .select(`id, ${BOOKING_CHILD_SELECT}, event_tracking(event_management_form, engage_form)`)
+      .select(
+        `id, ${BOOKING_CHILD_SELECT}, ` +
+          'event_tracking(event_management_form, engage_form, occurrence_date), ' +
+          'event_tracking_items(id, label, due_days, completed, occurrence_date)'
+      )
       .eq('is_event', true),
     isManagementRole(adminRole)
       ? adminSupabase
@@ -417,12 +457,12 @@ export async function fetchPendingActions(
   }
 
   // --- Event forms -------------------------------------------------------
+  // Booking-level events only, as before: a weekly event is flagged on the
+  // occurrence, and those have never raised pending actions here.
   for (const b of (eventBookings ?? []) as unknown as (BookingChildDates & {
     id: string
-    event_tracking:
-      | { event_management_form: boolean; engage_form: boolean }[]
-      | { event_management_form: boolean; engage_form: boolean }
-      | null
+    event_tracking: EventTrackingRow[] | EventTrackingRow | null
+    event_tracking_items: EventTrackingItemRow[] | null
   })[]) {
     const eventDate = minDate(sessionDatesOf(b))
     if (!eventDate) continue
@@ -430,7 +470,15 @@ export async function fetchPendingActions(
     // Only once the event is upcoming and within N calendar months.
     if (days < 0 || utcMidnight(eventDate) > triggerCutoffMs(s.eventTriggerMonths)) continue
 
-    const tracking = Array.isArray(b.event_tracking) ? b.event_tracking[0] : b.event_tracking
+    // event_tracking is one row per target since #55, so the array can hold this
+    // booking's own checklist alongside one per flagged week. Only the former is
+    // this loop's; picking [0] would sometimes have read a week's ticks.
+    const rows = Array.isArray(b.event_tracking)
+      ? b.event_tracking
+      : b.event_tracking
+        ? [b.event_tracking]
+        : []
+    const tracking = rows.find(t => (t.occurrence_date ?? null) === null) ?? null
     const title = titleOf(b.purpose, b.bodies ?? null)
 
     if (!tracking?.event_management_form) {
@@ -450,6 +498,23 @@ export async function fetchPendingActions(
         kind: 'event-form',
         severity: severityForRange(days, s.eventEngage[0], s.warningLeadDays),
         label: `Engage Form — ${title} · ${shortDate(eventDate)}`,
+        originTab: 'Events',
+        originId: b.id,
+        referenceDate: eventDate,
+      })
+    }
+
+    // Extra forms this event added (#161). Same shape as the two above -- an
+    // outstanding form with a deadline -- so they escalate identically and land
+    // on the same tab; only the name and the lead time are the event's own.
+    for (const item of b.event_tracking_items ?? []) {
+      if ((item.occurrence_date ?? null) !== null || item.completed) continue
+      const [dangerStart] = customFormRange(item.due_days, s.warningLeadDays)
+      actions.push({
+        id: `event-form:${b.id}:item:${item.id}`,
+        kind: 'event-form',
+        severity: severityForRange(days, dangerStart, s.warningLeadDays),
+        label: `${item.label} — ${title} · ${shortDate(eventDate)}`,
         originTab: 'Events',
         originId: b.id,
         referenceDate: eventDate,

@@ -22,6 +22,39 @@ interface TrackingRow {
   occurrence_date: string | null
 }
 
+/** One extra tracking form on an event (#161), as embedded above. */
+interface TrackingItemRow {
+  id: string
+  label: string
+  due_days: number
+  completed: boolean
+  occurrence_date: string | null
+  created_at: string
+}
+
+/**
+ * One line of an event's checklist, standard or extra, as the tab renders it.
+ *
+ * The two standard forms and the extras are one list on purpose: to the person
+ * working the event they are all just forms with deadlines, and the only thing
+ * that separates them is where the deadline comes from and whether the line can
+ * be renamed or removed. `kind` carries that, so the page maps over one array.
+ */
+interface EventForm {
+  /** 'event_management_form' | 'engage_form', or `item:<uuid>` for an extra. */
+  key: string
+  kind: 'standard' | 'custom'
+  label: string
+  checked: boolean
+  /**
+   * Days before the event this form is due: the global setting for a standard
+   * form, the event's own number for an extra one (#161).
+   */
+  due_days: number
+  /** due_days resolved against the event date; null if the event has no date. */
+  due_date: string | null
+}
+
 /** A flagged weekly occurrence with the series and booking it belongs to. */
 interface EventOccurrenceRow {
   occurrence_date: string
@@ -42,6 +75,7 @@ interface EventOccurrenceRow {
       bodies: { name: string } | null
       users: { full_name: string } | null
       event_tracking: TrackingRow[] | null
+      event_tracking_items: TrackingItemRow[] | null
     } | null
   } | null
 }
@@ -78,7 +112,8 @@ export async function GET() {
           tabling_bookings(
             tabling_sessions(location, session_date, start_time, end_time)
           ),
-          event_tracking(event_management_form, engage_form, occurrence_date)
+          event_tracking(event_management_form, engage_form, occurrence_date),
+          event_tracking_items(id, label, due_days, completed, occurrence_date, created_at)
         `)
         .eq('is_event', true)
         .eq('semester_id', activeSemester.id),
@@ -98,7 +133,8 @@ export async function GET() {
               id, purpose, type, created_at, semester_id,
               bodies(name),
               users!bookings_created_by_fkey(full_name),
-              event_tracking(event_management_form, engage_form, occurrence_date)
+              event_tracking(event_management_form, engage_form, occurrence_date),
+              event_tracking_items(id, label, due_days, completed, occurrence_date, created_at)
             )
           )
         `)
@@ -110,9 +146,9 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (occError) return NextResponse.json({ error: occError.message }, { status: 500 })
 
-  // Each form's due date is the near edge of its Danger Range (issue #45) --
-  // the same settings the "danger" flash (dangerStart) already reads, just the
-  // other end of the pair.
+  // A standard form's due date is the near edge of its Danger Range (issue #45)
+  // -- the same settings the "danger" flash (dangerStart) already reads, just
+  // the other end of the pair. An extra form carries its own (issue #161).
   const s = settingsFromRow(settingsRow as SettingsRow | null)
 
   /**
@@ -124,20 +160,84 @@ export async function GET() {
   const trackingFor = (rows: TrackingRow[] | null | undefined, date: string | null) =>
     (rows ?? []).find(t => (t.occurrence_date ?? null) === date) ?? null
 
-  /** Adds the two derived due dates, which depend only on when the event is. */
-  const withDates = <T,>(row: T, eventDate: string | null) => ({
+  /** The extra forms belonging to one target, in deadline order. */
+  const itemsFor = (rows: TrackingItemRow[] | null | undefined, date: string | null) =>
+    (rows ?? [])
+      .filter(i => (i.occurrence_date ?? null) === date)
+      // Longest lead time first, so the list reads earliest deadline down. Two
+      // forms due the same number of days out keep the order they were added in.
+      .sort((a, b) => b.due_days - a.due_days || a.created_at.localeCompare(b.created_at))
+
+  /**
+   * The event's checklist: the two standard forms, then whatever it added.
+   *
+   * A due date is the event date minus the form's lead time, so an event with no
+   * session date at all (which shouldn't happen for a real booking) shows its
+   * forms undated rather than dropping them.
+   */
+  const formsFor = (
+    tracking: TrackingRow | null,
+    items: TrackingItemRow[],
+    eventDate: string | null
+  ): EventForm[] => {
+    const dueDate = (days: number) => (eventDate ? subtractDays(eventDate, days) : null)
+
+    const standard = (
+      key: 'event_management_form' | 'engage_form',
+      label: string,
+      dueDays: number,
+      checked: boolean
+    ): EventForm => ({
+      key,
+      kind: 'standard',
+      label,
+      checked,
+      due_days: dueDays,
+      due_date: dueDate(dueDays),
+    })
+
+    return [
+      standard(
+        'event_management_form',
+        'Event Management Form',
+        s.eventMgmt[1],
+        tracking?.event_management_form ?? false
+      ),
+      standard('engage_form', 'Engage Form', s.eventEngage[1], tracking?.engage_form ?? false),
+      ...items.map<EventForm>(i => ({
+        key: `item:${i.id}`,
+        kind: 'custom',
+        label: i.label,
+        checked: i.completed,
+        due_days: i.due_days,
+        due_date: dueDate(i.due_days),
+      })),
+    ]
+  }
+
+  /** Adds the event's date and the checklist derived from it. */
+  const withDates = <T,>(
+    row: T,
+    eventDate: string | null,
+    tracking: TrackingRow | null,
+    items: TrackingItemRow[]
+  ) => ({
     ...row,
     event_date: eventDate,
-    event_management_form_due: eventDate ? subtractDays(eventDate, s.eventMgmt[1]) : null,
-    engage_form_due: eventDate ? subtractDays(eventDate, s.eventEngage[1]) : null,
+    forms: formsFor(tracking, items, eventDate),
   })
 
-  const bookingEvents = (bookings || []).map(b =>
-    withDates(
-      { ...b, occurrence_date: null, event_tracking: trackingFor(b.event_tracking as TrackingRow[], null) },
-      minDate(sessionDatesOf(b))
+  const bookingEvents = (bookings || []).map(b => {
+    // The raw checklist rows are folded into `forms` below, so they are dropped
+    // rather than shipped alongside it in two shapes.
+    const { event_tracking, event_tracking_items, ...rest } = b
+    return withDates(
+      { ...rest, occurrence_date: null },
+      minDate(sessionDatesOf(b)),
+      trackingFor(event_tracking as TrackingRow[], null),
+      itemsFor(event_tracking_items as TrackingItemRow[], null)
     )
-  )
+  })
 
   /**
    * One row per flagged occurrence: the occurrence is the event, so it is listed
@@ -176,9 +276,10 @@ export async function GET() {
             start_time: o.start_time ?? weekly.start_time,
             end_time: o.end_time ?? weekly.end_time,
           }],
-          event_tracking: trackingFor(booking.event_tracking, o.occurrence_date),
         },
-        o.occurrence_date
+        o.occurrence_date,
+        trackingFor(booking.event_tracking, o.occurrence_date),
+        itemsFor(booking.event_tracking_items, o.occurrence_date)
       )
     })
     .filter((r): r is NonNullable<typeof r> => r !== null)
