@@ -7,7 +7,11 @@ const hours = Array.from({ length: 12 }, (_, i) => i + 1)
 interface TimePickerProps {
   value: string // HH:MM in 24hr format
   onChange: (value: string) => void
-  interval?: 5 | 15
+  /**
+   * Minutes between the options offered. 30 is the half-hour grid a weekly room
+   * request is placed on (issue #163).
+   */
+  interval?: 5 | 15 | 30
 }
 
 function to24Hour(hour: number, minute: number, period: 'AM' | 'PM'): string {
