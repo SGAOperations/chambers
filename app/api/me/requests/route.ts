@@ -20,7 +20,7 @@ export async function GET() {
       id, type, purpose, capacity, status, notes, created_at, body_id, scope, division,
       bodies(name),
       room_request_details(room_name, start_date, start_time, end_time, end_date),
-      tabling_request_sessions(session_date, start_time, end_time),
+      tabling_request_sessions(session_date, start_time, end_time, location, tables),
       user_alerts(denial_reason),
       room_request_bodies(body_id, bodies(name))
     `)
