@@ -71,6 +71,13 @@ Nothing, unless the PR changes the schema. If it does, apply its file to the pre
 TARGET_DATABASE_URL="$NEON_PREVIEW_UNPOOLED" node scripts/neon/apply-file.mjs db/neon/000N_whatever.sql
 ```
 
+Every command in this file is bash. On Windows, PowerShell has no inline `VAR=value command` form -- it reads the whole thing as a command name -- so set the variable first, and quote the connection string singly or its `&` is parsed as the call operator:
+
+```powershell
+$env:TARGET_DATABASE_URL = '<connection string>'
+node scripts/neon/apply-file.mjs db/neon/000N_whatever.sql
+```
+
 Every preview shares this one database, so two PRs with conflicting migrations can tread on each other, and data one PR writes is visible to the next. When a PR genuinely needs isolation, branch by hand and override `DATABASE_URL`, `DATABASE_URL_UNPOOLED` and `NEON_DATA_API_URL` for that deployment alone.
 
 **Never** point Preview at production's `NEON_DATA_API_URL` or `DATA_API_PRIVATE_JWK`. That key mints `chambers_server` tokens and is as sensitive as the database password (`lib/db/data-api.ts`); scoping it to Preview gives unreviewed branch code full read and write on production, and leaks it into somewhere much easier to read.
