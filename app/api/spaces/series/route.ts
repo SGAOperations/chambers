@@ -12,22 +12,31 @@ import {
 } from '@/lib/spaces-email'
 import { sendSpaceSeriesConfirmedEmail } from '@/lib/emails/space-series'
 import {
+  SERIES_CADENCE,
   addDays,
+  daysApart,
   intervalFor,
+  isSeriesFrequency,
   planSeries,
+  seriesDates,
   touchesDeadZone,
-  weeklyDates,
+  type SeriesFrequency,
 } from '@/lib/space-series'
 import { canBookSpaces, loadActiveSemesterEnd, loadPlanContext } from '@/lib/space-series-data'
 
 /**
- * Creates a recurring weekly SGA Space booking (issue #112).
+ * Creates a recurring SGA Space booking (issue #112), weekly or biweekly
+ * (issue #173).
  *
- * Every week is checked the way a one-off booking is -- overlap, blackouts, the
- * weekly hours limit, advance notice -- and the ones that fail are reported
- * back rather than sinking the whole series. The first attempt returns 409 with
- * the conflicting weeks when there are any; the modal shows them, and a second
- * request with skip_conflicts books the rest.
+ * Every occurrence is checked the way a one-off booking is -- overlap,
+ * blackouts, the weekly hours limit, advance notice -- and the ones that fail
+ * are reported back rather than sinking the whole series. The first attempt
+ * returns 409 with the conflicting dates when there are any; the modal shows
+ * them, and a second request with skip_conflicts books the rest.
+ *
+ * The cadence only decides which dates are planned. Everything downstream --
+ * the rows written, the checks above, the emails -- treats a biweekly series as
+ * the same thing with fewer dates in it.
  */
 
 const adminSupabase = db
@@ -47,7 +56,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Only Leadership members and administrators may create space bookings.' }, { status: 403 })
   }
 
-  const { space_id, title, date, start_time, end_time, until, attendee_ids, external_attendees, skip_conflicts } = await request.json()
+  const { space_id, title, date, start_time, end_time, until, attendee_ids, external_attendees, skip_conflicts, frequency } = await request.json()
+
+  // Omitted means weekly, which is what every series was before issue #173 and
+  // what the column defaults to.
+  const cadence: SeriesFrequency = frequency == null ? 'weekly' : frequency
+  if (!isSeriesFrequency(cadence)) {
+    return NextResponse.json({ error: 'A recurring booking repeats weekly or biweekly.' }, { status: 400 })
+  }
 
   if (!space_id || typeof title !== 'string' || !title.trim()) {
     return NextResponse.json({ error: 'space_id and title are required.' }, { status: 400 })
@@ -76,14 +92,21 @@ export async function POST(request: Request) {
       error: 'Weekly bookings are unavailable until an administrator sets the end date of the current semester.',
     }, { status: 400 })
   }
-  if (until < addDays(date, 7)) {
-    return NextResponse.json({ error: 'A weekly booking needs to run for at least two weeks.' }, { status: 400 })
+  // "Recurring" means it happens more than once, so the end date has to reach
+  // at least the second occurrence -- which is a fortnight out for a biweekly
+  // booking, not a week.
+  if (until < addDays(date, daysApart(cadence))) {
+    return NextResponse.json({
+      error: `A ${SERIES_CADENCE[cadence].adjective} booking needs to run long enough to happen at least twice.`,
+    }, { status: 400 })
   }
   if (until > semesterEnd) {
-    return NextResponse.json({ error: 'A weekly booking cannot run past the end of the semester.' }, { status: 400 })
+    return NextResponse.json({
+      error: `A ${SERIES_CADENCE[cadence].adjective} booking cannot run past the end of the semester.`,
+    }, { status: 400 })
   }
 
-  const weeks = weeklyDates(date, until).map(d => ({ date: d, interval: intervalFor(d, start_time, end_time) }))
+  const weeks = seriesDates(date, until, cadence).map(d => ({ date: d, interval: intervalFor(d, start_time, end_time) }))
 
   const ctx = await loadPlanContext(adminSupabase, {
     spaceId: space_id,
@@ -116,6 +139,7 @@ export async function POST(request: Request) {
       end_time,
       starts_on: date,
       ends_on: until,
+      frequency: cadence,
     })
     .select('id')
     .single()
@@ -156,6 +180,7 @@ export async function POST(request: Request) {
         await sendSpaceSeriesConfirmedEmail({
           title: title.trim(),
           spaceName: space?.name ?? 'SGA Space',
+          frequency: cadence,
           weeks: rows
             .map((r: { id: string; start_time: string; end_time: string }) => ({ bookingId: r.id, startTime: r.start_time, endTime: r.end_time }))
             .sort((a, b) => a.startTime.localeCompare(b.startTime)),

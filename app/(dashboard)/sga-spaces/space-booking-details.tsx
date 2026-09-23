@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { repeatsLabel } from '@/lib/space-series'
 
 /**
  * A read-only view of someone else's SGA Space booking (issue #142).
@@ -24,6 +25,8 @@ interface ViewedBooking {
   external_attendees?: string[] | null
   creator_name: string | null
   series_id: string | null
+  /** The series' cadence (issue #173). Null on a one-off booking. */
+  series_frequency?: string | null
 }
 
 interface SpaceBookingDetailsProps {
@@ -103,7 +106,11 @@ export default function SpaceBookingDetails({ booking, spaceName, onClose }: Spa
               {formatDay(booking.start_time)}
               <br />
               {formatTime(booking.start_time)} – {formatTime(booking.end_time)}
-              {booking.series_id && <span className="block text-xs text-[#93b8d8] mt-0.5">Repeats weekly</span>}
+              {booking.series_id && (
+                <span className="block text-xs text-[#93b8d8] mt-0.5">
+                  {repeatsLabel(booking.series_frequency)}
+                </span>
+              )}
             </dd>
           </div>
           <div className="flex gap-3">
