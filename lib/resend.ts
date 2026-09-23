@@ -26,13 +26,24 @@ import { Resend } from 'resend'
 
 let client: Resend | null = null
 
-function api(): Resend {
-  // Constructed on first use rather than at import. The Resend constructor
-  // throws when RESEND_API_KEY is missing, and `next build` loads this module
-  // while collecting page data, so building without a key used to fail --
-  // which meant a preview deployment needed a real key even though, with the
-  // guard below, it never sends anything. Production still fails loudly: see
-  // the check at the bottom of this file.
+/**
+ * The Resend client, or null when there is no key to build it with.
+ *
+ * Constructed on first use rather than at import. The Resend constructor throws
+ * when RESEND_API_KEY is missing, and `next build` loads this module while
+ * collecting page data, so building without a key used to fail -- which meant a
+ * preview deployment needed a real key even though, with the guard below, it may
+ * never send anything.
+ *
+ * Null rather than a throw, because a send is never worth a crash: with a key
+ * set for production only, `new Resend(undefined)` threw straight through
+ * sendSignupOtpEmail and turned /api/signup/request into a 500 -- nobody could
+ * get into a preview at all. A caller that cannot send should learn that the
+ * same way it learns about any other failed send. Production still fails loudly,
+ * and early: see the check at the bottom of this file.
+ */
+function api(): Resend | null {
+  if (!process.env.RESEND_API_KEY) return null
   if (!client) client = new Resend(process.env.RESEND_API_KEY)
   return client
 }
@@ -62,32 +73,54 @@ function recipientsOf(payload: SendPayload): string[] {
   ]
 }
 
+/**
+ * Not sent, and said so: logged with who it would have reached, and answered
+ * with the shape of a Resend failure rather than a success. No call site reads
+ * the result today, and one that starts should not be told the mail was sent.
+ */
+function withhold(payload: SendPayload, intended: string[], reason: string): SendResult {
+  console.warn(
+    `[email] Withheld "${payload.subject}" — would have gone to ${
+      intended.join(', ') || '(no recipients)'
+    }. ${reason}`
+  )
+  return {
+    data: null,
+    error: { name: 'application_error', message: `Email withheld: ${reason}` },
+  } as SendResult
+}
+
 export const resend = {
   emails: {
     async send(payload: SendPayload, options?: SendOptions): Promise<SendResult> {
-      if (isProduction()) return api().emails.send(payload, options)
+      const sender = api()
+
+      if (isProduction()) {
+        // Unreachable: the check at the bottom of this file fails the server, and
+        // the production build, long before a send gets here without a key.
+        if (!sender) throw new Error('RESEND_API_KEY is not set.')
+        return sender.emails.send(payload, options)
+      }
 
       const intended = recipientsOf(payload)
       const to = process.env.PREVIEW_EMAIL_RECIPIENT
 
       if (!to) {
-        console.warn(
-          `[email] Withheld "${payload.subject}" — would have gone to ${
-            intended.join(', ') || '(no recipients)'
-          }. Set PREVIEW_EMAIL_RECIPIENT to receive it instead.`
+        return withhold(
+          payload,
+          intended,
+          'Set PREVIEW_EMAIL_RECIPIENT to receive it instead.'
         )
-        // Shaped like a Resend failure rather than a success: no call site reads
-        // this today, and one that starts should not be told the mail was sent.
-        return {
-          data: null,
-          error: {
-            name: 'application_error',
-            message: 'Email withheld: PREVIEW_EMAIL_RECIPIENT is not set.',
-          },
-        } as SendResult
+      }
+      if (!sender) {
+        return withhold(
+          payload,
+          intended,
+          'RESEND_API_KEY is not set for this environment, so nothing can be sent.'
+        )
       }
 
-      return api().emails.send(
+      return sender.emails.send(
         {
           ...payload,
           to,
