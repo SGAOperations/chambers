@@ -4,7 +4,15 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import TimePicker from '../bookings/time-picker'
 import DateField from '@/app/_components/date-field'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
-import { SERIES_CONFLICT_LABELS, addDays, weekdayOf, type SeriesConflict } from '@/lib/space-series'
+import {
+  SERIES_CADENCE,
+  SERIES_CONFLICT_LABELS,
+  addDays,
+  daysApart,
+  weekdayOf,
+  type SeriesConflict,
+  type SeriesFrequency,
+} from '@/lib/space-series'
 import { isSgaEmail } from '@/lib/spaces-email'
 
 interface User {
@@ -48,8 +56,8 @@ interface SpaceBookingModalProps {
   /** Cancels every upcoming week of seriesId. Offered only alongside onCancelBooking. */
   onCancelSeries?: () => Promise<void>
   /**
-   * The active semester's last day: the furthest a weekly booking may run. Null
-   * means Management has not set it, and weekly booking is unavailable.
+   * The active semester's last day: the furthest a recurring booking may run.
+   * Null means Management has not set it, and recurring booking is unavailable.
    */
   semesterEndDate?: string | null
 }
@@ -64,6 +72,8 @@ interface SeriesInfo {
   end_time: string
   ends_on: string
   weekday: string
+  /** How often it repeats (issue #173). Fixed for the life of the series. */
+  frequency: SeriesFrequency
   upcoming_count: number
   next_date: string | null
   semester_end_date: string | null
@@ -134,10 +144,14 @@ export default function SpaceBookingModal({
   const [cancelError, setCancelError] = useState<string | null>(null)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Weekly bookings (issue #112).
-  //   repeat/until   -- creating one.
-  //   scope          -- editing a week of one: this week alone, or the series.
+  // Recurring bookings (issue #112), weekly or biweekly (issue #173).
+  //   repeat/frequency/until -- creating one.
+  //   scope                  -- editing a week of one: this week, or the series.
+  //
+  // The cadence is chosen at creation and never edited: an existing series' own
+  // frequency is what the edit route keeps, so there is nothing to change here.
   const [repeat, setRepeat] = useState(false)
+  const [frequency, setFrequency] = useState<SeriesFrequency>('weekly')
   const [until, setUntil] = useState('')
   const [scope, setScope] = useState<'week' | 'series'>('week')
   const [series, setSeries] = useState<SeriesInfo | null>(null)
@@ -154,8 +168,8 @@ export default function SpaceBookingModal({
    */
   const [conflicts, setConflicts] = useState<{ key: string; list: SeriesConflict[]; applicable: number } | null>(null)
   const formKey = JSON.stringify([
-    scope, selectedSpaceId, title.trim(), date, startTime, endTime, repeat, until, attendees.map(a => a.id),
-    externalAttendees,
+    scope, selectedSpaceId, title.trim(), date, startTime, endTime, repeat, frequency, until,
+    attendees.map(a => a.id), externalAttendees,
   ])
   const activeConflicts = conflicts?.key === formKey ? conflicts : null
 
@@ -249,7 +263,7 @@ export default function SpaceBookingModal({
       const res = await fetch(`/api/spaces/series/${seriesId}`)
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error ?? 'Could not load this weekly booking.')
+        setError(data.error ?? 'Could not load this recurring booking.')
         return
       }
       const info: SeriesInfo = {
@@ -311,12 +325,28 @@ export default function SpaceBookingModal({
   const creatingSeries = !isEditing && repeat
   const repeatAvailable = !!semesterEndDate
 
+  // What to call the series in prose: the one being created, or the stored
+  // cadence of the one being edited (issue #173).
+  const activeCadence: SeriesFrequency = editingSeries ? series?.frequency ?? 'weekly' : frequency
+  const cadenceWord = SERIES_CADENCE[activeCadence].adjective
+
+  /**
+   * A starting end date when the box is first ticked, or the cadence changed:
+   * three more occurrences after the first, which is a month for a weekly
+   * booking and two for a biweekly one. Never past the end of the semester,
+   * since that is the furthest a series may run.
+   */
+  const suggestedUntil = (first: string, f: SeriesFrequency): string => {
+    const proposed = addDays(first, daysApart(f) * 3)
+    return semesterEndDate && proposed > semesterEndDate ? semesterEndDate : proposed
+  }
+
   const submit = async (skipConflicts: boolean) => {
     setError(null)
 
     if (!title.trim()) { setError('Title is required.'); return }
     if (!date) { setError('Date is required.'); return }
-    if ((creatingSeries || editingSeries) && !until) { setError('Choose the date the weekly booking ends.'); return }
+    if ((creatingSeries || editingSeries) && !until) { setError(`Choose the date the ${cadenceWord} booking ends.`); return }
 
     setSubmitting(true)
     try {
@@ -339,7 +369,7 @@ export default function SpaceBookingModal({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             space_id: selectedSpaceId, title: title.trim(), date, start_time: startTime, end_time: endTime, until,
-            attendee_ids, external_attendees, skip_conflicts: skipConflicts,
+            frequency, attendee_ids, external_attendees, skip_conflicts: skipConflicts,
           }),
         })
       } else {
@@ -397,7 +427,7 @@ export default function SpaceBookingModal({
           <div>
             <h2 className="text-lg font-semibold text-[#f0f6ff]">
               {isEditing
-                ? (editingSeries ? 'Edit Weekly Booking' : 'Edit Booking')
+                ? (editingSeries ? `Edit ${cadenceWord === 'biweekly' ? 'Biweekly' : 'Weekly'} Booking` : 'Edit Booking')
                 : `Book ${spaces?.find(s => s.id === selectedSpaceId)?.name ?? spaceName}`}
             </h2>
             {isEditing && (
@@ -477,7 +507,8 @@ export default function SpaceBookingModal({
           {/* Date -- or, for a series, the weekday it repeats on */}
           {editingSeries && series ? (
             <div className="text-sm text-[#93b8d8] bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5">
-              Every <span className="text-[#f0f6ff] font-medium">{series.weekday}</span>
+              {SERIES_CADENCE[activeCadence].every}{' '}
+              <span className="text-[#f0f6ff] font-medium">{series.weekday}</span>
               {' · '}{series.upcoming_count} upcoming week{series.upcoming_count === 1 ? '' : 's'}
             </div>
           ) : (
@@ -499,7 +530,7 @@ export default function SpaceBookingModal({
             </div>
           </div>
 
-          {/* Repeat weekly (creation) */}
+          {/* Repeat, and how often (creation) */}
           {!isEditing && (
             <div className="space-y-2">
               <label className={`flex items-center gap-2 ${repeatAvailable ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
@@ -510,19 +541,39 @@ export default function SpaceBookingModal({
                   onChange={e => {
                     setRepeat(e.target.checked)
                     if (e.target.checked && !until && date) {
-                      const suggested = addDays(date, 7 * 3)
-                      setUntil(semesterEndDate && suggested > semesterEndDate ? semesterEndDate : suggested)
+                      setUntil(suggestedUntil(date, frequency))
                     }
                   }}
                   className="accent-[#c8102e]"
                 />
                 <span className="text-sm text-[#f0f6ff]">
-                  Repeat weekly{date ? ` on ${weekdayOf(date)}s` : ''}
+                  Repeat{date ? ` on ${weekdayOf(date)}s` : ''}
                 </span>
               </label>
+
+              {/* Only once repeating: the cadence has nothing to say about a
+                  one-off, and the choice is fixed at creation (issue #173). */}
+              {repeat && (
+                <select
+                  value={frequency}
+                  onChange={e => {
+                    const next = e.target.value as SeriesFrequency
+                    setFrequency(next)
+                    // The end date suggested for weekly is too near for
+                    // biweekly to happen twice, so re-suggest rather than
+                    // leaving a value the server will reject.
+                    if (date) setUntil(suggestedUntil(date, next))
+                  }}
+                  className={inputCls}
+                >
+                  <option value="weekly">Every week</option>
+                  <option value="biweekly">Every other week</option>
+                </select>
+              )}
+
               {!repeatAvailable && (
                 <p className="text-xs text-[#6a96bb]">
-                  Weekly bookings are unavailable until an administrator sets the end date of the current semester.
+                  Recurring bookings are unavailable until an administrator sets the end date of the current semester.
                 </p>
               )}
             </div>
@@ -535,7 +586,7 @@ export default function SpaceBookingModal({
               <DateField
                 value={until}
                 onChange={setUntil}
-                min={editingSeries ? series?.next_date ?? undefined : date ? addDays(date, 7) : undefined}
+                min={editingSeries ? series?.next_date ?? undefined : date ? addDays(date, daysApart(frequency)) : undefined}
                 max={seriesMaxDate}
                 required
               />

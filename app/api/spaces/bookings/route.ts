@@ -65,11 +65,35 @@ export async function GET(request: Request) {
     }
   }
 
+  /**
+   * The cadence of each series a booking in this week belongs to (issue #173),
+   * so the calendar and the detail panel can say "Repeats biweekly" rather than
+   * assuming weekly. One extra query, only when the week actually contains a
+   * recurring booking -- the same shape as the creator lookup above, and cheaper
+   * than a join PostgREST would have to make on every row.
+   */
+  const seriesIds = [...new Set(
+    (bookings ?? [])
+      .map((b: { series_id: string | null }) => b.series_id)
+      .filter((id: string | null): id is string => !!id)
+  )]
+  const frequencyMap: Record<string, string> = {}
+  if (seriesIds.length > 0) {
+    const { data: seriesRows } = await adminSupabase
+      .from('space_booking_series')
+      .select('id, frequency')
+      .in('id', seriesIds)
+    for (const r of seriesRows ?? []) {
+      frequencyMap[r.id] = r.frequency
+    }
+  }
+
   // Admins see all creator names; regular users only see their own
   const isAdmin = !!user.app_metadata?.is_admin
-  const sanitized = (bookings ?? []).map((b: { id: string; creator_id: string; [key: string]: unknown }) => ({
+  const sanitized = (bookings ?? []).map((b: { id: string; creator_id: string; series_id: string | null; [key: string]: unknown }) => ({
     ...b,
     creator_name: (isAdmin || b.creator_id === user.id) ? (creatorMap[b.creator_id] ?? null) : null,
+    series_frequency: b.series_id ? frequencyMap[b.series_id] ?? 'weekly' : null,
   }))
 
   return NextResponse.json({ bookings: sanitized, blackouts: blackouts ?? [] })
