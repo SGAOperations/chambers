@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { DIVISIONS, loadScopeContext, validateScopeSelection } from '@/lib/booking-scope'
 import { OPS_REVIEW } from '@/lib/request-status'
+import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-times'
 import {
   LOCATION_ERROR,
   TABLES_ERROR,
@@ -190,6 +191,13 @@ export async function POST(request: Request) {
         )
       }
     }
+  }
+
+  // A weekly slot is scheduled against a grid of half hours, so a start in
+  // between cannot be granted as it was asked for (issue #163). Checked here as
+  // well as in the form because this is what actually writes the row.
+  if (type === 'Weekly Room' && invalidWeeklyStartTime(details?.start_time)) {
+    return NextResponse.json({ error: WEEKLY_START_TIME_ERROR }, { status: 400 })
   }
 
   if (type === 'Weekly Room' && minDaysRoom > 0) {

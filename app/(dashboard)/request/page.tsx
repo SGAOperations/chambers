@@ -16,6 +16,7 @@ import {
   isOpenRequestStatus,
   type RoomRequestStatus,
 } from '@/lib/request-status'
+import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-times'
 import { MAX_LOCATION, MAX_TABLES, TABLES_ERROR, invalidTableCount } from '@/lib/tabling-request'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -325,6 +326,13 @@ export default function RequestPage() {
 
     if (type === 'Weekly Room' && (!form.start_date || !form.end_date)) {
       setError('Please select start and end dates.')
+      return
+    }
+
+    // The picker only offers half hours, so this catches a value that got into
+    // the form some other way rather than a choice someone made (issue #163).
+    if (type === 'Weekly Room' && invalidWeeklyStartTime(form.start_time)) {
+      setError(WEEKLY_START_TIME_ERROR)
       return
     }
 
@@ -746,7 +754,11 @@ export default function RequestPage() {
                 <div className="flex flex-col sm:flex-row gap-3">
                   <div className="flex-1 min-w-0">
                     <label className={labelCls}>Start Time *</label>
-                    <TimePicker value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
+                    {/* Half hours only: a weekly slot is scheduled against a grid
+                        of them, so an in-between start cannot be granted as asked
+                        (issue #163). The end time keeps the finer steps. */}
+                    <TimePicker interval={30} value={form.start_time} onChange={v => setForm({ ...form, start_time: v })} />
+                    <p className="text-xs text-[#6a96bb] mt-1">Weekly bookings start on the hour or the half hour.</p>
                   </div>
                   <div className="flex-1 min-w-0">
                     <label className={labelCls}>End Time *</label>
