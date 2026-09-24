@@ -2,10 +2,11 @@ import { advanceNoticeError, type BookingInterval } from './spaces-advance-notic
 import { bostonWallClockNow } from './boston-time'
 
 /**
- * Recurring weekly SGA Space bookings (issue #112).
+ * Recurring SGA Space bookings (issue #112), weekly or biweekly (issue #173).
  *
- * A series is a pattern -- a space, a weekday, a time of day, a date range --
- * and every week of it is an ordinary space_bookings row carrying series_id.
+ * A series is a pattern -- a space, a weekday, a cadence, a time of day, a date
+ * range -- and every occurrence of it is an ordinary space_bookings row carrying
+ * series_id.
  * Keeping the weeks real means the calendar, the room display, overlap and
  * blackout checks, the blackout cascade and the weekly hours limit all go on
  * working without knowing series exist, and a single week can still be edited
@@ -75,10 +76,68 @@ export function timeOfDay(iso: string): string {
   return new Date(iso).toISOString().slice(11, 16)
 }
 
-/** Every date from `first` to `until` inclusive, a week apart. */
-export function weeklyDates(first: string, until: string): string[] {
+/**
+ * How often a series repeats (issue #173).
+ *
+ * A name rather than a number of weeks, because 'weekly' and 'biweekly' are what
+ * the form offers and what the emails say, and because the scheduling rules --
+ * advance notice, the weekly hours limit, the semester bound -- have only been
+ * thought through for these two. Matches the check constraint on
+ * space_booking_series.frequency.
+ */
+export type SeriesFrequency = 'weekly' | 'biweekly'
+
+export const SERIES_FREQUENCIES: readonly SeriesFrequency[] = ['weekly', 'biweekly']
+
+export function isSeriesFrequency(value: unknown): value is SeriesFrequency {
+  return SERIES_FREQUENCIES.includes(value as SeriesFrequency)
+}
+
+/** Weeks between one occurrence and the next. */
+export function weeksApart(frequency: SeriesFrequency): number {
+  return frequency === 'biweekly' ? 2 : 1
+}
+
+/** Days between one occurrence and the next. */
+export function daysApart(frequency: SeriesFrequency): number {
+  return 7 * weeksApart(frequency)
+}
+
+/**
+ * How the cadence is said, in the two grammatical positions it is needed:
+ * `adjective` names the thing ("this biweekly booking"), `every` describes the
+ * pattern and takes a weekday after it ("Every other Tuesday").
+ */
+export const SERIES_CADENCE: Record<SeriesFrequency, { adjective: string; every: string }> = {
+  weekly: { adjective: 'weekly', every: 'Every' },
+  biweekly: { adjective: 'biweekly', every: 'Every other' },
+}
+
+/**
+ * "Repeats weekly" / "Repeats biweekly", for a surface holding a booking rather
+ * than the series behind it. Anything unrecognised -- including the null a
+ * one-off carries -- reads as weekly, which is what every series was before
+ * issue #173.
+ */
+export function repeatsLabel(frequency: string | null | undefined): string {
+  return `Repeats ${frequency === 'biweekly' ? 'biweekly' : 'weekly'}`
+}
+
+/**
+ * Every date from `first` to `until` inclusive, one cadence step apart.
+ *
+ * The cadence is counted from `first`, so a biweekly series lands on the same
+ * weekday every other week from the date it started -- which is what makes the
+ * edit route able to extend one without recomputing where it "should" have been.
+ */
+export function seriesDates(
+  first: string,
+  until: string,
+  frequency: SeriesFrequency = 'weekly'
+): string[] {
+  const step = daysApart(frequency)
   const dates: string[] = []
-  for (let d = first; d <= until; d = addDays(d, 7)) dates.push(d)
+  for (let d = first; d <= until; d = addDays(d, step)) dates.push(d)
   return dates
 }
 

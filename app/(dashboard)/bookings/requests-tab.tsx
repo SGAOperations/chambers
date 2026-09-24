@@ -90,6 +90,9 @@ interface RoomRequest {
     session_date: string
     start_time: string
     end_time: string
+    /** Null when not asked for -- a Slack request, or one predating issue #164. */
+    location: string | null
+    tables: number | null
   }[] | null
 }
 
@@ -377,8 +380,16 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
               <div>
                 <p className="font-medium text-[#f0f6ff]">Sessions:</p>
                 <ul className="ml-4 space-y-0.5">
+                  {/* The preferred location leads, as the preferred room does on
+                      a room request. Both it and the table count are omitted
+                      rather than shown blank when the request never carried them
+                      -- made through Slack, or before issue #164. */}
                   {r.tabling_request_sessions.map((s, i) => (
-                    <li key={i}>{formatDate(s.session_date)} · {formatTime(s.start_time)} – {formatTime(s.end_time)}</li>
+                    <li key={i}>
+                      {s.location && <span>{s.location} · </span>}
+                      {formatDate(s.session_date)} · {formatTime(s.start_time)} – {formatTime(s.end_time)}
+                      {s.tables != null && <span> · {s.tables} {s.tables === 1 ? 'table' : 'tables'}</span>}
+                    </li>
                   ))}
                 </ul>
               </div>

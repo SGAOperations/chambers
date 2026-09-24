@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { getJson } from '@/lib/fetch-json'
 import { useIdentity } from '../identity-context'
 import { Skeleton } from '@/app/_components/skeleton'
+import EventFormsSection from './event-forms-section'
 
 function BookingSettingsTabSkeleton() {
   return (
@@ -376,6 +377,9 @@ export default function BookingSettingsTab() {
           {paSaving ? 'Saving...' : 'Save'}
         </button>
       </div>
+
+      {/* Saved event forms (issue #161) */}
+      <EventFormsSection />
 
       {/* Semester Management */}
       <div>

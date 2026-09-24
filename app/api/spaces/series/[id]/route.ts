@@ -19,19 +19,29 @@ import {
   type SeriesWeek,
 } from '@/lib/emails/space-series'
 import {
+  SERIES_CADENCE,
   intervalFor,
+  isSeriesFrequency,
   planSeries,
+  seriesDates,
   touchesDeadZone,
   weekdayOf,
-  weeklyDates,
   type PlannedWeek,
   type SeriesConflict,
+  type SeriesFrequency,
 } from '@/lib/space-series'
 import { loadActiveSemesterEnd, loadPlanContext } from '@/lib/space-series-data'
 
 /**
  * One recurring SGA Space booking (issue #112): read it, edit every upcoming
  * week at once, or cancel every upcoming week.
+ *
+ * The cadence -- weekly or biweekly (issue #173) -- is read from the series and
+ * kept. It is the one thing an edit cannot change: turning a weekly booking
+ * biweekly would have to delete every other upcoming week, which is a
+ * cancellation wearing an edit's clothes, and the people on those weeks would
+ * learn about it from a calendar that quietly emptied. Cancelling the series and
+ * making a new one says the same thing out loud.
  *
  * "Upcoming" is a week whose start has not yet passed, in the Boston wall-clock
  * domain space times are stored in. Past weeks are never touched -- they are the
@@ -60,7 +70,13 @@ interface SeriesRow {
   end_time: string
   starts_on: string
   ends_on: string
+  frequency: string
   cancelled_at: string | null
+}
+
+/** The stored cadence, defaulting to weekly for anything unrecognised. */
+function cadenceOf(series: SeriesRow): SeriesFrequency {
+  return isSeriesFrequency(series.frequency) ? series.frequency : 'weekly'
 }
 
 interface WeekRow {
@@ -76,7 +92,7 @@ interface WeekRow {
 async function loadSeries(id: string): Promise<SeriesRow | null> {
   const { data } = await adminSupabase
     .from('space_booking_series')
-    .select('id, space_id, creator_id, title, attendee_ids, external_attendees, start_time, end_time, starts_on, ends_on, cancelled_at')
+    .select('id, space_id, creator_id, title, attendee_ids, external_attendees, start_time, end_time, starts_on, ends_on, frequency, cancelled_at')
     .eq('id', id)
     .maybeSingle()
   return (data as SeriesRow | null) ?? null
@@ -137,6 +153,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       start_time: series.start_time.slice(0, 5),
       end_time: series.end_time.slice(0, 5),
       weekday: weekdayOf(series.starts_on),
+      frequency: cadenceOf(series),
     },
     upcoming_count: upcoming.length,
     next_date: upcoming[0]?.start_time.slice(0, 10) ?? null,
@@ -156,8 +173,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const series = await loadSeries(id)
   if (!series) return NextResponse.json({ error: 'Series not found' }, { status: 404 })
   if (!mayManage(user, series)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const cadence = cadenceOf(series)
   if (series.cancelled_at) {
-    return NextResponse.json({ error: 'This weekly booking has been cancelled.' }, { status: 400 })
+    return NextResponse.json({
+      error: `This ${SERIES_CADENCE[cadence].adjective} booking has been cancelled.`,
+    }, { status: 400 })
   }
 
   const { title, start_time, end_time, until, attendee_ids, external_attendees, skip_conflicts, space_id } = await request.json()
@@ -193,7 +213,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const upcoming = await loadUpcoming(id)
   if (upcoming.length === 0) {
-    return NextResponse.json({ error: 'This weekly booking has no upcoming weeks left to change.' }, { status: 400 })
+    return NextResponse.json({
+      error: `This ${SERIES_CADENCE[cadence].adjective} booking has no upcoming weeks left to change.`,
+    }, { status: 400 })
   }
 
   const nextDate = upcoming[0].start_time.slice(0, 10)
@@ -209,11 +231,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const semesterEnd = await loadActiveSemesterEnd(adminSupabase)
     if (!semesterEnd) {
       return NextResponse.json({
-        error: 'A weekly booking cannot be extended until an administrator sets the end date of the current semester.',
+        error: `A ${SERIES_CADENCE[cadence].adjective} booking cannot be extended until an administrator sets the end date of the current semester.`,
       }, { status: 400 })
     }
     if (until > semesterEnd) {
-      return NextResponse.json({ error: 'A weekly booking cannot run past the end of the semester.' }, { status: 400 })
+      return NextResponse.json({
+        error: `A ${SERIES_CADENCE[cadence].adjective} booking cannot run past the end of the semester.`,
+      }, { status: 400 })
     }
   }
 
@@ -225,7 +249,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const date = r.start_time.slice(0, 10)
     return { date, interval: intervalFor(date, start_time, end_time), existing: r }
   })
-  const adding: PlannedWeek[] = weeklyDates(series.starts_on, until)
+  const adding: PlannedWeek[] = seriesDates(series.starts_on, until, cadence)
     .filter(d => d > series.ends_on)
     .map(d => ({ date: d, interval: intervalFor(d, start_time, end_time) }))
     .filter(w => w.interval.start >= nowIso)
@@ -341,6 +365,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         await sendSpaceSeriesUpdatedEmail({
           title: cleanTitle,
           spaceName,
+          frequency: cadence,
           weeks: finalWeeks,
           removed: removedWeeks,
           unchanged,
@@ -358,10 +383,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           await sendSpaceSeriesCancelledEmail({
             title: cleanTitle,
             spaceName,
+            frequency: cadence,
             weeks: [...finalWeeks, ...removedWeeks],
             to: [process.env.RESEND_FROM_EMAIL!],
             bcc: dropped,
-            intro: 'You have been removed from this weekly SGA Space booking.',
+            intro: `You have been removed from this ${SERIES_CADENCE[cadence].adjective} SGA Space booking.`,
           })
         }
       } catch (e) {
@@ -426,6 +452,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
           await sendSpaceSeriesCancelledEmail({
             title: series.title,
             spaceName: space?.name ?? 'SGA Space',
+            frequency: cadenceOf(series),
             weeks: upcoming.map(toWeek),
             to,
             bcc,

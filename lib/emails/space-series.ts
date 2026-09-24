@@ -7,7 +7,13 @@ import {
   icsSequenceNow,
   type SpaceIcsEvent,
 } from './space-ics'
-import { SERIES_CONFLICT_LABELS, weekdayOf, type SeriesConflict } from '@/lib/space-series'
+import {
+  SERIES_CADENCE,
+  SERIES_CONFLICT_LABELS,
+  weekdayOf,
+  type SeriesConflict,
+  type SeriesFrequency,
+} from '@/lib/space-series'
 
 /**
  * Emails for recurring SGA Space bookings (issue #112).
@@ -31,6 +37,22 @@ export interface SeriesWeek {
 interface SeriesBase {
   title: string
   spaceName: string
+  /**
+   * How often the series repeats (issue #173). Optional, defaulting to weekly,
+   * so a caller that predates biweekly bookings still reads correctly.
+   */
+  frequency?: SeriesFrequency
+}
+
+/** 'weekly' | 'biweekly', however the caller left it. */
+function cadenceOf(base: SeriesBase): SeriesFrequency {
+  return base.frequency ?? 'weekly'
+}
+
+/** "Weekly" / "Biweekly", for the start of a subject line. */
+function Cadence(base: SeriesBase): string {
+  const word = SERIES_CADENCE[cadenceOf(base)].adjective
+  return word.charAt(0).toUpperCase() + word.slice(1)
 }
 
 function escapeHtml(s: string): string {
@@ -47,10 +69,15 @@ function toEvents(base: SeriesBase, weeks: SeriesWeek[]): SpaceIcsEvent[] {
   }))
 }
 
-/** "Every Tuesday, 6:00 PM – 7:00 PM", from the first week. */
-function patternLine(weeks: SeriesWeek[]): string {
+/**
+ * "Every Tuesday, 6:00 PM – 7:00 PM" from the first week -- or "Every other
+ * Tuesday" for a biweekly series, which is the only place the cadence is
+ * visible in the body, since the dates below it are listed in full either way.
+ */
+function patternLine(base: SeriesBase, weeks: SeriesWeek[]): string {
   const first = weeks[0]
-  return `Every ${weekdayOf(first.startTime.slice(0, 10))}, ${formatSpaceTime(first.startTime)} – ${formatSpaceTime(first.endTime)}`
+  const every = SERIES_CADENCE[cadenceOf(base)].every
+  return `${every} ${weekdayOf(first.startTime.slice(0, 10))}, ${formatSpaceTime(first.startTime)} – ${formatSpaceTime(first.endTime)}`
 }
 
 /** A week whose time differs from the first is shown with its own time. */
@@ -114,10 +141,10 @@ export async function sendSpaceSeriesConfirmedEmail(params: SeriesBase & {
   if (!recipients.length || !weeks.length) return
 
   const { text, html } = sections(
-    'Your weekly SGA Space booking has been confirmed.',
+    `Your ${SERIES_CADENCE[cadenceOf(params)].adjective} SGA Space booking has been confirmed.`,
     params,
     [
-      { heading: patternLine(weeks), lines: weeks.map(w => weekLabel(w, weeks[0])) },
+      { heading: patternLine(params, weeks), lines: weeks.map(w => weekLabel(w, weeks[0])) },
       { heading: 'Not booked', lines: conflictLines(skipped) },
     ]
   )
@@ -126,7 +153,7 @@ export async function sendSpaceSeriesConfirmedEmail(params: SeriesBase & {
     from: emailFrom(),
     to: process.env.RESEND_FROM_EMAIL!,
     bcc: recipients,
-    subject: `Chambers — Weekly SGA Space Booking Confirmed: ${sanitize(params.title)}`,
+    subject: `Chambers — ${Cadence(params)} SGA Space Booking Confirmed: ${sanitize(params.title)}`,
     text,
     html,
     attachments: [{
@@ -152,10 +179,10 @@ export async function sendSpaceSeriesUpdatedEmail(params: SeriesBase & {
   if (!recipients.length || (!weeks.length && !removed.length)) return
 
   const { text, html } = sections(
-    'Your weekly SGA Space booking has been updated.',
+    `Your ${SERIES_CADENCE[cadenceOf(params)].adjective} SGA Space booking has been updated.`,
     params,
     [
-      { heading: weeks.length ? patternLine(weeks) : 'Upcoming weeks', lines: weeks.map(w => weekLabel(w, weeks[0])) },
+      { heading: weeks.length ? patternLine(params, weeks) : 'Upcoming weeks', lines: weeks.map(w => weekLabel(w, weeks[0])) },
       { heading: 'Kept their previous time', lines: conflictLines(unchanged) },
       { heading: 'Removed', lines: removed.map(w => formatSpaceShortDate(w.startTime)) },
       { heading: 'Not added', lines: conflictLines(skipped) },
@@ -185,7 +212,7 @@ export async function sendSpaceSeriesUpdatedEmail(params: SeriesBase & {
     from: emailFrom(),
     to: process.env.RESEND_FROM_EMAIL!,
     bcc: recipients,
-    subject: `Chambers — Weekly SGA Space Booking Updated: ${sanitize(params.title)}`,
+    subject: `Chambers — ${Cadence(params)} SGA Space Booking Updated: ${sanitize(params.title)}`,
     text,
     html,
     attachments,
@@ -203,7 +230,7 @@ export async function sendSpaceSeriesCancelledEmail(params: SeriesBase & {
   if (!to.length || !weeks.length) return
 
   const { text, html } = sections(
-    params.intro ?? 'Your weekly SGA Space booking has been cancelled.',
+    params.intro ?? `Your ${SERIES_CADENCE[cadenceOf(params)].adjective} SGA Space booking has been cancelled.`,
     params,
     [{ heading: 'Cancelled weeks', lines: weeks.map(w => weekLabel(w, weeks[0])) }]
   )
@@ -212,7 +239,7 @@ export async function sendSpaceSeriesCancelledEmail(params: SeriesBase & {
     from: emailFrom(),
     to,
     ...(bcc?.length ? { bcc } : {}),
-    subject: `Chambers — Weekly SGA Space Booking Cancelled: ${sanitize(params.title)}`,
+    subject: `Chambers — ${Cadence(params)} SGA Space Booking Cancelled: ${sanitize(params.title)}`,
     text,
     html,
     attachments: [{

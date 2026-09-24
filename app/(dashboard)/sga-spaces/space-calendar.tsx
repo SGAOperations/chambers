@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
+import { repeatsLabel } from '@/lib/space-series'
 
 interface Booking {
   id: string
@@ -13,6 +14,8 @@ interface Booking {
   external_attendees?: string[] | null
   creator_name: string | null
   series_id: string | null
+  /** That series' cadence, 'weekly' or 'biweekly' (issue #173). Null on a one-off. */
+  series_frequency?: string | null
 }
 
 interface Blackout {
@@ -724,8 +727,13 @@ export default function SpaceCalendar({
                             overflowWrap: 'anywhere',
                           }}
                         >
-                          {/* Marks one week of a weekly booking (issue #112). */}
-                          {bs.booking.series_id && <span aria-label="Repeats weekly" title="Repeats weekly">↻ </span>}
+                          {/* Marks one week of a recurring booking (#112, #173). */}
+                          {bs.booking.series_id && (
+                            <span
+                              aria-label={repeatsLabel(bs.booking.series_frequency)}
+                              title={repeatsLabel(bs.booking.series_frequency)}
+                            >↻ </span>
+                          )}
                           {bs.booking.title}
                         </span>
                         {showCreator && (

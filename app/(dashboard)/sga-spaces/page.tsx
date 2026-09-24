@@ -23,8 +23,10 @@ interface Booking {
   attendee_ids: string[]
   external_attendees?: string[] | null
   creator_name: string | null
-  /** The weekly series this booking is one week of (issue #112). */
+  /** The recurring series this booking is one week of (issue #112). */
   series_id: string | null
+  /** That series' cadence, 'weekly' or 'biweekly' (issue #173). Null on a one-off. */
+  series_frequency?: string | null
 }
 
 interface Blackout {
@@ -517,7 +519,7 @@ export default function SGASpacesPage() {
               const res = await fetch(`/api/spaces/series/${editBooking.seriesId}`, { method: 'DELETE' })
               if (!res.ok) {
                 const data = await res.json()
-                throw new Error(data.error ?? 'Failed to cancel the weekly booking.')
+                throw new Error(data.error ?? 'Failed to cancel the recurring booking.')
               }
               setEditBooking(null)
               fetchCalendarData()
