@@ -32,7 +32,7 @@ export async function GET() {
       bodies(name),
       users(full_name),
       room_request_details(room_name, start_date, start_time, end_time, end_date),
-      tabling_request_sessions(session_date, start_time, end_time),
+      tabling_request_sessions(session_date, start_time, end_time, location, tables),
       room_request_bodies(body_id, bodies(name))
     `)
     .order('created_at', { ascending: false })

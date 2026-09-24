@@ -5,6 +5,12 @@ import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { DIVISIONS, loadScopeContext, validateScopeSelection } from '@/lib/booking-scope'
 import { OPS_REVIEW } from '@/lib/request-status'
 import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-times'
+import {
+  LOCATION_ERROR,
+  TABLES_ERROR,
+  cleanLocation,
+  invalidTableCount,
+} from '@/lib/tabling-request'
 
 const adminSupabase = db
 
@@ -118,6 +124,45 @@ export async function POST(request: Request) {
       )
     }
     capacityValue = n
+  }
+
+  /**
+   * Where the body wants to table and how many tables it needs (issue #164).
+   *
+   * Resolved before anything is written, so a bad number cannot leave a request
+   * row behind with no sessions under it. The table count is required here --
+   * Operational Affairs has to reserve a specific number and was previously
+   * guessing -- while the location stays optional, being a preference in the
+   * same sense as a room request's preferred room.
+   *
+   * The Slack quick-request flow writes its own row and asks for neither, which
+   * is why the columns are nullable rather than NOT NULL.
+   */
+  const tablingSessions: {
+    session_date: string
+    start_time: string
+    end_time: string
+    location: string | null
+    tables: number
+  }[] = []
+
+  if (type === 'Tabling') {
+    for (const s of (sessions ?? []) as { session_date: string; start_time: string; end_time: string; location?: unknown; tables?: unknown }[]) {
+      if (invalidTableCount(s.tables)) {
+        return NextResponse.json({ error: TABLES_ERROR }, { status: 400 })
+      }
+      const location = cleanLocation(s.location)
+      if (location === undefined) {
+        return NextResponse.json({ error: LOCATION_ERROR }, { status: 400 })
+      }
+      tablingSessions.push({
+        session_date: s.session_date,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        location,
+        tables: Number(s.tables),
+      })
+    }
   }
 
   // Fetch advance notice settings and validate dates
@@ -243,15 +288,13 @@ export async function POST(request: Request) {
   }
 
   if (type === 'Tabling') {
-    const sessionRows = sessions.map((s: {
-      session_date: string
-      start_time: string
-      end_time: string
-    }) => ({
+    const sessionRows = tablingSessions.map(s => ({
       request_id: roomRequest.id,
       session_date: s.session_date,
       start_time: s.start_time,
       end_time: s.end_time,
+      location: s.location,
+      tables: s.tables,
     }))
 
     const { error: sessionError } = await adminSupabase

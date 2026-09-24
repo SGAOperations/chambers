@@ -17,6 +17,7 @@ import {
   type RoomRequestStatus,
 } from '@/lib/request-status'
 import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-times'
+import { MAX_LOCATION, MAX_TABLES, TABLES_ERROR, invalidTableCount } from '@/lib/tabling-request'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
 
@@ -51,6 +52,9 @@ interface MyRequest {
     session_date: string
     start_time: string
     end_time: string
+    /** Null when not asked for -- a Slack request, or one predating issue #164. */
+    location: string | null
+    tables: number | null
   }[] | null
   user_alerts: { denial_reason: string | null }[] | null
 }
@@ -59,6 +63,13 @@ interface TablingSession {
   session_date: string
   start_time: string
   end_time: string
+  /** Where the body would like to table. Optional, as Preferred Room is. */
+  location: string
+  /**
+   * Kept as a string because that is what the input gives back, and '' has to
+   * stay distinguishable from 0 for the validation below.
+   */
+  tables: string
 }
 
 interface OneTimeSession {
@@ -80,6 +91,10 @@ const emptySession = (): TablingSession => ({
   session_date: '',
   start_time: DEFAULT_START_TIME,
   end_time: DEFAULT_END_TIME,
+  location: '',
+  // Almost every tabling request is for one table, so it is prefilled rather
+  // than left blank for everyone to type the same digit.
+  tables: '1',
 })
 
 const emptyOneTimeSession = (): OneTimeSession => ({ session_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME, room_name: '' })
@@ -336,6 +351,15 @@ export default function RequestPage() {
           return
         }
       }
+      // How many tables is what Operational Affairs has to reserve, so it is
+      // asked rather than guessed (issue #164). The location beside it stays
+      // optional: it is a preference, as Preferred Room is on a room request.
+      for (const s of sessions) {
+        if (invalidTableCount(s.tables)) {
+          setError(TABLES_ERROR)
+          return
+        }
+      }
       if (minDaysTabling > 0) {
         const minDate = getMinDate(minDaysTabling)
         for (const s of sessions) {
@@ -574,9 +598,16 @@ export default function RequestPage() {
                           <div>
                             <span className="text-xs font-medium text-[#93b8d8]">Sessions</span>
                             <div className="mt-1 space-y-0.5">
+                              {/* Location and table count are omitted rather than
+                                  shown blank when they were never asked for --
+                                  a Slack request, or one predating issue #164. */}
                               {req.tabling_request_sessions.map((s, i) => (
                                 <p key={i} className="text-sm text-[#f0f6ff]">
+                                  {s.location && <span>{s.location} · </span>}
                                   {formatDate(s.session_date)} · {formatTime(s.start_time)} – {formatTime(s.end_time)}
+                                  {s.tables != null && (
+                                    <span className="text-[#93b8d8]"> · {s.tables} {s.tables === 1 ? 'table' : 'tables'}</span>
+                                  )}
                                 </p>
                               ))}
                             </div>
@@ -764,9 +795,36 @@ export default function RequestPage() {
                       )}
                     </div>
 
+                    {/* Optional, like Preferred Room above: a preference for
+                        Operational Affairs to work with, not a promise (#164). */}
+                    <div>
+                      <label className={labelCls}>Preferred Location</label>
+                      <input
+                        type="text"
+                        placeholder="Optional — e.g. Curry Crossroads"
+                        maxLength={MAX_LOCATION}
+                        value={s.location}
+                        onChange={e => updateSession(i, 'location', e.target.value)}
+                        className={inputCls}
+                      />
+                    </div>
+
                     <div>
                       <label className={labelCls}>Date *</label>
                       <DateField value={s.session_date} min={minDaysTabling > 0 ? getMinDate(minDaysTabling) : undefined} onChange={v => updateSession(i, 'session_date', v)} />
+                    </div>
+
+                    <div>
+                      <label className={labelCls}>Number of Tables *</label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={MAX_TABLES}
+                        value={s.tables}
+                        onChange={e => updateSession(i, 'tables', e.target.value)}
+                        className={inputCls}
+                      />
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-3">

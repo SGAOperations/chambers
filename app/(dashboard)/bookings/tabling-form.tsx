@@ -67,6 +67,9 @@ interface PendingRequest {
     session_date: string | null
     start_time: string | null
     end_time: string | null
+    /** Null when not asked for -- a Slack request, or one predating issue #164. */
+    location: string | null
+    tables: number | null
   }> | null
 }
 
@@ -358,10 +361,18 @@ export default function TablingForm({ bodies, semesters, onClose, onSuccess }: T
                     <span className="text-xs text-[#6a96bb] shrink-0">{new Date(r.created_at).toLocaleDateString()}</span>
                   </div>
                   <p className="text-xs text-[#93b8d8] mb-1.5">{r.purpose}</p>
+                  {/* What was asked for, beside when: the location is what the
+                      Location field above is being filled in from, and the table
+                      count is the other thing the booking has to honour (#164).
+                      Both are omitted when the request never carried them. */}
                   {(r.tabling_request_sessions ?? []).map((s, i) => (
-                    <div key={i} className="flex gap-3 text-xs text-[#6a96bb]">
-                      <span>{s.session_date ?? '—'}</span>
-                      <span>{s.start_time?.slice(0, 5) ?? '—'} – {s.end_time?.slice(0, 5) ?? '—'}</span>
+                    <div key={i} className="text-xs text-[#6a96bb]">
+                      <div className="flex gap-3">
+                        <span>{s.session_date ?? '—'}</span>
+                        <span>{s.start_time?.slice(0, 5) ?? '—'} – {s.end_time?.slice(0, 5) ?? '—'}</span>
+                        {s.tables != null && <span>{s.tables} {s.tables === 1 ? 'table' : 'tables'}</span>}
+                      </div>
+                      {s.location && <div className="text-[#93b8d8]">Prefers {s.location}</div>}
                     </div>
                   ))}
                 </div>
