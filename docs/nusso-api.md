@@ -160,6 +160,14 @@ Set `NUSSO_USERNAME` / `NUSSO_PASSWORD` (a shared SGA EMS web-user account) in
 the environment. See `.env.example` for the full list. Without them, the
 Browse/Book NUSSO tab returns 503 ("not configured") rather than failing loudly.
 
+**Booking also requires a requestor contact.** EMS's Reservation Details tab has
+a required "2nd contact" (the requestor); a reservation with an empty requestor
+is rejected with a generic "complete the required fields" error. Both captured
+successful bookings carried a real person as the 2nd contact plus a 1st-contact
+phone. Set `NUSSO_REQUESTOR_NAME` + `NUSSO_REQUESTOR_EMAIL` (and ideally
+`NUSSO_REQUESTOR_ID`, the EMS contact id) to a valid contact for the booking
+account; `createBooking` fails fast with a clear message when they are unset.
+
 ## Chambers surface & authorization
 
 The **Browse/Book NUSSO** tab is a "find a room" flow: pick a date, time window

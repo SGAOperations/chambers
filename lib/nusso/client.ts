@@ -29,6 +29,8 @@ import {
   NUSSO_BASE_URL,
   NUSSO_ORG,
   NUSSO_CONTACT,
+  NUSSO_REQUESTOR,
+  isRequestorConfigured,
   DEFAULT_RESERVATION_PROFILE,
   getNussoCredentials,
   type NussoReservationProfile,
@@ -36,6 +38,7 @@ import {
 import {
   NussoApiError,
   NussoAuthError,
+  NussoConfigError,
   type NussoAvailability,
   type NussoBookingRequest,
   type NussoExistingBooking,
@@ -474,6 +477,13 @@ export async function createBooking(
   req: NussoBookingRequest,
   profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE
 ): Promise<NussoReservationResult> {
+  // EMS requires a requestor (2nd contact); fail with a clear message rather
+  // than letting EMS reject it with a generic "complete the required fields".
+  if (!isRequestorConfigured()) {
+    throw new NussoConfigError(
+      'NUSSO requestor contact is not configured: set NUSSO_REQUESTOR_NAME and NUSSO_REQUESTOR_EMAIL (and ideally NUSSO_REQUESTOR_ID) to a valid EMS contact for the booking account.'
+    )
+  }
   const referer = `${NUSSO_BASE_URL}${profile.refererPath}`
   const gmtStart = toGmt(req.window.start)
   const gmtEnd = toGmt(req.window.end)
@@ -543,11 +553,12 @@ export async function createBooking(
         FirstPhoneOne: NUSSO_CONTACT.firstContactPhone,
         FirstPhoneTwo: '',
         FirstEmail: NUSSO_CONTACT.firstContactEmail,
-        SecondContactId: -1,
-        SecondContactName: '',
-        SecondContactPhoneOne: '',
+        // The requestor (EMS 2nd contact) -- a required field.
+        SecondContactId: NUSSO_REQUESTOR.id,
+        SecondContactName: NUSSO_REQUESTOR.name,
+        SecondContactPhoneOne: NUSSO_REQUESTOR.phone,
         SecondContactPhoneTwo: '',
-        SecondContactEmail: '',
+        SecondContactEmail: NUSSO_REQUESTOR.email,
         BillingReference: '',
         PoNumber: '',
         SendInvitation: false,

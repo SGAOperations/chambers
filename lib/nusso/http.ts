@@ -12,7 +12,8 @@ import { NussoApiError, NussoAuthError, NussoConfigError } from './types'
  */
 export function handleNussoError(err: unknown): NextResponse {
   if (err instanceof NussoConfigError) {
-    return NextResponse.json({ error: 'The NUSSO integration is not configured.' }, { status: 503 })
+    // The message names exactly what is missing (credentials, requestor, ...).
+    return NextResponse.json({ error: err.message || 'The NUSSO integration is not configured.' }, { status: 503 })
   }
   if (err instanceof NussoAuthError) {
     return NextResponse.json({ error: 'Could not sign in to NUSSO. An administrator should check the credentials.' }, { status: 502 })

@@ -70,6 +70,27 @@ export const NUSSO_CONTACT = {
 } as const
 
 /**
+ * The reservation's **requestor** -- EMS's "2nd contact" on the Reservation
+ * Details tab, and a REQUIRED field: a reservation with an empty requestor is
+ * rejected with "complete the required fields". In the EMS web UI this is the
+ * signed-in web user; because Chambers books under one shared account, it is
+ * that account's EMS contact. Set these to a real EMS contact for the account
+ * (its numeric id makes the match exact; name + email is the minimum). Not
+ * committed -- it is a person's contact info. See .env.example.
+ */
+export const NUSSO_REQUESTOR = {
+  id: intEnv('NUSSO_REQUESTOR_ID', -1),
+  name: process.env.NUSSO_REQUESTOR_NAME || '',
+  email: process.env.NUSSO_REQUESTOR_EMAIL || '',
+  phone: process.env.NUSSO_REQUESTOR_PHONE || '',
+} as const
+
+/** True once the requestor contact is configured enough for EMS to accept it. */
+export function isRequestorConfigured(): boolean {
+  return !!NUSSO_REQUESTOR.name && !!NUSSO_REQUESTOR.email
+}
+
+/**
  * An EMS reservation "type". Different kinds of reservation (a room request, a
  * tabling request, ...) run under different EMS process templates, carry a
  * different event type, and enforce a different set of required user-defined
