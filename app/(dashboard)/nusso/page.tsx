@@ -75,7 +75,8 @@ export default function NussoPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date, start, end,
-          capacity: Number.isFinite(cap) && cap > 0 ? cap : undefined,
+          // Capacity filtering only applies to room requests; tabling spaces are all cap 1.
+          capacity: reservationType === 'room-request' && Number.isFinite(cap) && cap > 0 ? cap : undefined,
           reservationType,
         }),
       })
@@ -130,10 +131,13 @@ export default function NussoPage() {
             <span className={labelCls}>End</span>
             <TimePicker value={end} onChange={setEnd} interval={15} />
           </div>
-          <div>
-            <label className={labelCls} htmlFor="s-cap">Min. capacity</label>
-            <input id="s-cap" type="number" min={0} placeholder="any" className={`${field} w-24`} value={capacity} onChange={e => setCapacity(e.target.value)} />
-          </div>
+          {/* Tabling spaces are all capacity 1, so a capacity filter is meaningless there. */}
+          {reservationType === 'room-request' && (
+            <div>
+              <label className={labelCls} htmlFor="s-cap">Min. capacity</label>
+              <input id="s-cap" type="number" min={0} placeholder="any" className={`${field} w-24`} value={capacity} onChange={e => setCapacity(e.target.value)} />
+            </div>
+          )}
           <button
             onClick={search}
             disabled={loading || !windowValid}
@@ -174,10 +178,12 @@ export default function NussoPage() {
                     <li key={room.RoomId} className="flex items-center gap-4 rounded-lg border border-[#1e5080] bg-[#0f2a4a] px-4 py-3">
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-[#f0f6ff] font-medium truncate">{room.RoomCode}{room.RoomDescription && room.RoomDescription !== room.RoomCode ? ` — ${room.RoomDescription}` : ''}</p>
-                        <p className="text-xs text-[#93b8d8]">
-                          Seats up to {room.Capacity}
-                          {room.MinCapacity > 0 ? ` · min ${room.MinCapacity}` : ''}
-                        </p>
+                        {searched?.type === 'room-request' && (
+                          <p className="text-xs text-[#93b8d8]">
+                            Seats up to {room.Capacity}
+                            {room.MinCapacity > 0 ? ` · min ${room.MinCapacity}` : ''}
+                          </p>
+                        )}
                         {room.Alert && <p className="text-xs text-amber-300/90 mt-1 whitespace-pre-line">⚠ {room.Alert}</p>}
                       </div>
                       {canBook && (

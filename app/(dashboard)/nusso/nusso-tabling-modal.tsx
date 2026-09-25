@@ -100,7 +100,7 @@ export default function NussoTablingModal({ room, date, start, end, onClose, onS
             <div className="px-6 py-5 space-y-4">
               <div className="rounded-lg border border-[#1e5080] bg-[#0f2a4a] px-4 py-3">
                 <p className="text-sm text-[#f0f6ff] font-medium">{room.BuildingDescription ? `${room.BuildingDescription} — ` : ''}{room.RoomCode}</p>
-                <p className="text-xs text-[#93b8d8] mt-0.5">{dateLabel} · {pretty(start)} – {pretty(end)} · seats up to {room.Capacity}</p>
+                <p className="text-xs text-[#93b8d8] mt-0.5">{dateLabel} · {pretty(start)} – {pretty(end)}</p>
               </div>
 
               <div>
