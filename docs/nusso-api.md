@@ -1,0 +1,149 @@
+# NUSSO / EMS API integration
+
+"NUSSO" is how SGA refers to **nuevents.neu.edu**, Northeastern's deployment of
+Accruent's **EMS Web App** (formerly Virtual EMS). It is an ASP.NET WebForms
+application with an undocumented JSON API. Chambers integrates with it to browse
+spaces and create reservations directly, without a person driving the EMS web UI.
+
+This document records what we reverse-engineered from authenticated browser
+captures. The API is not published by the vendor and can change without notice,
+so the client (`lib/nusso/`) validates responses rather than trusting them.
+
+## Authentication
+
+There is **no federated SSO and no MFA**. Login is a plain ASP.NET WebForms
+form post to the app root, and the session is carried by cookies.
+
+```
+GET  /                      -> Set-Cookie: ASP.NET_SessionId, __AntiXsrfToken,
+                               EmsBadBrowserCookie   + hidden WebForms fields
+                               (__VIEWSTATE, __VIEWSTATEGENERATOR,
+                                __EVENTVALIDATION, deaCSRFToken)
+POST /   (form urlencoded)  -> 302  Set-Cookie: EMSCookie   (the auth cookie)
+     Location: /Default.aspx
+GET  /BrowseForSpace.aspx   -> read the authenticated #deaCSRFToken hidden input
+```
+
+The login POST body mirrors the browser exactly:
+
+| field | value |
+|---|---|
+| `__EVENTTARGET`, `__EVENTARGUMENT` | empty |
+| `__VIEWSTATE`, `__VIEWSTATEGENERATOR`, `__EVENTVALIDATION` | scraped from `GET /` |
+| `deaCSRFToken` | scraped from `GET /` (a short pre-auth token) |
+| `userID_input` | username |
+| `password_input` | password (plaintext) |
+| `pwdhid` | password again (EMS mirrors it; both were 14 chars — no client hash) |
+| `cancel-notes` | empty |
+| `ctl00$pc$btnLogin` | `Sign In` |
+
+Success is a **302** that sets `EMSCookie`. A **200** means the login page
+re-rendered with an error — almost always bad credentials.
+
+Authenticated requests carry four cookies: `ASP.NET_SessionId`,
+`__AntiXsrfToken`, `EmsBadBrowserCookie`, `EMSCookie`.
+
+### CSRF token
+
+Every authenticated page renders a hidden input:
+
+```html
+<input type="hidden" name="deaCSRFToken" id="deaCSRFToken" value="<GUID>" />
+```
+
+The front end reads it and sends it as the **`dea-CSRFToken`** header on every
+`ServerApi.aspx` call. The value differs from the pre-auth login-page token, so
+the client re-scrapes it from an authenticated page after login.
+
+## ServerApi
+
+All actions are `POST https://nuevents.neu.edu/ServerApi.aspx/<Method>`, JSON in,
+JSON out. Responses are wrapped in ASP.NET's envelope:
+
+```json
+{ "d": "<stringified JSON>" }
+```
+
+Required headers: `Content-Type: application/json; charset=UTF-8`,
+`X-Requested-With: XMLHttpRequest`, `Origin`, `Referer`, `dea-CSRFToken`, plus
+the cookies. A lapsed session is answered with the login HTML (not an error), so
+the client retries once after re-authenticating when a response is not JSON.
+
+### Methods used
+
+| Method | Purpose | Client fn |
+|---|---|---|
+| `GetBrowseLocationsBookings` | existing bookings in a window (calendar) | `browseBookings` |
+| `GetBrowseLocationsRooms` | rooms across buildings (picker) | `browseRooms` |
+| `GetAvailabilityList` | is a room free for a window | `getAvailability` |
+| `AddToCartCheck` | validate a selection before saving | `createBooking` (step 1) |
+| `GetServicesForBooking` | services/UDF context; primes server state | `createBooking` (step 2) |
+| `SaveReservation` | **create the reservation** | `createBooking` (step 3) |
+
+`SaveReservation` returns `{ "Success": true, "SuccessMessage": "<json>" }` where
+`SuccessMessage` is itself stringified JSON containing `ReservationId` and a
+`ReservationSummaryLink`.
+
+## Times
+
+EMS speaks **Boston wall-clock** strings with second precision and no offset
+(`"2026-09-27 21:00:00"`), the same domain SGA Spaces stores in (see
+`lib/boston-time.ts`). Cart entries additionally carry GMT equivalents; the
+client derives the offset per-instant so both EDT and EST are correct.
+
+## SGA's EMS identifiers
+
+Observed on nuevents.neu.edu; overridable by env (see `lib/nusso/config.ts`).
+Org-level ids (`NUSSO_ORG`) are the same for every reservation type; the
+template and event type are per-**profile** (see below).
+
+| thing | id | scope |
+|---|---|---|
+| SGA group | `225399` | org |
+| Eastern time zone | `61` | org |
+| room-request template | `25` | `room-request` profile |
+| event type | `657` | `room-request` profile |
+
+### Reservation profiles (room request vs. tabling vs. ...)
+
+Different EMS reservation types run under a different process template, carry a
+different event type, enforce a different required-UDF set, and are submitted
+from a different page. `lib/nusso/config.ts` models each as a
+`NussoReservationProfile`, and the client (`getAvailability`, `createBooking`)
+and the API routes (`?/reservationType`) take one, defaulting to
+`room-request`. **Tabling** is a known second type that uses a different form
+and fields — add it as a `tabling` profile (its template id, event type and
+required UDFs still need to be captured) plus its own booking form; nothing
+else in the client changes.
+
+### Required user-defined fields (UDFs)
+
+`SaveReservation` rejects a request that omits a required UDF. The SGA template
+enforces **three** single-select UDFs. The answer values below are the exact
+option ids that produced a successful reservation in the capture and are sent by
+default (`NUSSO_REQUIRED_UDFS`):
+
+| Id | prompt | answer id |
+|---|---|---|
+| 23 | projector / plasma TV access | 18 |
+| 34 | external control over the event | 31 |
+| 32 | Safety & Security terms acknowledgement | 27 |
+
+> **Validation caveat.** These answers, and the ID catalog above, were captured
+> from a single real booking (test reservation #696860). They have not been
+> re-verified against a live booking from this integration. Before enabling
+> booking in production, run one end-to-end reservation and confirm the UDF set
+> and option ids still match — EMS can renumber them.
+
+## Configuration
+
+Set `NUSSO_USERNAME` / `NUSSO_PASSWORD` (a shared SGA EMS web-user account) in
+the environment. See `.env.example` for the full list. Without them, the
+Browse/Book NUSSO tab returns 503 ("not configured") rather than failing loudly.
+
+## Authorization in Chambers
+
+- **Browsing** (rooms, bookings, availability): any signed-in Chambers user.
+- **Booking**: admins and body Leadership only (`lib/nusso/authorize.ts`),
+  because it acts under SGA's single shared EMS account and puts a real
+  reservation on Northeastern's calendar.

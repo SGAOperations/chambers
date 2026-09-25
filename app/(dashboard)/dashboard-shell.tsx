@@ -445,6 +445,7 @@ export default function DashboardShell({
           <div className="flex flex-col gap-1 px-3 py-4 flex-1">
             {navLink('/my-rooms', 'My Rooms')}
             {navLink('/sga-spaces', 'SGA Spaces')}
+            {navLink('/nusso', 'Browse/Book NUSSO')}
             {(isLeadership || isAdmin) && navLink('/request', 'Request a Booking')}
             {(isAdmin || isIEMS) && navLink('/events', 'Events')}
             {isAdmin && navLink('/bookings', 'Bookings')}
