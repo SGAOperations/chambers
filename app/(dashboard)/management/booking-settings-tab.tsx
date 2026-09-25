@@ -79,6 +79,8 @@ export default function BookingSettingsTab() {
   const [minDaysRoom, setMinDaysRoom] = useState(0)
   const [minDaysTabling, setMinDaysTabling] = useState(0)
   const [minHoursSpaces, setMinHoursSpaces] = useState(24)
+  const [nussoMinDaysRoom, setNussoMinDaysRoom] = useState(0)
+  const [nussoMinDaysTabling, setNussoMinDaysTabling] = useState(0)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
 
@@ -126,6 +128,8 @@ export default function BookingSettingsTab() {
         setMinDaysRoom(data.min_days_advance_room ?? 0)
         setMinDaysTabling(data.min_days_advance_tabling ?? 0)
         setMinHoursSpaces(data.min_hours_advance_spaces ?? 24)
+        setNussoMinDaysRoom(data.nusso_min_days_advance_room ?? 0)
+        setNussoMinDaysTabling(data.nusso_min_days_advance_tabling ?? 0)
         setPa(prev => {
           const merged = { ...prev }
           for (const k of Object.keys(PA_DEFAULTS)) {
@@ -161,6 +165,8 @@ export default function BookingSettingsTab() {
         min_days_advance_room: minDaysRoom,
         min_days_advance_tabling: minDaysTabling,
         min_hours_advance_spaces: minHoursSpaces,
+        nusso_min_days_advance_room: nussoMinDaysRoom,
+        nusso_min_days_advance_tabling: nussoMinDaysTabling,
       }),
     })
 
@@ -314,6 +320,26 @@ export default function BookingSettingsTab() {
               min={0}
               value={minHoursSpaces}
               onChange={e => { setSuccess(false); setMinHoursSpaces(Math.max(0, parseInt(e.target.value) || 0)) }}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Minimum Days Advance Notice — NUSSO Room</label>
+            <input
+              type="number"
+              min={0}
+              value={nussoMinDaysRoom}
+              onChange={e => { setSuccess(false); setNussoMinDaysRoom(Math.max(0, parseInt(e.target.value) || 0)) }}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Minimum Days Advance Notice — NUSSO Tabling</label>
+            <input
+              type="number"
+              min={0}
+              value={nussoMinDaysTabling}
+              onChange={e => { setSuccess(false); setNussoMinDaysTabling(Math.max(0, parseInt(e.target.value) || 0)) }}
               className={inputCls}
             />
           </div>

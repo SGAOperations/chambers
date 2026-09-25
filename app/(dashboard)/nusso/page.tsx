@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
 import TimePicker from '../bookings/time-picker'
 import { useIdentity } from '../identity-context'
@@ -13,6 +13,15 @@ type ReservationType = 'room-request' | 'tabling'
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
 }
+
+/** "YYYY-MM-DD" that is `days` after today, for the Book-mode earliest date. */
+function addDaysISO(days: number): string {
+  const d = new Date(`${todayISO()}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + Math.max(0, days))
+  return d.toISOString().slice(0, 10)
+}
+
+type Mode = 'browse' | 'book'
 
 /** Group rooms by building, buildings A→Z, rooms by code within. */
 function groupByBuilding(rooms: AvailableRoom[]): [string, AvailableRoom[]][] {
@@ -48,11 +57,55 @@ export default function NussoPage() {
   const { isAdmin, isLeadership } = useIdentity()
   const canBook = isAdmin || isLeadership
 
+  // Browse = view-only (no booking). Book = booking allowed, with the date picker
+  // held to NUSSO's advance-notice minimum. Only bookers get Book mode.
+  const [mode, setMode] = useState<Mode>(canBook ? 'book' : 'browse')
   const [reservationType, setReservationType] = useState<ReservationType>('room-request')
   const [date, setDate] = useState<string>(todayISO)
   const [start, setStart] = useState('12:00')
   const [end, setEnd] = useState('13:00')
   const [capacity, setCapacity] = useState('')
+
+  // NUSSO's own booking minimums (Management-configured), for Book-mode date limits.
+  const [nussoMinDaysRoom, setNussoMinDaysRoom] = useState(0)
+  const [nussoMinDaysTabling, setNussoMinDaysTabling] = useState(0)
+
+  const minAdvance = reservationType === 'tabling' ? nussoMinDaysTabling : nussoMinDaysRoom
+  // In Book mode you cannot pick a date sooner than the minimum (nor the past);
+  // in Browse mode any date is viewable.
+  const minBookDate = mode === 'book' ? addDaysISO(minAdvance) : undefined
+
+  const clampToBookable = useCallback(
+    (d: string, m: Mode, rt: ReservationType, mdr: number, mdt: number): string => {
+      if (m !== 'book') return d
+      const min = addDaysISO(rt === 'tabling' ? mdt : mdr)
+      return d < min ? min : d
+    },
+    []
+  )
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch('/api/nusso/settings')
+        if (!res.ok) return
+        const data = await res.json()
+        if (!active) return
+        const mdr = data.minDaysRoom ?? 0
+        const mdt = data.minDaysTabling ?? 0
+        setNussoMinDaysRoom(mdr)
+        setNussoMinDaysTabling(mdt)
+        // Now that the minimums are known, pull the date forward if it is too soon.
+        setDate(prev => clampToBookable(prev, mode, reservationType, mdr, mdt))
+      } catch {
+        /* leave minimums at 0 */
+      }
+    })()
+    return () => { active = false }
+    // Intentionally run once on mount; later clamping happens in the handlers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const [rooms, setRooms] = useState<AvailableRoom[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -62,10 +115,24 @@ export default function NussoPage() {
   const [searched, setSearched] = useState<{ date: string; start: string; end: string; type: ReservationType } | null>(null)
   const [bookRoom, setBookRoom] = useState<AvailableRoom | null>(null)
 
+  const switchMode = (m: Mode) => {
+    setMode(m)
+    setDate(prev => clampToBookable(prev, m, reservationType, nussoMinDaysRoom, nussoMinDaysTabling))
+  }
+  const switchType = (t: ReservationType) => {
+    setReservationType(t)
+    setDate(prev => clampToBookable(prev, mode, t, nussoMinDaysRoom, nussoMinDaysTabling))
+  }
+
   const windowValid = start < end
 
   const search = useCallback(async () => {
     if (!windowValid) return
+    if (mode === 'book' && minBookDate && date < minBookDate) {
+      setError('That date is too soon to book through NUSSO. Pick a later date, or switch to Browse.')
+      setRooms(null)
+      return
+    }
     setLoading(true)
     setError(null)
     const cap = Number(capacity)
@@ -90,7 +157,7 @@ export default function NussoPage() {
     } finally {
       setLoading(false)
     }
-  }, [date, start, end, capacity, reservationType, windowValid])
+  }, [date, start, end, capacity, reservationType, windowValid, mode, minBookDate])
 
   const grouped = rooms ? groupByBuilding(rooms) : []
 
@@ -103,25 +170,55 @@ export default function NussoPage() {
 
       {/* Search bar */}
       <div className="flex-shrink-0 rounded-xl border border-[#1e5080] bg-[#0f2a4a] p-4">
-        {/* Reservation type toggle */}
-        <div className="inline-flex rounded-lg border border-[#1e5080] p-0.5 mb-3">
-          {(['room-request', 'tabling'] as ReservationType[]).map(t => (
-            <button
-              key={t}
-              onClick={() => setReservationType(t)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                reservationType === t ? 'bg-[#c8102e] text-white' : 'text-[#93b8d8] hover:text-[#f0f6ff]'
-              }`}
-            >
-              {t === 'room-request' ? 'Room request' : 'Tabling'}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3 mb-3">
+          {/* Browse / Book mode toggle. Book (with its date limits) is bookers only. */}
+          <div className="inline-flex rounded-lg border border-[#1e5080] p-0.5">
+            {(['browse', 'book'] as Mode[]).map(m => (
+              <button
+                key={m}
+                onClick={() => switchMode(m)}
+                disabled={m === 'book' && !canBook}
+                title={m === 'book' && !canBook ? 'Only Leadership and administrators can book' : undefined}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                  mode === m ? 'bg-[#c8102e] text-white' : 'text-[#93b8d8] hover:text-[#f0f6ff]'
+                }`}
+              >
+                {m === 'browse' ? 'Browse' : 'Book'}
+              </button>
+            ))}
+          </div>
+
+          {/* Reservation type toggle */}
+          <div className="inline-flex rounded-lg border border-[#1e5080] p-0.5">
+            {(['room-request', 'tabling'] as ReservationType[]).map(t => (
+              <button
+                key={t}
+                onClick={() => switchType(t)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  reservationType === t ? 'bg-[#c8102e] text-white' : 'text-[#93b8d8] hover:text-[#f0f6ff]'
+                }`}
+              >
+                {t === 'room-request' ? 'Room request' : 'Tabling'}
+              </button>
+            ))}
+          </div>
+
+          <span className="text-xs text-[#6a96bb]">
+            {mode === 'browse' ? 'Viewing only — booking is off in Browse.' : 'Booking on — dates before the NUSSO minimum are disabled.'}
+          </span>
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className={labelCls} htmlFor="s-date">Date</label>
-            <input id="s-date" type="date" className={field} value={date} onChange={e => setDate(e.target.value)} />
+            <input
+              id="s-date"
+              type="date"
+              className={field}
+              value={date}
+              min={minBookDate}
+              onChange={e => setDate(clampToBookable(e.target.value, mode, reservationType, nussoMinDaysRoom, nussoMinDaysTabling))}
+            />
           </div>
           <div className="w-32">
             <span className={labelCls}>Start</span>
@@ -186,7 +283,7 @@ export default function NussoPage() {
                         )}
                         {room.Alert && <p className="text-xs text-amber-300/90 mt-1 whitespace-pre-line">⚠ {room.Alert}</p>}
                       </div>
-                      {canBook && (
+                      {canBook && mode === 'book' && (
                         <button
                           onClick={() => setBookRoom(room)}
                           className="flex-shrink-0 py-1.5 px-3 bg-[#c8102e] hover:bg-[#a50d26] text-white text-sm font-medium rounded-lg transition-colors"

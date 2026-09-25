@@ -213,3 +213,18 @@ carries the reservation id with a `chambersBookingRecorded: false` warning rathe
 than discarding the booking. No emails are sent for a NUSSO booking (unlike the
 admin create flow). Weekly/recurring NUSSO bookings are not yet supported — the
 booking flow is single-session.
+
+### Browse vs. Book mode & advance minimums
+
+The tab has a **Browse / Book** toggle. **Browse** is view-only (no Book buttons)
+and any date is searchable. **Book** (bookers only) shows Book buttons and holds
+the date picker to NUSSO's advance-notice minimum, so a date too soon to reserve
+can't be chosen.
+
+Those minimums are their own settings, separate from the SGA request lead times:
+`app_settings.nusso_min_days_advance_room` and `nusso_min_days_advance_tabling`
+(migration `db/neon/0007_nusso_advance_minimums.sql`, default 0 = only past dates
+blocked). They are edited in **Management → Booking Settings** alongside the other
+advance-notice knobs, and read by the tab via `GET /api/nusso/settings` (any
+signed-in user). Apply the migration and refresh the Neon Data API schema cache
+before relying on them.
