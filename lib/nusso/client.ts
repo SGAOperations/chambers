@@ -30,7 +30,7 @@ import {
   NUSSO_ORG,
   NUSSO_CONTACT,
   NUSSO_REQUESTOR,
-  isRequestorConfigured,
+  isFirstContactConfigured,
   DEFAULT_RESERVATION_PROFILE,
   getNussoCredentials,
   type NussoReservationProfile,
@@ -477,11 +477,12 @@ export async function createBooking(
   req: NussoBookingRequest,
   profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE
 ): Promise<NussoReservationResult> {
-  // EMS requires a requestor (2nd contact); fail with a clear message rather
-  // than letting EMS reject it with a generic "complete the required fields".
-  if (!isRequestorConfigured()) {
+  // EMS requires the 1st-contact fields, including the phone (which has no safe
+  // default). Fail with a clear message rather than letting EMS reject it with a
+  // generic "complete the required fields".
+  if (!isFirstContactConfigured()) {
     throw new NussoConfigError(
-      'NUSSO requestor contact is not configured: set NUSSO_REQUESTOR_NAME and NUSSO_REQUESTOR_EMAIL (and ideally NUSSO_REQUESTOR_ID) to a valid EMS contact for the booking account.'
+      'NUSSO 1st-contact phone is required: set NUSSO_CONTACT_PHONE (NUSSO_CONTACT_NAME and NUSSO_CONTACT_EMAIL default to SGA operations).'
     )
   }
   const referer = `${NUSSO_BASE_URL}${profile.refererPath}`

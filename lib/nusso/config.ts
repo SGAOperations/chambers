@@ -60,8 +60,12 @@ export const NUSSO_ORG = {
 } as const
 
 /**
- * The first-contact details stamped on reservations. These are the group's
- * booking contact, not a person's private data, and default to SGA operations.
+ * The first-contact details stamped on reservations -- the group's booking
+ * contact, not a person's private data. EMS requires the Customer (group), the
+ * 1st Contact name, the 1st Contact **phone**, and the 1st Contact email; a
+ * reservation missing any of them is rejected with "complete the required
+ * fields". Name and email default to SGA operations; the phone has no safe
+ * default, so it must be set (NUSSO_CONTACT_PHONE) for booking to work.
  */
 export const NUSSO_CONTACT = {
   firstContactName: process.env.NUSSO_CONTACT_NAME || 'Student Government Association(STU)',
@@ -69,14 +73,16 @@ export const NUSSO_CONTACT = {
   firstContactPhone: process.env.NUSSO_CONTACT_PHONE || '',
 } as const
 
+/** True once the required 1st-contact fields (incl. phone) are present. */
+export function isFirstContactConfigured(): boolean {
+  return !!NUSSO_CONTACT.firstContactName && !!NUSSO_CONTACT.firstContactEmail && !!NUSSO_CONTACT.firstContactPhone
+}
+
 /**
- * The reservation's **requestor** -- EMS's "2nd contact" on the Reservation
- * Details tab, and a REQUIRED field: a reservation with an empty requestor is
- * rejected with "complete the required fields". In the EMS web UI this is the
- * signed-in web user; because Chambers books under one shared account, it is
- * that account's EMS contact. Set these to a real EMS contact for the account
- * (its numeric id makes the match exact; name + email is the minimum). Not
- * committed -- it is a person's contact info. See .env.example.
+ * The reservation's **requestor** (EMS "2nd contact") -- entirely OPTIONAL. When
+ * these are set the requestor is stamped on the reservation; when unset the 2nd
+ * contact is simply left blank, which EMS accepts. Not committed -- it is a
+ * person's contact info. See .env.example.
  */
 export const NUSSO_REQUESTOR = {
   id: intEnv('NUSSO_REQUESTOR_ID', -1),
@@ -84,11 +90,6 @@ export const NUSSO_REQUESTOR = {
   email: process.env.NUSSO_REQUESTOR_EMAIL || '',
   phone: process.env.NUSSO_REQUESTOR_PHONE || '',
 } as const
-
-/** True once the requestor contact is configured enough for EMS to accept it. */
-export function isRequestorConfigured(): boolean {
-  return !!NUSSO_REQUESTOR.name && !!NUSSO_REQUESTOR.email
-}
 
 /**
  * An EMS reservation "type". Different kinds of reservation (a room request, a
