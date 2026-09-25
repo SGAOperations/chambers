@@ -160,9 +160,26 @@ Set `NUSSO_USERNAME` / `NUSSO_PASSWORD` (a shared SGA EMS web-user account) in
 the environment. See `.env.example` for the full list. Without them, the
 Browse/Book NUSSO tab returns 503 ("not configured") rather than failing loudly.
 
-## Authorization in Chambers
+## Chambers surface & authorization
 
-- **Browsing** (rooms, bookings, availability): any signed-in Chambers user.
+The **Browse/Book NUSSO** tab is a "find a room" flow: pick a date, time window
+and (optionally) minimum capacity, and the page lists every **available** room
+for that window, grouped by building and showing each room's capacity. Booking a
+result opens a confirm modal (room + window fixed) that collects the event name,
+attendance and — for tabling — the required description.
+
+Routes (`app/api/nusso/`):
+
+- `POST /api/nusso/search` — available rooms for a window (`searchAvailableRooms`,
+  a GetAvailabilityList with RoomId -1 filtered to free rooms). The find-a-room query.
+- `POST /api/nusso/book` — create the reservation.
+- `POST /api/nusso/availability` — availability for one specific room.
+- `GET /api/nusso/rooms`, `GET /api/nusso/bookings` — the raw room list and a
+  day's existing bookings (browse helpers).
+
+Authorization:
+
+- **Browsing / searching**: any signed-in Chambers user.
 - **Booking**: admins and body Leadership only (`lib/nusso/authorize.ts`),
   because it acts under SGA's single shared EMS account and puts a real
   reservation on Northeastern's calendar.

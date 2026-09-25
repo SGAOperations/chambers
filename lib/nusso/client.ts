@@ -321,13 +321,14 @@ export async function browseRooms(window: NussoTimeWindow): Promise<NussoRoomOpt
   )
 }
 
-/** Availability for a specific room and window (GetAvailabilityList). */
-export async function getAvailability(
+/** Build the GetAvailabilityList payload. roomId -1 means "all rooms". */
+function availabilityPayload(
   roomId: number,
   window: NussoTimeWindow,
-  profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE
-): Promise<NussoAvailability[]> {
-  const data = await serverApi<{ Availability?: NussoAvailability[] }>('GetAvailabilityList', {
+  profile: NussoReservationProfile,
+  minCapacity: number
+) {
+  return {
     searchData: {
       TemplateId: profile.templateId,
       Start: window.start,
@@ -350,13 +351,43 @@ export async function getAvailability(
         { filterName: 'SetupTypes', value: '-1', displayValue: '(no preference)', filterType: 7 },
         { filterName: 'RoomTypes', value: '-1', displayValue: '(all)', filterType: 7 },
         { filterName: 'Features', value: '', displayValue: '(none)', filterType: 7 },
-        { filterName: 'Capacity', value: 0, filterType: 2 },
+        { filterName: 'Capacity', value: minCapacity, filterType: 2 },
         { filterName: 'RoomId', value: roomId, displayValue: null, filterType: 2 },
       ],
     },
     includeFloorMaps: false,
-  })
+  }
+}
+
+/** Availability for a specific room and window (GetAvailabilityList). */
+export async function getAvailability(
+  roomId: number,
+  window: NussoTimeWindow,
+  profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE
+): Promise<NussoAvailability[]> {
+  const data = await serverApi<{ Availability?: NussoAvailability[] }>(
+    'GetAvailabilityList',
+    availabilityPayload(roomId, window, profile, 0)
+  )
   return data?.Availability ?? []
+}
+
+/**
+ * Search every room for availability in a window (the "find a room" query).
+ * roomId -1 asks EMS for all rooms matching the filters; we return only those
+ * actually free for the whole window (DaysAvailable > 0). `minCapacity` filters
+ * to rooms that seat at least that many.
+ */
+export async function searchAvailableRooms(
+  window: NussoTimeWindow,
+  profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE,
+  minCapacity = 0
+): Promise<NussoAvailability[]> {
+  const data = await serverApi<{ Availability?: NussoAvailability[] }>(
+    'GetAvailabilityList',
+    availabilityPayload(-1, window, profile, minCapacity)
+  )
+  return (data?.Availability ?? []).filter(a => a.DaysAvailable > 0)
 }
 
 /**
