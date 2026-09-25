@@ -416,7 +416,7 @@ export async function createBooking(
     SetupCount: String(req.attendance),
     SetupTypeId: req.setupTypeId,
     RoomType: 1,
-    RecordType: 1,
+    RecordType: profile.recordType,
     TempRoomDescription: '',
     IsHost: false,
     GmtStart: gmtStart,
@@ -491,8 +491,33 @@ export async function createBooking(
       },
       files: [],
       // Default to the profile's known-good required-UDF answers; let the caller
-      // override any of them by Id (e.g. the projector question).
+      // override any of them by Id (e.g. the projector question, or tabling's
+      // required free-text description).
       udfs: mergeUdfs(profile.requiredUdfs, req.udfs),
+      // A single (non-recurring) booking: RecurrenceType "random" with empty
+      // date arrays is how the EMS UI represents "no recurrence".
+      recurrences: {
+        RecurrenceType: 'random',
+        Recurrences: [],
+        RandomDates: [],
+        EndDate: `${req.window.date.slice(0, 10)}T00:00:00.000Z`,
+        DateType: 'enddate',
+        DailyCount: 1,
+        DailyType: 'everydays',
+        DateCount: 1,
+        WeeklyCount: 1,
+        WeeklyDays: [],
+        MonthlyType: 'everymonths',
+        MonthlyDay: 25,
+        MonthlyCount: 1,
+        MonthlyWeek: '1',
+        MonthlyWeekDay: '0',
+        MonthlyWeekDayCount: 1,
+        IsoStartOfWeek: 7,
+      },
+      serviceOrders: [],
+      // Minutes GMT is ahead of Boston wall-clock: -240 in EDT, -300 in EST.
+      tzMinuteBias: -bostonOffsetMinutes(new Date(`${req.window.start.replace(' ', 'T')}Z`)),
     },
     referer
   )

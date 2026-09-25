@@ -77,9 +77,9 @@ export const NUSSO_CONTACT = {
  * those differences so the client and the UI can be told "book this as a room
  * request" without any of those ids leaking into the call sites.
  *
- * Only `room-request` is defined today. Tabling (and anything else) is added by
- * writing another profile here plus its own form; the client, the booking route
- * and SaveReservation itself do not change.
+ * Both `room-request` and `tabling` are defined, from captured bookings. Any
+ * further type is added by writing another profile here plus its own form; the
+ * client, the booking route and SaveReservation itself do not change.
  */
 export interface NussoReservationProfile {
   /** Stable key used by the API and UI to select this profile. */
@@ -93,11 +93,18 @@ export interface NussoReservationProfile {
   /** The page EMS submits this reservation type from (used as the Referer). */
   refererPath: string
   /**
-   * Required user-defined fields, with the exact single-select answer ids that
-   * were accepted. SaveReservation rejects a request that omits a required UDF,
-   * so these are sent by default (the UI may override individual answers). The
-   * `Answer` values are EMS option ids, not booleans; changing them blindly
-   * risks a rejected booking. See docs/nusso-api.md.
+   * The cart booking's RecordType. 1 for a room request, 2 for tabling -- EMS
+   * distinguishes the two on the booking row itself.
+   */
+  recordType: number
+  /**
+   * Required user-defined fields, with the answer values that were accepted.
+   * SaveReservation rejects a request that omits a required UDF, so these are
+   * sent by default (the UI may override individual answers by Id). For a
+   * single-select (FieldType 4) the `Answer` is an EMS option id, not a boolean;
+   * changing it blindly risks a rejected booking. A free-text field (FieldType 1)
+   * carries a default the UI is expected to replace -- e.g. tabling's required
+   * "describe this event" field. See docs/nusso-api.md.
    */
   requiredUdfs: NussoUdfAnswer[]
 }
@@ -109,14 +116,31 @@ export const RESERVATION_PROFILES: Record<string, NussoReservationProfile> = {
     templateId: intEnv('NUSSO_TEMPLATE_ID', 25),
     eventTypeId: intEnv('NUSSO_EVENT_TYPE_ID', 657),
     refererPath: '/RoomRequest.aspx',
+    recordType: 1,
     requiredUdfs: [
       { Id: 23, FieldType: 4, Answer: 18, Required: true, Prompt: 'Will you need access to the built-in projector or plasma television in your room(s)?' },
       { Id: 34, FieldType: 4, Answer: 31, Required: true, Prompt: 'Does anyone external to the university have any control over the nature and/or execution of this event?' },
       { Id: 32, FieldType: 4, Answer: 27, Required: true, Prompt: 'I have read the Safety & Security section of the Terms & Conditions.' },
     ],
   },
-  // TODO(tabling): add a 'tabling' profile once its template id, event type and
-  // required UDFs are captured -- tabling uses a different EMS form and fields.
+  tabling: {
+    key: 'tabling',
+    label: 'Tabling',
+    templateId: intEnv('NUSSO_TABLING_TEMPLATE_ID', 22),
+    eventTypeId: intEnv('NUSSO_TABLING_EVENT_TYPE_ID', 387),
+    // Tabling is submitted from the same RoomRequest page as a room request.
+    refererPath: '/RoomRequest.aspx',
+    recordType: 2,
+    requiredUdfs: [
+      // Id 78 is a single-select "what type of tabling event"; 99 is one captured
+      // option. Id 77 is REQUIRED FREE TEXT ("describe this event") -- the empty
+      // default here must be replaced by the form, or EMS rejects the booking.
+      { Id: 78, FieldType: 4, Answer: '99', Required: true, Prompt: 'What type of tabling event are you looking to host?' },
+      { Id: 77, FieldType: 1, Answer: '', Required: true, Prompt: 'Describe the nature of this tabling event' },
+      { Id: 34, FieldType: 4, Answer: 31, Required: true, Prompt: 'Does anyone external to the university have any control over the nature and/or execution of this event?' },
+      { Id: 32, FieldType: 4, Answer: 27, Required: true, Prompt: 'I have read the Safety & Security section of the Terms & Conditions.' },
+    ],
+  },
 }
 
 export const DEFAULT_RESERVATION_PROFILE = RESERVATION_PROFILES['room-request']

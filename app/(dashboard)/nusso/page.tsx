@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
 import { useIdentity } from '../identity-context'
 import NussoBookModal from './nusso-book-modal'
+import NussoTablingModal from './nusso-tabling-modal'
 
 /** One existing booking from /api/nusso/bookings. */
 interface NussoBooking {
@@ -57,6 +58,7 @@ export default function NussoPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [showTablingModal, setShowTablingModal] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
 
   const load = useCallback(async (forDate: string) => {
@@ -93,12 +95,20 @@ export default function NussoPage() {
           <p className="text-sm text-[#93b8d8] mt-0.5">Northeastern event spaces · nuevents.neu.edu</p>
         </div>
         {canBook && (
-          <button
-            onClick={() => setShowModal(true)}
-            className="py-2 px-4 bg-[#c8102e] hover:bg-[#a50d26] text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            Book a space
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowModal(true)}
+              className="py-2 px-4 bg-[#c8102e] hover:bg-[#a50d26] text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              Book a space
+            </button>
+            <button
+              onClick={() => setShowTablingModal(true)}
+              className="py-2 px-4 bg-[#0f2a4a] border border-[#1e5080] hover:bg-[#184073] text-[#f0f6ff] text-sm font-medium rounded-lg transition-colors"
+            >
+              Book tabling
+            </button>
+          </div>
         )}
       </div>
 
@@ -169,6 +179,18 @@ export default function NussoPage() {
           onSuccess={id => {
             setShowModal(false)
             setToast(`Reservation #${id} created. A confirmation email has been sent.`)
+            load(date)
+          }}
+        />
+      )}
+
+      {showTablingModal && (
+        <NussoTablingModal
+          initialDate={date}
+          onClose={() => setShowTablingModal(false)}
+          onSuccess={id => {
+            setShowTablingModal(false)
+            setToast(`Tabling reservation #${id} created. A confirmation email has been sent.`)
             load(date)
           }}
         />

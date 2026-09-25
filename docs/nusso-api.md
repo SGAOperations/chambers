@@ -102,19 +102,38 @@ template and event type are per-**profile** (see below).
 | SGA group | `225399` | org |
 | Eastern time zone | `61` | org |
 | room-request template | `25` | `room-request` profile |
-| event type | `657` | `room-request` profile |
+| room-request event type | `657` | `room-request` profile |
+| tabling template | `22` | `tabling` profile |
+| tabling event type | `387` | `tabling` profile |
 
 ### Reservation profiles (room request vs. tabling vs. ...)
 
 Different EMS reservation types run under a different process template, carry a
-different event type, enforce a different required-UDF set, and are submitted
-from a different page. `lib/nusso/config.ts` models each as a
-`NussoReservationProfile`, and the client (`getAvailability`, `createBooking`)
-and the API routes (`?/reservationType`) take one, defaulting to
-`room-request`. **Tabling** is a known second type that uses a different form
-and fields — add it as a `tabling` profile (its template id, event type and
-required UDFs still need to be captured) plus its own booking form; nothing
-else in the client changes.
+different event type, set a different cart `RecordType`, enforce a different
+required-UDF set, and may be submitted from a different page.
+`lib/nusso/config.ts` models each as a `NussoReservationProfile`, and the client
+(`getAvailability`, `createBooking`) and the API routes (`reservationType`) take
+one, defaulting to `room-request`. Adding a new type is a profile plus its form;
+nothing else in the client changes.
+
+Captured differences:
+
+| | room-request | tabling |
+|---|---|---|
+| templateId | 25 | 22 |
+| eventTypeId | 657 | 387 |
+| cart `RecordType` | 1 | 2 |
+| required UDFs | 23, 34, 32 | **78, 77, 34, 32** |
+
+Tabling's UDFs differ: it drops the projector question (23) and adds **78** (a
+single-select "what type of tabling event"; `99` is one captured option) and
+**77** — a **required free-text** "describe this event" field that the form must
+collect from the user (the profile ships an empty default that EMS would reject
+on its own).
+
+Every `SaveReservation` also carries `recurrences` (a "no recurrence" default
+for a single booking), `serviceOrders: []`, and `tzMinuteBias` (minutes GMT is
+ahead of Boston: -240 EDT / -300 EST). The client sends all three.
 
 ### Required user-defined fields (UDFs)
 
