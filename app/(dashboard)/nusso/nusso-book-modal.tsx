@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import type { AvailableRoom } from './types'
+import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
+import { useScopeContext, EMPTY_SCOPE, isScopeComplete } from './use-scope-context'
 
 /**
  * Confirm-and-book modal for a NUSSO room request. Opened from a search result,
@@ -30,11 +32,15 @@ function pretty(t: string): string {
 }
 
 export default function NussoBookModal({ room, date, start, end, onClose, onSuccess }: NussoBookModalProps) {
+  const scopeCtx = useScopeContext()
+  const [scope, setScope] = useState<BookingScopeValue>(EMPTY_SCOPE)
   const [eventName, setEventName] = useState('')
   const [attendance, setAttendance] = useState(String(Math.max(1, room.MinCapacity || 1)))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<{ id: number } | null>(null)
+
+  const roomName = `${room.BuildingDescription ? `${room.BuildingDescription} — ` : ''}${room.RoomCode}`
 
   const dateLabel = new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
@@ -44,6 +50,10 @@ export default function NussoBookModal({ room, date, start, end, onClose, onSucc
     const n = Number(attendance)
     if (!eventName.trim() || !Number.isFinite(n) || n < 1) {
       setError('Enter an event name and an attendance of at least 1.')
+      return
+    }
+    if (!isScopeComplete(scope)) {
+      setError('Choose which body this booking is for.')
       return
     }
     setSubmitting(true)
@@ -58,7 +68,12 @@ export default function NussoBookModal({ room, date, start, end, onClose, onSucc
           setupTypeId: room.DefaultSetupTypeId,
           attendance: n,
           eventName: eventName.trim(),
+          roomName,
           date, start, end,
+          scope: scope.scope,
+          body_id: scope.body_id,
+          division: scope.division,
+          body_ids: scope.body_ids,
         }),
       })
       const data = await res.json()
@@ -76,7 +91,7 @@ export default function NussoBookModal({ room, date, start, end, onClose, onSucc
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-[#0a1628] border border-[#1e5080] rounded-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+      <div className="bg-[#0a1628] border border-[#1e5080] rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#1e5080]">
           <h2 className="text-lg font-semibold text-[#f0f6ff]">{done ? 'Reservation created' : 'Book this room'}</h2>
           <button onClick={onClose} className="text-[#93b8d8] hover:text-[#f0f6ff] transition-colors" aria-label="Close">
@@ -107,6 +122,21 @@ export default function NussoBookModal({ room, date, start, end, onClose, onSucc
                 <input id="b-att" type="number" min={1} className={field} value={attendance} onChange={e => setAttendance(e.target.value)} />
               </div>
 
+              {/* Which body (and scope) the booking is recorded under in Chambers. */}
+              {scopeCtx.error ? (
+                <p className="text-sm text-[#c8102e]">Couldn&apos;t load your bodies. Reopen and try again.</p>
+              ) : scopeCtx.loading ? (
+                <p className="text-sm text-[#93b8d8]">Loading your bodies…</p>
+              ) : (
+                <BookingScopeSelector
+                  value={scope}
+                  onChange={setScope}
+                  ownerBodies={scopeCtx.ownerBodies}
+                  allBodies={scopeCtx.allBodies}
+                  allowedDivisions={scopeCtx.allowedDivisions}
+                />
+              )}
+
               {error && (
                 <div className="rounded-lg border border-[#c8102e]/50 bg-[#c8102e]/10 px-4 py-3">
                   <p className="text-sm text-[#f0f6ff]">{error}</p>
@@ -116,7 +146,7 @@ export default function NussoBookModal({ room, date, start, end, onClose, onSucc
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#1e5080]">
               <button onClick={onClose} className="text-sm px-4 py-2 rounded-lg text-[#93b8d8] hover:text-[#f0f6ff] transition-colors">Cancel</button>
-              <button onClick={handleBook} disabled={submitting || !eventName.trim()} className="text-sm px-4 py-2 rounded-lg bg-[#c8102e] hover:bg-[#a50d26] text-white font-medium disabled:opacity-40 transition-colors">
+              <button onClick={handleBook} disabled={submitting || !eventName.trim() || !isScopeComplete(scope)} className="text-sm px-4 py-2 rounded-lg bg-[#c8102e] hover:bg-[#a50d26] text-white font-medium disabled:opacity-40 transition-colors">
                 {submitting ? 'Booking…' : 'Book room'}
               </button>
             </div>

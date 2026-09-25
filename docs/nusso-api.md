@@ -191,3 +191,25 @@ Authorization:
 - **Booking**: admins and body Leadership only (`lib/nusso/authorize.ts`),
   because it acts under SGA's single shared EMS account and puts a real
   reservation on Northeastern's calendar.
+
+## Recording into Chambers (My Rooms)
+
+A successful NUSSO reservation is written into Chambers' own booking model so it
+appears in **My Rooms** with its EMS reservation code attached
+(`lib/nusso/record-booking.ts`). The booking modals collect a body + scope
+(`BookingScopeSelector`, fed by `/api/request`; single / divisional / multi-body,
+same rules as the request form), and `/api/nusso/book`:
+
+1. validates the scope selection and the active semester **before** the EMS call
+   (so it never makes a reservation it cannot record);
+2. makes the EMS reservation;
+3. on success, inserts a `bookings` parent (`One-Time Room` for a room request,
+   `Tabling` for tabling) scoped to the chosen body + active semester, plus the
+   child session row(s) with `reservation_code` = the EMS reservation id and
+   status `Reserved` — the exact rows My Rooms already reads.
+
+The EMS reservation is irreversible, so if step 3 fails the response still
+carries the reservation id with a `chambersBookingRecorded: false` warning rather
+than discarding the booking. No emails are sent for a NUSSO booking (unlike the
+admin create flow). Weekly/recurring NUSSO bookings are not yet supported — the
+booking flow is single-session.
