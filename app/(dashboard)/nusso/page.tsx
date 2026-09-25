@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
+import TimePicker from '../bookings/time-picker'
 import { useIdentity } from '../identity-context'
 import NussoBookModal from './nusso-book-modal'
 import NussoTablingModal from './nusso-tabling-modal'
@@ -121,13 +122,13 @@ export default function NussoPage() {
             <label className={labelCls} htmlFor="s-date">Date</label>
             <input id="s-date" type="date" className={field} value={date} onChange={e => setDate(e.target.value)} />
           </div>
-          <div>
-            <label className={labelCls} htmlFor="s-start">Start</label>
-            <input id="s-start" type="time" className={field} value={start} onChange={e => setStart(e.target.value)} />
+          <div className="w-32">
+            <span className={labelCls}>Start</span>
+            <TimePicker value={start} onChange={setStart} interval={15} />
           </div>
-          <div>
-            <label className={labelCls} htmlFor="s-end">End</label>
-            <input id="s-end" type="time" className={field} value={end} onChange={e => setEnd(e.target.value)} />
+          <div className="w-32">
+            <span className={labelCls}>End</span>
+            <TimePicker value={end} onChange={setEnd} interval={15} />
           </div>
           <div>
             <label className={labelCls} htmlFor="s-cap">Min. capacity</label>

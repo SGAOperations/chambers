@@ -372,22 +372,62 @@ export async function getAvailability(
   return data?.Availability ?? []
 }
 
+/** Normalize an EMS time string ("YYYY-MM-DD HH:mm:ss" or with a T) for comparison. */
+function normTime(s: string): string {
+  return (s || '').replace(' ', 'T').slice(0, 19)
+}
+
+/** Whether a booking's blocking span overlaps [startISO, endISO). */
+function bookingOverlaps(b: NussoExistingBooking, startISO: string, endISO: string): boolean {
+  // TimeBookingStart/End is the full occupied span (incl. setup/teardown);
+  // fall back to the event span if it is missing.
+  const bStart = normTime(b.TimeBookingStart || b.EventStart)
+  const bEnd = normTime(b.TimeBookingEnd || b.EventEnd)
+  if (!bStart || !bEnd) return false
+  return bStart < endISO && bEnd > startISO
+}
+
 /**
  * Search every room for availability in a window (the "find a room" query).
- * roomId -1 asks EMS for all rooms matching the filters; we return only those
- * actually free for the whole window (DaysAvailable > 0). `minCapacity` filters
- * to rooms that seat at least that many.
+ *
+ * GetAvailabilityList with RoomId -1 lists all rooms matching the filters, but
+ * for *requestable* rooms it includes ones that already have a booking (EMS lets
+ * you submit a request against a taken room; the browse grid just shows the
+ * conflict). DaysAvailable does not mean "free for this slot". So we cross-check
+ * the day's real bookings (GetBrowseLocationsBookings) and drop any room with a
+ * booking overlapping the requested window -- the same data the EMS grid draws.
+ * `minCapacity` keeps rooms that seat at least that many.
  */
 export async function searchAvailableRooms(
   window: NussoTimeWindow,
   profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE,
   minCapacity = 0
 ): Promise<NussoAvailability[]> {
-  const data = await serverApi<{ Availability?: NussoAvailability[] }>(
-    'GetAvailabilityList',
-    availabilityPayload(-1, window, profile, minCapacity)
+  const day = window.date.slice(0, 10)
+  const dayWindow: NussoTimeWindow = {
+    date: window.date,
+    start: `${day} 00:00:00`,
+    end: `${day} 23:59:59`,
+  }
+
+  const [availData, bookings] = await Promise.all([
+    serverApi<{ Availability?: NussoAvailability[] }>(
+      'GetAvailabilityList',
+      availabilityPayload(-1, window, profile, minCapacity)
+    ),
+    browseBookings(dayWindow),
+  ])
+
+  const winStart = normTime(window.start)
+  const winEnd = normTime(window.end)
+  const busy = new Set<number>()
+  for (const b of bookings) {
+    if (bookingOverlaps(b, winStart, winEnd)) busy.add(b.RoomId)
+  }
+
+  return (availData?.Availability ?? []).filter(
+    r => r.DaysAvailable > 0 && !busy.has(r.RoomId) && (minCapacity <= 0 || r.Capacity >= minCapacity)
   )
-  return (data?.Availability ?? []).filter(a => a.DaysAvailable > 0)
 }
 
 /**
