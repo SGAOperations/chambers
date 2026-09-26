@@ -14,7 +14,9 @@ import { useEffect, useState, useCallback, useSyncExternalStore } from 'react'
  * It also states the two answers Chambers submits on the booker's behalf. EMS
  * requires both (lib/nusso/config.ts sends them as required UDFs on every
  * profile) and neither is on any Chambers form, so a booker would otherwise
- * attest to them without ever being shown them.
+ * attest to them without ever being shown them -- which is why the Safety &
+ * Security section they are agreeing to is quoted here in full rather than
+ * merely cited.
  *
  * Acknowledgement is per browser session (sessionStorage): the first visit after
  * signing in shows it, later visits in the same session do not, and the next
@@ -43,6 +45,11 @@ function writeAck() {
 
 const RESPONSIBILITIES: { title: string; body: string }[] = [
   {
+    title: 'Book only official SGA meetings',
+    body:
+      'Browse/Book NUSSO reserves space under SGA\u2019s account, for SGA business \u2014 body, board, committee and team meetings and the events they run. It is not for personal use, for another organisation, or for holding a room \u201cjust in case\u201d.',
+  },
+  {
     title: 'Revise and cancel your own bookings',
     body:
       'A reservation made here is yours to maintain. If the plan changes, come back and revise it, or cancel it, so the space is released for someone else. Nobody will do it for you.',
@@ -69,6 +76,27 @@ const FIXED_ANSWERS: string[] = [
   'No one external to the university has any control over the nature or execution of this event.',
   'You have read the Safety & Security section of the Terms & Conditions and determined that there WILL NOT BE any safety/security concerns.',
 ]
+
+/**
+ * The Safety & Security section itself, quoted from NUSSO's Terms & Conditions.
+ *
+ * Chambers answers that section on the booker's behalf, so it has to put the
+ * section in front of them: asking someone to attest to terms they have not been
+ * shown is not an attestation. The four examples are what makes the question
+ * answerable -- "any safety or security concerns" means little until you see
+ * that cash and controversial subject matter are among them.
+ */
+const SAFETY_TERMS = {
+  heading: 'Safety and Security',
+  body:
+    'You are responsible for notifying Public Safety of any safety or security concerns that might arise from your activities on campus, including but not limited to the following:',
+  examples: [
+    'The serving of alcohol',
+    'The collecting of cash',
+    'The restriction of access to a space or venue',
+    'The presentation of potentially controversial subject matter',
+  ],
+}
 
 /** The small header control that reopens the notice. */
 export function ResponsibilitiesButton({ onClick }: { onClick: () => void }) {
@@ -152,6 +180,19 @@ export function ResponsibilityModal({ onClose }: { onClose: () => void }) {
             <ul className="text-xs text-[#93b8d8] list-disc pl-5 space-y-1">
               {FIXED_ANSWERS.map(a => <li key={a}>{a}</li>)}
             </ul>
+
+            {/* The section being agreed to, verbatim, so the second answer means something. */}
+            <div className="rounded-md border border-[#1e5080] bg-[#0a1628] px-3 py-2.5 space-y-1.5">
+              <p className="text-xs font-semibold text-[#f0f6ff]">
+                {SAFETY_TERMS.heading}
+                <span className="font-normal text-[#6a96bb]"> · from NUSSO&apos;s Terms &amp; Conditions</span>
+              </p>
+              <p className="text-xs text-[#93b8d8] leading-relaxed">{SAFETY_TERMS.body}</p>
+              <ul className="text-xs text-[#93b8d8] list-disc pl-5 space-y-0.5">
+                {SAFETY_TERMS.examples.map(e => <li key={e}>{e}</li>)}
+              </ul>
+            </div>
+
             <p className="text-sm text-[#f0f6ff] leading-relaxed">
               If either of those is not true of your event,{' '}
               <span className="font-bold text-[#ff6b7f]">STOP. Do not create a booking.</span>{' '}
