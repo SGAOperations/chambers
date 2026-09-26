@@ -79,10 +79,38 @@ the client retries once after re-authenticating when a response is not JSON.
 | `AddToCartCheck` | validate a selection before saving | `createBooking` (step 1) |
 | `GetServicesForBooking` | services/UDF context; primes server state | `createBooking` (step 2) |
 | `SaveReservation` | **create the reservation** | `createBooking` (step 3) |
+| `CancelBooking` | **release a booking** | `cancelBooking` |
 
 `SaveReservation` returns `{ "Success": true, "SuccessMessage": "<json>" }` where
 `SuccessMessage` is itself stringified JSON containing `ReservationId` and a
 `ReservationSummaryLink`.
+
+### Cancelling: reservation id vs. booking id
+
+`CancelBooking` takes both ids and is the same call for a room and for a table
+(captured from the ReservationSummary page for each):
+
+```json
+{ "reservationId": 696883, "bookingId": 1695927, "cancelReason": "1", "cancelNotes": "..." }
+```
+
+The catch is that EMS keeps **two** ids -- the reservation (`696883`, what
+Chambers stores as `reservation_code`) and the booking row inside it
+(`1695927`) -- and only the booking row can be cancelled. `SaveReservation`
+returns the first and never the second, so a cancellation has to find it.
+
+`findBookingId()` does that through `GetBrowseLocationsBookings`, whose rows
+carry an `Id` per booking: it fetches the reservation's day and matches on the
+event name Chambers booked under (`SGA - {purpose}`) together with the exact
+wall-clock window, and returns null unless exactly one row matches. **The
+correspondence between that `Id` and CancelBooking's `bookingId` is inferred,
+not captured** -- it has not been observed in a HAR -- which is the main reason
+/api/nusso/cancel treats "no booking id" as an ordinary outcome and falls back
+to a manual cancellation request rather than failing.
+
+`cancelReason` 1 is the value the UI sends; EMS's other reasons are not
+enumerated anywhere readable. The response is a small JSON body with no
+`Success` flag, so anything that is not an explicit error counts as done.
 
 ## Times
 
