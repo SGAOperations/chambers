@@ -59,6 +59,12 @@ export async function recordChambersBooking(
       created_by: user.id,
       creator_role: input.creatorRole,
       semester_id: input.semesterId,
+      // The only place this is ever set. It is what later lets the booking be
+      // cancelled straight back through EMS: we made that reservation, so we
+      // know its event name and window match what Chambers holds. A booking
+      // that merely carries a reservation_code someone typed in does not
+      // qualify -- see db/neon/0009_bookings_booked_via_nusso.sql.
+      booked_via_nusso: true,
     })
     .select()
     .single()

@@ -21,6 +21,13 @@ export interface FlatBooking {
   meetingTime: string
   status: string
   reservationCode: string | null
+  /**
+   * True only when Chambers made this booking's reservation through Browse/Book
+   * NUSSO. A reservationCode alone does not mean that -- most are typed in for
+   * reservations made outside Chambers -- and only this may gate an actual EMS
+   * cancellation.
+   */
+  bookedViaNusso: boolean
   senateType: string | null
   /** Resolved server-side across the booking's full scope (issue #19). */
   canManage: boolean
@@ -36,6 +43,7 @@ export interface FlatBooking {
 export interface ScopedBookingRow {
   id: string
   body_id: string
+  booked_via_nusso?: boolean
   scope: BookingScope
   division: Division | null
   bodies: { name: string } | null
@@ -250,6 +258,7 @@ export function flattenMyRooms(data: MyRoomsResponse, today: string): FlatBookin
           meetingTime: resolveMeetingTime(d.meeting_time, d.start_time),
           status: d.status,
           reservationCode: d.reservation_code,
+          bookedViaNusso: !!b.booked_via_nusso,
           senateType: null,
           canManage: !!b.canManage,
           scopeKey: scopeKeyOf(b),
@@ -289,6 +298,7 @@ export function flattenMyRooms(data: MyRoomsResponse, today: string): FlatBookin
         ),
         status: occ.status || w.status,
         reservationCode: occ.reservation_code || w.reservation_code,
+        bookedViaNusso: !!b.booked_via_nusso,
         senateType: occ.senate_type ?? null,
         canManage: !!b.canManage,
         scopeKey: scopeKeyOf(b),
@@ -318,6 +328,7 @@ export function flattenMyRooms(data: MyRoomsResponse, today: string): FlatBookin
         meetingTime: resolveMeetingTime(s.meeting_time, s.start_time),
         status: s.status,
         reservationCode: s.reservation_code || t.reservation_code,
+        bookedViaNusso: !!b.booked_via_nusso,
         senateType: null,
         canManage: !!b.canManage,
         scopeKey: scopeKeyOf(b),

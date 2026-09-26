@@ -105,6 +105,9 @@ export default function MyRoomsClient({
     date: string
     occurrenceId?: string
     sessionCount?: number
+    reservationCode?: string | null
+    /** True only when Chambers made this reservation through Browse/Book NUSSO. */
+    bookedViaNusso?: boolean
   } | null>(null)
   const [revisingBooking, setRevisingBooking] = useState<{
     id: string
@@ -432,6 +435,8 @@ export default function MyRoomsClient({
               date: detailBooking.date,
               occurrenceId: detailBooking.id,
               sessionCount,
+              reservationCode: detailBooking.reservationCode,
+              bookedViaNusso: detailBooking.bookedViaNusso,
             })
             setDetailBooking(null)
           }}

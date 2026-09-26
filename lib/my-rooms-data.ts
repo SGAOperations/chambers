@@ -50,7 +50,7 @@ export interface MyRoomsPayload {
 /** Thrown when one of the three booking queries fails, so callers can map it to their own error shape. */
 export class MyRoomsQueryError extends Error {}
 
-const SELECT_BASE = 'id, purpose, body_id, hidden, scope, division, bodies(name), booking_bodies(body_id, bodies(name))'
+const SELECT_BASE = 'id, purpose, body_id, hidden, scope, division, booked_via_nusso, bodies(name), booking_bodies(body_id, bodies(name))'
 
 export async function fetchMyRooms(
   supabase: Db,

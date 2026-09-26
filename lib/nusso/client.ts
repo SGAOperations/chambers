@@ -635,6 +635,85 @@ export async function createBooking(
   }
 }
 
+/**
+ * The EMS *booking* id behind a reservation, which CancelBooking needs and
+ * SaveReservation never returns.
+ *
+ * EMS keeps two ids: the reservation (what Chambers stores as reservation_code,
+ * e.g. 696883) and the booking row inside it (1695927). Only the second one can
+ * be cancelled, and the only place we can read it without the reservation's
+ * encrypted summary link is the browse calendar, which lists each booking in a
+ * window with its `Id`.
+ *
+ * So the day is fetched and the row is matched on the two things Chambers knows
+ * exactly: the event name it booked under ("SGA - ..."), and the wall-clock
+ * window. Both must line up -- a name alone would collide with a group that
+ * books the same title twice in a day, and a window alone with anyone else's
+ * booking at that hour.
+ *
+ * Returns null when nothing matches, or when more than one row does. Null is a
+ * real answer here, not an error: the caller's job is to fall back to a manual
+ * cancellation request rather than guess at which booking to release.
+ */
+export async function findBookingId(
+  date: string,
+  startTime: string,
+  endTime: string,
+  eventName: string
+): Promise<number | null> {
+  // EMS wants a window, not a day; ask for the whole day and filter locally so
+  // an off-by-a-minute boundary cannot hide the row.
+  const bookings = await browseBookings({
+    date: `${date} 00:00:00`,
+    start: `${date} 00:00:00`,
+    end: `${date} 23:59:59`,
+  })
+
+  // Chambers stores times as either "08:00" or "08:00:00" depending on the
+  // column; EMS always answers with seconds, and normTime() compares on a fixed
+  // 19-character prefix, so the seconds have to be there before it is called.
+  const withSeconds = (t: string) => (t.length === 5 ? `${t}:00` : t)
+  const wantedStart = normTime(`${date} ${withSeconds(startTime)}`)
+  const wantedEnd = normTime(`${date} ${withSeconds(endTime)}`)
+  const wantedName = eventName.trim().toLowerCase()
+
+  const matches = bookings.filter(b =>
+    (b.EventName ?? '').trim().toLowerCase() === wantedName &&
+    normTime(b.EventStart) === wantedStart &&
+    normTime(b.EventEnd) === wantedEnd
+  )
+
+  return matches.length === 1 ? matches[0].Id : null
+}
+
+/**
+ * Cancel one EMS booking. Mirrors what the ReservationSummary page posts when a
+ * booking is cancelled by hand (captured from nuevents.neu.edu): the reservation
+ * and booking ids, a cancel reason id, and free-text notes.
+ *
+ * `cancelReason` 1 is the reason the UI sends; EMS exposes others but they are
+ * not enumerated anywhere we can read, so the captured value is what we use.
+ *
+ * EMS answers 200 with a small JSON body. It does not use a `Success` flag here
+ * the way SaveReservation does, so anything that comes back without an explicit
+ * error is taken as done; an HTTP failure or a session loss throws out of
+ * serverApi() as usual.
+ */
+export async function cancelBooking(
+  reservationId: number,
+  bookingId: number,
+  cancelNotes: string
+): Promise<void> {
+  const result = await serverApi<{ Success?: boolean; ErrorMessage?: string } | null>(
+    'CancelBooking',
+    { reservationId, bookingId, cancelReason: '1', cancelNotes },
+    `${NUSSO_BASE_URL}/ReservationSummary.aspx`
+  )
+  if (result && (result.Success === false || result.ErrorMessage)) {
+    throw new NussoApiError(result.ErrorMessage || 'NUSSO refused to cancel the booking.')
+  }
+}
+
 /** Exposed for a health-check route: proves login works without booking. */
 export async function verifyNussoLogin(): Promise<boolean> {
   const session = await getSession(true)
