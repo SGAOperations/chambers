@@ -12,6 +12,12 @@ interface CancelModalProps {
     date: string
     occurrenceId?: string
     sessionCount?: number
+    /**
+     * The EMS reservation id, when this booking came from Browse/Book NUSSO.
+     * Its presence is what offers the NUSSO Cancellation action: only those
+     * bookings have a reservation of ours to release.
+     */
+    reservationCode?: string | null
   }
   onClose: () => void
   onSuccess: () => void
@@ -27,6 +33,12 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
   const [cancellationType, setCancellationType] = useState<'Cancellation' | 'Virtual'>('Cancellation')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  /** A completed NUSSO cancellation that came back with something to say. */
+  const [nussoWarning, setNussoWarning] = useState('')
+
+  // Only a booking made through Browse/Book NUSSO carries a reservation we can
+  // release, and weekly series are never created that way.
+  const canCancelInNusso = !!booking.reservationCode && booking.type !== 'Weekly Room'
 
   const handleSubmit = async () => {
     setSubmitting(true)
@@ -49,6 +61,51 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
       setError(data.error || 'Something went wrong.')
     }
     setSubmitting(false)
+  }
+
+  /**
+   * Release the reservation in NUSSO rather than asking an admin to.
+   *
+   * On success the route has already applied Cancelled (or Virtual) and the
+   * modal can close. On a partial or failed release it has filed the ordinary
+   * cancellation request as a backup and returned a warning, which is held on
+   * screen instead of closing -- the requester needs to read it, because the
+   * booking is now Pending Cancellation and somebody has to finish the job.
+   */
+  const handleNussoCancel = async () => {
+    setSubmitting(true)
+    setError('')
+    setNussoWarning('')
+    try {
+      const res = await fetch('/api/nusso/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: booking.id,
+          occurrence_id: scope === 'occurrence' ? booking.occurrenceId : null,
+          scope,
+          cancellation_type: cancellationType,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'The NUSSO cancellation was rejected.')
+        return
+      }
+      if (data.warning) {
+        // Deliberately not onSuccess() here: that closes the modal, and this is
+        // the one outcome the requester has to read before it goes away. The
+        // list is refreshed when they dismiss it instead.
+        setNussoWarning(data.warning)
+        return
+      }
+      onSuccess()
+      onClose()
+    } catch {
+      setError('Could not reach Chambers to run the NUSSO cancellation.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const showScopeSelector = isWeekly || isMultiSession
@@ -150,6 +207,13 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
 
         {error && <p className="text-[#c8102e] text-sm">{error}</p>}
 
+        {nussoWarning && (
+          <div className="bg-[#3d2200] border border-[#f97316] rounded-lg px-4 py-3">
+            <p className="text-sm font-semibold text-[#fb923c]">Automatic cancellation did not complete</p>
+            <p className="text-sm text-[#fdba74] mt-0.5">{nussoWarning}</p>
+          </div>
+        )}
+
         <div className="flex gap-2 pt-2">
           <button
             onClick={handleSubmit}
@@ -159,12 +223,38 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
             {submitting ? 'Submitting...' : 'Submit Request'}
           </button>
           <button
-            onClick={onClose}
+            onClick={() => (nussoWarning ? onSuccess() : onClose())}
             className="px-4 py-2 border border-[#1e5080] text-[#f0f6ff] text-sm rounded-lg hover:bg-[#1a4d8a] transition-colors"
           >
-            Cancel
+            {nussoWarning ? 'Close' : 'Cancel'}
           </button>
         </div>
+
+        {/*
+          Sits under Submit Request rather than beside it: the request above is
+          the normal path, and this one reaches out to Northeastern's system and
+          releases the room there and then. It is offered only on bookings that
+          came from Browse/Book NUSSO, which are the only ones with a reservation
+          of ours to release.
+        */}
+        {canCancelInNusso && (
+          <div className="border-t border-[#1e5080] pt-4 space-y-2">
+            <button
+              onClick={handleNussoCancel}
+              // Once it has fallen back, the backup request is already filed;
+              // a second press would only file a duplicate.
+              disabled={submitting || !!nussoWarning}
+              className="w-full px-4 py-2 border border-[#c8102e] text-[#f0f6ff] text-sm rounded-lg font-medium hover:bg-[#c8102e]/15 transition-colors disabled:opacity-50"
+            >
+              {submitting ? 'Cancelling in NUSSO...' : 'NUSSO Cancellation'}
+            </button>
+            <p className="text-xs text-[#6a96bb]">
+              Releases reservation #{booking.reservationCode} in NUSSO now and sets this
+              booking to {cancellationType === 'Virtual' ? 'Virtual' : 'Cancelled'}. If NUSSO
+              cannot be reached, a cancellation request is filed as a backup instead.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )
