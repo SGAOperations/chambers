@@ -6,11 +6,13 @@ import { isManagementRole } from '@/lib/admin-roles'
 
 const adminSupabase = db
 
-// Legacy advance-notice knobs.
+// Legacy advance-notice knobs, plus the NUSSO tab's own booking minimums.
 const ADVANCE_KEYS = [
   'min_days_advance_room',
   'min_days_advance_tabling',
   'min_hours_advance_spaces',
+  'nusso_min_days_advance_room',
+  'nusso_min_days_advance_tabling',
 ] as const
 
 // Pending-action thresholds (issue #38). Every value is a non-negative integer

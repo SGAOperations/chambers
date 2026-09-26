@@ -23,6 +23,11 @@ interface AuditLogEntry {
   target_date: string | null
   action: 'created' | 'updated' | 'added' | 'removed' | 'cancelled' | 'dismissed' | null
   changes: AuditChange[] | null
+  /**
+   * The author's role as it was when the entry was written. Null on entries from
+   * before the column existed, and on authors who hold no admin role.
+   */
+  admin_role: string | null
   users: { full_name: string; admin_role: string | null } | null
 }
 
@@ -35,6 +40,15 @@ interface AuditGroup {
   created_at: string
   users: AuditLogEntry['users']
   entries: AuditLogEntry[]
+}
+
+/**
+ * The role to badge a group with: what its author held when they wrote it,
+ * falling back to the role they hold now for entries written before the stamp
+ * existed. Entries in a group share an author, so the first one speaks for it.
+ */
+function groupRole(group: AuditGroup): string | null | undefined {
+  return group.entries[0]?.admin_role ?? group.users?.admin_role
 }
 
 function groupEntries(logs: AuditLogEntry[]): AuditGroup[] {
@@ -133,6 +147,8 @@ export default function AuditTab() {
   const [bookings, setBookings] = useState<BookingOption[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
+  /** The selected booking's purpose, which leads every entry line below. */
+  const [purpose, setPurpose] = useState<string | null>(null)
   const [loadingLogs, setLoadingLogs] = useState(false)
 
   useEffect(() => {
@@ -170,6 +186,7 @@ export default function AuditTab() {
   useEffect(() => {
     if (!selectedId) {
       setLogs([])
+      setPurpose(null)
       return
     }
     const fetchLogs = async () => {
@@ -177,6 +194,7 @@ export default function AuditTab() {
       const res = await fetch(`/api/administrator/audit-logs?booking_id=${selectedId}`)
       const data = await res.json()
       setLogs(data.logs || [])
+      setPurpose(typeof data.purpose === 'string' && data.purpose.trim() ? data.purpose : null)
       setLoadingLogs(false)
     }
     fetchLogs()
@@ -235,7 +253,7 @@ export default function AuditTab() {
                   <p className="text-sm font-semibold text-[#f0f6ff]">{group.users?.full_name ?? 'Unknown'}</p>
                   <p className="text-xs text-[#93b8d8]">{formatTimestamp(group.created_at)}</p>
                 </div>
-                <AdminRoleBadge role={group.users?.admin_role} />
+                <AdminRoleBadge role={groupRole(group)} />
               </div>
 
               <ul className="divide-y divide-[#1e5080]">
@@ -243,6 +261,13 @@ export default function AuditTab() {
                   <li key={entry.id} className="px-5 py-3 space-y-1.5">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <p className="text-sm text-[#f0f6ff]">
+                        {/*
+                          Every entry leads with the booking's purpose. The tab is
+                          already scoped to one booking, so this repeats -- that is
+                          the point: an entry read on its own, or copied out of
+                          here, still says which booking it belongs to.
+                        */}
+                        {purpose && <span className="font-semibold">{purpose}{' · '}</span>}
                         <span className="font-medium">{targetLabel(entry)}</span>
                         <span className="text-[#93b8d8]">
                           {' · '}

@@ -1,0 +1,173 @@
+/**
+ * Configuration for the NUSSO / EMS integration.
+ *
+ * Two kinds of value live here:
+ *
+ *   1. Credentials and the base URL, from the environment. These are secrets
+ *      (a real EMS web-user login) and are never committed -- see .env.example.
+ *
+ *   2. The org-specific EMS identifiers SGA books under, discovered while
+ *      reverse-engineering nuevents.neu.edu. These are not secret, but they are
+ *      environment-specific: they are the numeric ids EMS assigned to SGA's
+ *      group, the room-request process template, the "meeting" event type and
+ *      the Eastern time zone. They are overridable by env so a different body,
+ *      or a rebuilt EMS instance that renumbers them, does not need a code
+ *      change.
+ */
+import { NussoConfigError, type NussoUdfAnswer } from './types'
+
+/** nuevents.neu.edu, trailing slash stripped. Overridable for testing. */
+export const NUSSO_BASE_URL = (process.env.NUSSO_BASE_URL || 'https://nuevents.neu.edu').replace(/\/+$/, '')
+
+/**
+ * The EMS web-user credentials Chambers logs in as. This is the SGA operations
+ * account, entered into EMS's built-in login form (no external SSO, no MFA --
+ * see docs/nusso-api.md). Read lazily so importing this module never throws;
+ * only an actual NUSSO request requires them.
+ */
+export function getNussoCredentials(): { username: string; password: string } {
+  const username = process.env.NUSSO_USERNAME
+  const password = process.env.NUSSO_PASSWORD
+  if (!username || !password) {
+    throw new NussoConfigError(
+      'NUSSO integration is not configured: set NUSSO_USERNAME and NUSSO_PASSWORD.'
+    )
+  }
+  return { username, password }
+}
+
+/** True when the credentials are present, so routes can 503 cleanly instead of throwing. */
+export function isNussoConfigured(): boolean {
+  return !!process.env.NUSSO_USERNAME && !!process.env.NUSSO_PASSWORD
+}
+
+function intEnv(name: string, fallback: number): number {
+  const raw = process.env[name]
+  if (!raw) return fallback
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : fallback
+}
+
+/**
+ * Org-level EMS identifiers that are the same whatever kind of reservation is
+ * being made. Defaults observed on nuevents.neu.edu; overridable by env.
+ */
+export const NUSSO_ORG = {
+  /** SGA's group/organization id in EMS. */
+  groupId: intEnv('NUSSO_GROUP_ID', 225399),
+  /** EMS time-zone id for Eastern Time. */
+  timeZoneId: intEnv('NUSSO_TIME_ZONE_ID', 61),
+} as const
+
+/**
+ * The first-contact details stamped on reservations -- the group's booking
+ * contact, not a person's private data. EMS requires the Customer (group), the
+ * 1st Contact name, the 1st Contact **phone**, and the 1st Contact email; a
+ * reservation missing any of them is rejected with "complete the required
+ * fields". Name and email default to SGA operations; the phone has no safe
+ * default, so it must be set (NUSSO_CONTACT_PHONE) for booking to work.
+ */
+export const NUSSO_CONTACT = {
+  firstContactName: process.env.NUSSO_CONTACT_NAME || 'Student Government Association(STU)',
+  firstContactEmail: process.env.NUSSO_CONTACT_EMAIL || 'sgaOperations@northeastern.edu',
+  firstContactPhone: process.env.NUSSO_CONTACT_PHONE || '',
+} as const
+
+/** True once the required 1st-contact fields (incl. phone) are present. */
+export function isFirstContactConfigured(): boolean {
+  return !!NUSSO_CONTACT.firstContactName && !!NUSSO_CONTACT.firstContactEmail && !!NUSSO_CONTACT.firstContactPhone
+}
+
+/**
+ * The reservation's **requestor** (EMS "2nd contact") -- entirely OPTIONAL. When
+ * these are set the requestor is stamped on the reservation; when unset the 2nd
+ * contact is simply left blank, which EMS accepts. Not committed -- it is a
+ * person's contact info. See .env.example.
+ */
+export const NUSSO_REQUESTOR = {
+  id: intEnv('NUSSO_REQUESTOR_ID', -1),
+  name: process.env.NUSSO_REQUESTOR_NAME || '',
+  email: process.env.NUSSO_REQUESTOR_EMAIL || '',
+  phone: process.env.NUSSO_REQUESTOR_PHONE || '',
+} as const
+
+/**
+ * An EMS reservation "type". Different kinds of reservation (a room request, a
+ * tabling request, ...) run under different EMS process templates, carry a
+ * different event type, and enforce a different set of required user-defined
+ * fields -- and are submitted from a different page. A profile bundles exactly
+ * those differences so the client and the UI can be told "book this as a room
+ * request" without any of those ids leaking into the call sites.
+ *
+ * Both `room-request` and `tabling` are defined, from captured bookings. Any
+ * further type is added by writing another profile here plus its own form; the
+ * client, the booking route and SaveReservation itself do not change.
+ */
+export interface NussoReservationProfile {
+  /** Stable key used by the API and UI to select this profile. */
+  key: string
+  /** Human label for the picker/UI. */
+  label: string
+  /** EMS process/booking template id. */
+  templateId: number
+  /** Event type id sent on the reservation. */
+  eventTypeId: number
+  /** The page EMS submits this reservation type from (used as the Referer). */
+  refererPath: string
+  /**
+   * The cart booking's RecordType. 1 for a room request, 2 for tabling -- EMS
+   * distinguishes the two on the booking row itself.
+   */
+  recordType: number
+  /**
+   * Required user-defined fields, with the answer values that were accepted.
+   * SaveReservation rejects a request that omits a required UDF, so these are
+   * sent by default (the UI may override individual answers by Id). For a
+   * single-select (FieldType 4) the `Answer` is an EMS option id, not a boolean;
+   * changing it blindly risks a rejected booking. A free-text field (FieldType 1)
+   * carries a default the UI is expected to replace -- e.g. tabling's required
+   * "describe this event" field. See docs/nusso-api.md.
+   */
+  requiredUdfs: NussoUdfAnswer[]
+}
+
+export const RESERVATION_PROFILES: Record<string, NussoReservationProfile> = {
+  'room-request': {
+    key: 'room-request',
+    label: 'Room Request',
+    templateId: intEnv('NUSSO_TEMPLATE_ID', 25),
+    eventTypeId: intEnv('NUSSO_EVENT_TYPE_ID', 657),
+    refererPath: '/RoomRequest.aspx',
+    recordType: 1,
+    requiredUdfs: [
+      { Id: 23, FieldType: 4, Answer: 18, Required: true, Prompt: 'Will you need access to the built-in projector or plasma television in your room(s)?' },
+      { Id: 34, FieldType: 4, Answer: 31, Required: true, Prompt: 'Does anyone external to the university have any control over the nature and/or execution of this event?' },
+      { Id: 32, FieldType: 4, Answer: 27, Required: true, Prompt: 'I have read the Safety & Security section of the Terms & Conditions.' },
+    ],
+  },
+  tabling: {
+    key: 'tabling',
+    label: 'Tabling',
+    templateId: intEnv('NUSSO_TABLING_TEMPLATE_ID', 22),
+    eventTypeId: intEnv('NUSSO_TABLING_EVENT_TYPE_ID', 387),
+    // Tabling is submitted from the same RoomRequest page as a room request.
+    refererPath: '/RoomRequest.aspx',
+    recordType: 2,
+    requiredUdfs: [
+      // Id 78 is a single-select "what type of tabling event"; 99 is one captured
+      // option. Id 77 is REQUIRED FREE TEXT ("describe this event") -- the empty
+      // default here must be replaced by the form, or EMS rejects the booking.
+      { Id: 78, FieldType: 4, Answer: '99', Required: true, Prompt: 'What type of tabling event are you looking to host?' },
+      { Id: 77, FieldType: 1, Answer: '', Required: true, Prompt: 'Describe the nature of this tabling event' },
+      { Id: 34, FieldType: 4, Answer: 31, Required: true, Prompt: 'Does anyone external to the university have any control over the nature and/or execution of this event?' },
+      { Id: 32, FieldType: 4, Answer: 27, Required: true, Prompt: 'I have read the Safety & Security section of the Terms & Conditions.' },
+    ],
+  },
+}
+
+export const DEFAULT_RESERVATION_PROFILE = RESERVATION_PROFILES['room-request']
+
+/** Look up a profile by key, falling back to the default room request. */
+export function reservationProfile(key?: string | null): NussoReservationProfile {
+  return (key && RESERVATION_PROFILES[key]) || DEFAULT_RESERVATION_PROFILE
+}
