@@ -71,7 +71,7 @@ export default function NussoTablingModal({ room, date, start, end, onClose, onS
           roomId: room.RoomId,
           setupTypeId: room.DefaultSetupTypeId,
           attendance: n,
-          eventName: `SGA - ${eventName.trim()}`,
+          eventName: eventName.trim(),
           roomName,
           date, start, end,
           udfs: [{ Id: UDF_DESCRIPTION, FieldType: 1, Answer: description.trim(), Required: true }],

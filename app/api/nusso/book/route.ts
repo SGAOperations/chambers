@@ -95,7 +95,9 @@ export async function POST(request: Request) {
         roomId,
         setupTypeId,
         attendance,
-        eventName: eventName.trim(),
+        // Every NUSSO reservation is titled "SGA - {title}"; the raw title
+        // (without the prefix) is what Chambers records as the booking's purpose.
+        eventName: `SGA - ${eventName.trim()}`,
         window: buildWindow(date, start, end),
         udfs: Array.isArray(udfs) ? udfs : [],
       },

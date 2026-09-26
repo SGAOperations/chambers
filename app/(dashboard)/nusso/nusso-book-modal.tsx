@@ -67,7 +67,7 @@ export default function NussoBookModal({ room, date, start, end, onClose, onSucc
           roomId: room.RoomId,
           setupTypeId: room.DefaultSetupTypeId,
           attendance: n,
-          eventName: `SGA - ${eventName.trim()}`,
+          eventName: eventName.trim(),
           roomName,
           date, start, end,
           scope: scope.scope,
