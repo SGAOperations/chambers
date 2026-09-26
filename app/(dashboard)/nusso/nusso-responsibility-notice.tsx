@@ -127,7 +127,7 @@ export function ResponsibilityModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="px-6 py-5 space-y-4">
-          <p className="text-sm text-[#f0f6ff]">You are responsible for:</p>
+          <p className="text-sm text-[#f0f6ff]">You are responsible for the following:</p>
           <ul className="space-y-3">
             {RESPONSIBILITIES.map(r => (
               <li key={r.title} className="rounded-lg border border-[#1e5080] bg-[#0f2a4a] px-4 py-3">
