@@ -23,6 +23,11 @@ interface AuditLogEntry {
   target_date: string | null
   action: 'created' | 'updated' | 'added' | 'removed' | 'cancelled' | 'dismissed' | null
   changes: AuditChange[] | null
+  /**
+   * The author's role as it was when the entry was written. Null on entries from
+   * before the column existed, and on authors who hold no admin role.
+   */
+  admin_role: string | null
   users: { full_name: string; admin_role: string | null } | null
 }
 
@@ -35,6 +40,15 @@ interface AuditGroup {
   created_at: string
   users: AuditLogEntry['users']
   entries: AuditLogEntry[]
+}
+
+/**
+ * The role to badge a group with: what its author held when they wrote it,
+ * falling back to the role they hold now for entries written before the stamp
+ * existed. Entries in a group share an author, so the first one speaks for it.
+ */
+function groupRole(group: AuditGroup): string | null | undefined {
+  return group.entries[0]?.admin_role ?? group.users?.admin_role
 }
 
 function groupEntries(logs: AuditLogEntry[]): AuditGroup[] {
@@ -239,7 +253,7 @@ export default function AuditTab() {
                   <p className="text-sm font-semibold text-[#f0f6ff]">{group.users?.full_name ?? 'Unknown'}</p>
                   <p className="text-xs text-[#93b8d8]">{formatTimestamp(group.created_at)}</p>
                 </div>
-                <AdminRoleBadge role={group.users?.admin_role} />
+                <AdminRoleBadge role={groupRole(group)} />
               </div>
 
               <ul className="divide-y divide-[#1e5080]">

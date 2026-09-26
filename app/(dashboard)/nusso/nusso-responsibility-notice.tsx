@@ -11,6 +11,11 @@ import { useEffect, useState, useCallback, useSyncExternalStore } from 'react'
  * -- so the notice goes up once per sign-in rather than living in a help page
  * nobody opens.
  *
+ * It also states the two answers Chambers submits on the booker's behalf. EMS
+ * requires both (lib/nusso/config.ts sends them as required UDFs on every
+ * profile) and neither is on any Chambers form, so a booker would otherwise
+ * attest to them without ever being shown them.
+ *
  * Acknowledgement is per browser session (sessionStorage): the first visit after
  * signing in shows it, later visits in the same session do not, and the next
  * sign-in shows it again. The header's "Your responsibilities" button reopens it
@@ -52,6 +57,17 @@ const RESPONSIBILITIES: { title: string; body: string }[] = [
     body:
       'NUSSO allocates rooms and setup from the attendance you enter. Over-stating it takes space away from other groups; under-stating it can leave you in a room that does not fit.',
   },
+]
+
+/**
+ * The two required EMS answers Chambers fills in for every reservation, both
+ * hard-coded in lib/nusso/config.ts: UDF 34 (external control) answered "No",
+ * and UDF 32 (Safety & Security) answered "there WILL NOT BE any
+ * safety/security concerns". Keep this list in step with those profiles.
+ */
+const FIXED_ANSWERS: string[] = [
+  'No one external to the university has any control over the nature or execution of this event.',
+  'You have read the Safety & Security section of the Terms & Conditions and determined that there WILL NOT BE any safety/security concerns.',
 ]
 
 /** The small header control that reopens the notice. */
@@ -120,6 +136,29 @@ export function ResponsibilityModal({ onClose }: { onClose: () => void }) {
               </li>
             ))}
           </ul>
+          {/*
+            Not one of the three responsibilities above: this is an attestation
+            made in the booker's name that they never see a field for, so it gets
+            its own block and the loudest styling on the page.
+          */}
+          <div className="rounded-lg border border-[#c8102e] bg-[#c8102e]/10 px-4 py-3 space-y-2">
+            <p className="text-sm font-medium text-[#f0f6ff]">
+              Two answers are submitted for you
+            </p>
+            <p className="text-xs text-[#93b8d8]">
+              NUSSO requires both, and Chambers answers them the same way on every
+              reservation it sends:
+            </p>
+            <ul className="text-xs text-[#93b8d8] list-disc pl-5 space-y-1">
+              {FIXED_ANSWERS.map(a => <li key={a}>{a}</li>)}
+            </ul>
+            <p className="text-sm text-[#f0f6ff] leading-relaxed">
+              If either of those is not true of your event,{' '}
+              <span className="font-bold text-[#ff6b7f]">STOP. Do not create a booking.</span>{' '}
+              Contact Operational Affairs.
+            </p>
+          </div>
+
           <p className="text-xs text-[#6a96bb]">
             You can reopen this from <span className="text-[#93b8d8]">Your responsibilities</span> at the top of the page.
           </p>
