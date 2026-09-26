@@ -6,6 +6,11 @@ import TimePicker from '../bookings/time-picker'
 import { useIdentity } from '../identity-context'
 import NussoBookModal from './nusso-book-modal'
 import NussoTablingModal from './nusso-tabling-modal'
+import {
+  ResponsibilitiesButton,
+  ResponsibilityModal,
+  useResponsibilityNotice,
+} from './nusso-responsibility-notice'
 import type { AvailableRoom } from './types'
 
 type ReservationType = 'room-request' | 'tabling'
@@ -56,6 +61,10 @@ const labelCls = 'block text-xs font-medium text-[#93b8d8] mb-1'
 export default function NussoPage() {
   const { isAdmin, isLeadership } = useIdentity()
   const canBook = isAdmin || isLeadership
+
+  // What booking through NUSSO makes you responsible for: up once per sign-in,
+  // and reopenable from the header at any time.
+  const notice = useResponsibilityNotice()
 
   // Browse = view-only (no booking). Book = booking allowed, with the date picker
   // held to NUSSO's advance-notice minimum. Only bookers get Book mode.
@@ -163,86 +172,103 @@ export default function NussoPage() {
 
   return (
     <div className="flex flex-col gap-5 h-full min-h-0">
-      <div className="flex-shrink-0">
-        <h1 className="text-2xl font-bold text-[#f0f6ff]">Browse/Book NUSSO</h1>
-        <p className="text-sm text-[#93b8d8] mt-0.5">Find an available Northeastern event space · nuevents.neu.edu</p>
+      <div className="flex-shrink-0 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-[#f0f6ff]">Browse/Book NUSSO</h1>
+          <p className="text-sm text-[#93b8d8] mt-0.5">Find an available Northeastern event space · nuevents.neu.edu</p>
+        </div>
+        <ResponsibilitiesButton onClick={notice.reopen} />
       </div>
 
-      {/* Search bar */}
+      {/*
+        Search bar, in two columns: what you are booking on the left (mode, type,
+        date), and the window you want it for on the right (times, capacity,
+        search). The split keeps the row from reading as one undifferentiated
+        strip of eight controls.
+      */}
       <div className="flex-shrink-0 rounded-xl border border-[#1e5080] bg-[#0f2a4a] p-4">
-        <div className="flex flex-wrap items-center gap-3 mb-3">
-          {/* Browse / Book mode toggle. Book (with its date limits) is bookers only. */}
-          <div className="inline-flex rounded-lg border border-[#1e5080] p-0.5">
-            {(['browse', 'book'] as Mode[]).map(m => (
-              <button
-                key={m}
-                onClick={() => switchMode(m)}
-                disabled={m === 'book' && !canBook}
-                title={m === 'book' && !canBook ? 'Only Leadership and administrators can book' : undefined}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                  mode === m ? 'bg-[#c8102e] text-white' : 'text-[#93b8d8] hover:text-[#f0f6ff]'
-                }`}
-              >
-                {m === 'browse' ? 'Browse' : 'Book'}
-              </button>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
+          {/* Column one: mode, then what is being booked. */}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Browse / Book mode toggle. Book (with its date limits) is bookers only. */}
+              <div className="inline-flex rounded-lg border border-[#1e5080] p-0.5">
+                {(['browse', 'book'] as Mode[]).map(m => (
+                  <button
+                    key={m}
+                    onClick={() => switchMode(m)}
+                    disabled={m === 'book' && !canBook}
+                    title={m === 'book' && !canBook ? 'Only Leadership and administrators can book' : undefined}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      mode === m ? 'bg-[#c8102e] text-white' : 'text-[#93b8d8] hover:text-[#f0f6ff]'
+                    }`}
+                  >
+                    {m === 'browse' ? 'Browse' : 'Book'}
+                  </button>
+                ))}
+              </div>
 
-          <span className="text-xs text-[#6a96bb]">
-            {mode === 'browse' ? 'Viewing only — booking is off in Browse.' : 'Booking on — dates before the NUSSO minimum are disabled.'}
-          </span>
-        </div>
+              <span className="text-xs text-[#6a96bb]">
+                {mode === 'browse' ? 'Viewing only — booking is off in Browse.' : 'Booking on — dates before the NUSSO minimum are disabled.'}
+              </span>
+            </div>
 
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <span className={labelCls}>Type</span>
-            <div className="inline-flex rounded-lg border border-[#1e5080] p-0.5 h-[38px] items-center">
-              {(['room-request', 'tabling'] as ReservationType[]).map(t => (
-                <button
-                  key={t}
-                  onClick={() => switchType(t)}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                    reservationType === t ? 'bg-[#c8102e] text-white' : 'text-[#93b8d8] hover:text-[#f0f6ff]'
-                  }`}
-                >
-                  {t === 'room-request' ? 'Room request' : 'Tabling'}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <span className={labelCls}>Type</span>
+                <div className="inline-flex rounded-lg border border-[#1e5080] p-0.5 h-[38px] items-center">
+                  {(['room-request', 'tabling'] as ReservationType[]).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => switchType(t)}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        reservationType === t ? 'bg-[#c8102e] text-white' : 'text-[#93b8d8] hover:text-[#f0f6ff]'
+                      }`}
+                    >
+                      {t === 'room-request' ? 'Room request' : 'Tabling'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className={labelCls} htmlFor="s-date">Date</label>
+                <input
+                  id="s-date"
+                  type="date"
+                  className={field}
+                  value={date}
+                  min={minBookDate}
+                  onChange={e => setDate(clampToBookable(e.target.value, mode, reservationType, nussoMinDaysRoom, nussoMinDaysTabling))}
+                />
+              </div>
             </div>
           </div>
-          <div>
-            <label className={labelCls} htmlFor="s-date">Date</label>
-            <input
-              id="s-date"
-              type="date"
-              className={field}
-              value={date}
-              min={minBookDate}
-              onChange={e => setDate(clampToBookable(e.target.value, mode, reservationType, nussoMinDaysRoom, nussoMinDaysTabling))}
-            />
-          </div>
-          <div className="w-32">
-            <span className={labelCls}>Start</span>
-            <TimePicker value={start} onChange={setStart} interval={15} />
-          </div>
-          <div className="w-32">
-            <span className={labelCls}>End</span>
-            <TimePicker value={end} onChange={setEnd} interval={15} />
-          </div>
-          {/* Tabling spaces are all capacity 1, so a capacity filter is meaningless there. */}
-          {reservationType === 'room-request' && (
-            <div>
-              <label className={labelCls} htmlFor="s-cap">Min. capacity</label>
-              <input id="s-cap" type="number" min={0} placeholder="any" className={`${field} w-24`} value={capacity} onChange={e => setCapacity(e.target.value)} />
+
+          {/* Column two: the window to search for, and the search itself. */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="w-32">
+              <span className={labelCls}>Start</span>
+              <TimePicker value={start} onChange={setStart} interval={15} />
             </div>
-          )}
-          <button
-            onClick={search}
-            disabled={loading || !windowValid}
-            className="py-2 px-5 bg-[#c8102e] hover:bg-[#a50d26] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40"
-          >
-            {loading ? 'Searching…' : 'Find rooms'}
-          </button>
+            <div className="w-32">
+              <span className={labelCls}>End</span>
+              <TimePicker value={end} onChange={setEnd} interval={15} />
+            </div>
+            {/* Tabling spaces are all capacity 1, so a capacity filter is meaningless there. */}
+            {reservationType === 'room-request' && (
+              <div>
+                <label className={labelCls} htmlFor="s-cap">Min. capacity</label>
+                <input id="s-cap" type="number" min={0} placeholder="any" className={`${field} w-24`} value={capacity} onChange={e => setCapacity(e.target.value)} />
+              </div>
+            )}
+            <button
+              onClick={search}
+              disabled={loading || !windowValid}
+              className="py-2 px-5 bg-[#c8102e] hover:bg-[#a50d26] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40"
+            >
+              {loading ? 'Searching…' : 'Find rooms'}
+            </button>
+          </div>
         </div>
         {!windowValid && <p className="text-xs text-[#c8102e] mt-2">End time must be after start time.</p>}
       </div>
@@ -322,6 +348,8 @@ export default function NussoPage() {
           onSuccess={() => { setBookRoom(null); search() }}
         />
       )}
+
+      {notice.open && <ResponsibilityModal onClose={notice.close} />}
     </div>
   )
 }

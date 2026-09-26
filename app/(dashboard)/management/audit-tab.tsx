@@ -133,6 +133,8 @@ export default function AuditTab() {
   const [bookings, setBookings] = useState<BookingOption[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
+  /** The selected booking's purpose, which leads every entry line below. */
+  const [purpose, setPurpose] = useState<string | null>(null)
   const [loadingLogs, setLoadingLogs] = useState(false)
 
   useEffect(() => {
@@ -170,6 +172,7 @@ export default function AuditTab() {
   useEffect(() => {
     if (!selectedId) {
       setLogs([])
+      setPurpose(null)
       return
     }
     const fetchLogs = async () => {
@@ -177,6 +180,7 @@ export default function AuditTab() {
       const res = await fetch(`/api/administrator/audit-logs?booking_id=${selectedId}`)
       const data = await res.json()
       setLogs(data.logs || [])
+      setPurpose(typeof data.purpose === 'string' && data.purpose.trim() ? data.purpose : null)
       setLoadingLogs(false)
     }
     fetchLogs()
@@ -243,6 +247,13 @@ export default function AuditTab() {
                   <li key={entry.id} className="px-5 py-3 space-y-1.5">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <p className="text-sm text-[#f0f6ff]">
+                        {/*
+                          Every entry leads with the booking's purpose. The tab is
+                          already scoped to one booking, so this repeats -- that is
+                          the point: an entry read on its own, or copied out of
+                          here, still says which booking it belongs to.
+                        */}
+                        {purpose && <span className="font-semibold">{purpose}{' · '}</span>}
                         <span className="font-medium">{targetLabel(entry)}</span>
                         <span className="text-[#93b8d8]">
                           {' · '}
