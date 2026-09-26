@@ -36,8 +36,11 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
   /** A completed NUSSO cancellation that came back with something to say. */
   const [nussoWarning, setNussoWarning] = useState('')
 
-  // Only a booking made through Browse/Book NUSSO carries a reservation we can
-  // release, and weekly series are never created that way.
+  // Whether this booking is one of ours in NUSSO. When it is, releasing the
+  // reservation IS the cancellation and there is no second option to pick: the
+  // manual request still exists, but only as the failsafe the route falls back
+  // to on its own. When it is not, nothing here changes -- the booking follows
+  // the ordinary request-an-admin path exactly as it always has.
   const canCancelInNusso = !!booking.reservationCode && booking.type !== 'Weekly Room'
 
   const handleSubmit = async () => {
@@ -200,7 +203,10 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
             <p className="text-sm font-semibold text-[#fb923c]">Warning</p>
             <p className="text-sm text-[#fdba74] mt-0.5">
               {seriesWarning}
-              {' '}An admin may reach out to confirm the cancellation.
+              {' '}
+              {canCancelInNusso
+                ? 'Each one held in NUSSO is released as part of this.'
+                : 'An admin may reach out to confirm the cancellation.'}
             </p>
           </div>
         )}
@@ -215,12 +221,23 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
         )}
 
         <div className="flex gap-2 pt-2">
+          {/*
+            One action, whichever path this booking takes. On a NUSSO booking it
+            releases the reservation and settles the status; on any other it
+            files the request an admin picks up. The manual request is never a
+            choice the requester has to make -- on a NUSSO booking the route
+            files it for them if the release does not go through.
+          */}
           <button
-            onClick={handleSubmit}
-            disabled={submitting}
+            onClick={canCancelInNusso ? handleNussoCancel : handleSubmit}
+            // After a fallback the backup request is already filed; pressing
+            // again would only file a duplicate.
+            disabled={submitting || !!nussoWarning}
             className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] hover:scale-105 text-white text-sm rounded-lg font-medium transition-all disabled:opacity-50"
           >
-            {submitting ? 'Submitting...' : 'Submit Request'}
+            {submitting
+              ? (canCancelInNusso ? 'Cancelling in NUSSO...' : 'Submitting...')
+              : (canCancelInNusso ? 'Submit Cancellation' : 'Submit Request')}
           </button>
           <button
             onClick={() => (nussoWarning ? onSuccess() : onClose())}
@@ -230,31 +247,14 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
           </button>
         </div>
 
-        {/*
-          Sits under Submit Request rather than beside it: the request above is
-          the normal path, and this one reaches out to Northeastern's system and
-          releases the room there and then. It is offered only on bookings that
-          came from Browse/Book NUSSO, which are the only ones with a reservation
-          of ours to release.
-        */}
-        {canCancelInNusso && (
-          <div className="border-t border-[#1e5080] pt-4 space-y-2">
-            <button
-              onClick={handleNussoCancel}
-              // Once it has fallen back, the backup request is already filed;
-              // a second press would only file a duplicate.
-              disabled={submitting || !!nussoWarning}
-              className="w-full px-4 py-2 border border-[#c8102e] text-[#f0f6ff] text-sm rounded-lg font-medium hover:bg-[#c8102e]/15 transition-colors disabled:opacity-50"
-            >
-              {submitting ? 'Cancelling in NUSSO...' : 'NUSSO Cancellation'}
-            </button>
-            <p className="text-xs text-[#6a96bb]">
-              Releases reservation #{booking.reservationCode} in NUSSO now and sets this
-              booking to {cancellationType === 'Virtual' ? 'Virtual' : 'Cancelled'}. If NUSSO
-              cannot be reached, a cancellation request is filed as a backup instead.
-            </p>
-          </div>
+        {canCancelInNusso && !nussoWarning && (
+          <p className="text-xs text-[#6a96bb]">
+            Releases reservation #{booking.reservationCode} in NUSSO and sets this
+            booking to {cancellationType === 'Virtual' ? 'Virtual' : 'Cancelled'}. If NUSSO
+            cannot be reached, a cancellation request is filed for Operational Affairs instead.
+          </p>
         )}
+
       </div>
     </div>
   )

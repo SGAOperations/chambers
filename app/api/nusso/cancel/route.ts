@@ -89,10 +89,14 @@ export async function POST(request: Request) {
     )
   }
 
+  // Every session in scope that is not already settled, including any without a
+  // reservation code: those cannot be released, but they still have to be
+  // cancelled, so they go down the fallback path rather than being skipped. That
+  // matters now that this is the only cancel action offered on a NUSSO booking.
   const targets = await loadTargets(bookingType, bookingId, occurrenceId)
   if (!targets.length) {
     return NextResponse.json(
-      { error: 'No NUSSO reservation is recorded on this booking, so there is nothing to release.' },
+      { error: 'Nothing to cancel: these sessions are already cancelled or virtual.' },
       { status: 400 }
     )
   }
@@ -139,21 +143,53 @@ export async function POST(request: Request) {
     })
   }
 
-  // Anything EMS would not release becomes the manual request it would have been
-  // without this route, so nothing is quietly dropped.
+  // Anything not released becomes the manual request it would have been without
+  // this route, so nothing is quietly dropped.
   const fallbackError = await placeFallbackRequest(
     bookingType, bookingId, caller.user.id, scope, occurrenceId, type, failed
   )
+
+  // Two different things end up in `failed`, and only one of them is a fault.
+  // A session with no reservation code was never ours to release -- an ordinary
+  // Chambers booking sitting in the same series -- and it goes down the ordinary
+  // path, which is not news. A session we tried and could not release is.
+  const refused = failed.filter(o => o.target.reservationCode)
 
   return NextResponse.json({
     released: outcomes.length - failed.length,
     failed: failed.length,
     status: statusForCancellation(type),
-    warning: fallbackError
-      ? `NUSSO could not be reached (${failed[0].reason}), and the backup cancellation request could not be filed either (${fallbackError}). Contact Operational Affairs directly.`
-      : `NUSSO did not release ${failed.length === outcomes.length ? 'the reservation' : `${failed.length} of ${outcomes.length} sessions`} automatically: ${failed[0].reason} ` +
-        'A cancellation request has been filed as a backup and is now Pending Cancellation for Operational Affairs to complete by hand.',
+    warning: buildWarning(outcomes.length, refused, fallbackError),
   })
+}
+
+/**
+ * What to tell the requester, or null when there is nothing worth saying.
+ *
+ * Sessions that were never NUSSO reservations are deliberately silent on their
+ * own: they went down the ordinary cancellation path, which is exactly what
+ * would have happened without this route.
+ */
+function buildWarning(
+  total: number,
+  refused: NussoCancelOutcome[],
+  fallbackError: string | null
+): string | null {
+  if (fallbackError) {
+    return refused.length
+      ? `NUSSO did not release the reservation (${refused[0].reason}), and the backup cancellation request could not be filed either (${fallbackError}). Contact Operational Affairs directly.`
+      : `The cancellation request could not be filed (${fallbackError}). Contact Operational Affairs directly.`
+  }
+
+  // Only non-NUSSO sessions fell back: the ordinary path working, not a warning.
+  if (!refused.length) return null
+
+  const scale = refused.length === total ? 'the reservation' : `${refused.length} of ${total} sessions`
+  return (
+    `NUSSO did not release ${scale} automatically: ${refused[0].reason} ` +
+    'A cancellation request has been filed as a backup and is now Pending Cancellation ' +
+    'for Operational Affairs to complete by hand.'
+  )
 }
 
 /** The session rows to release, each with the reservation code recorded on it. */
@@ -170,7 +206,7 @@ async function loadTargets(
     if (occurrenceId) query = query.eq('id', occurrenceId)
     const { data } = await query
     return (data ?? [])
-      .filter(r => r.reservation_code && !isSettled(r.status))
+      .filter(r => !isSettled(r.status))
       .map(r => ({
         table: 'one_time_room_bookings' as const,
         id: r.id,
@@ -192,7 +228,7 @@ async function loadTargets(
   if (occurrenceId) query = query.eq('id', occurrenceId)
   const { data } = await query
   return (data ?? [])
-    .filter(r => r.reservation_code && !isSettled(r.status))
+    .filter(r => !isSettled(r.status))
     .map(r => ({
       table: 'tabling_sessions' as const,
       id: r.id,

@@ -34,8 +34,11 @@ export interface NussoCancelTarget {
   /** 'one_time_room_bookings' | 'tabling_sessions' -- the row's own table. */
   table: 'one_time_room_bookings' | 'tabling_sessions'
   id: string
-  /** EMS reservation id, as stored on the row. */
-  reservationCode: string
+  /**
+   * EMS reservation id, as stored on the row. Null on a session that was not
+   * booked through NUSSO -- it still has to be cancelled, just not by us.
+   */
+  reservationCode: string | null
   date: string
   startTime: string
   endTime: string
@@ -70,6 +73,13 @@ export async function releaseOne(
   eventName: string,
   cancelNotes: string
 ): Promise<NussoCancelOutcome> {
+  // A session with no reservation code was never booked through NUSSO; one with
+  // a code that is not a number is a code we cannot use. Neither is releasable,
+  // and both must still reach the caller as an outcome so they get the manual
+  // request rather than being quietly left alone.
+  if (!target.reservationCode) {
+    return { target, released: false, reason: 'No NUSSO reservation is recorded on this session.' }
+  }
   const reservationId = Number(target.reservationCode)
   if (!Number.isFinite(reservationId)) {
     return { target, released: false, reason: 'The stored reservation code is not a NUSSO reservation id.' }
