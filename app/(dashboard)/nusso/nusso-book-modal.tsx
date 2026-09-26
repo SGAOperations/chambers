@@ -67,7 +67,7 @@ export default function NussoBookModal({ room, date, start, end, onClose, onSucc
           roomId: room.RoomId,
           setupTypeId: room.DefaultSetupTypeId,
           attendance: n,
-          eventName: eventName.trim(),
+          eventName: `SGA - ${eventName.trim()}`,
           roomName,
           date, start, end,
           scope: scope.scope,
@@ -115,7 +115,10 @@ export default function NussoBookModal({ room, date, start, end, onClose, onSucc
 
               <div>
                 <label className={label} htmlFor="b-event">Event name</label>
-                <input id="b-event" className={field} value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. SGA Senate Meeting" maxLength={100} autoFocus />
+                <div className="flex items-center">
+                  <span className="text-sm text-[#93b8d8] bg-[#0a1628] border border-r-0 border-[#1e5080] rounded-l-lg px-3 py-2 whitespace-nowrap">SGA -</span>
+                  <input id="b-event" className={`${field} rounded-l-none`} value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. Senate Meeting" maxLength={90} autoFocus />
+                </div>
               </div>
               <div>
                 <label className={label} htmlFor="b-att">Expected attendance</label>

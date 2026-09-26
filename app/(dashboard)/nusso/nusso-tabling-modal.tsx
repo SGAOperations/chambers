@@ -71,7 +71,7 @@ export default function NussoTablingModal({ room, date, start, end, onClose, onS
           roomId: room.RoomId,
           setupTypeId: room.DefaultSetupTypeId,
           attendance: n,
-          eventName: eventName.trim(),
+          eventName: `SGA - ${eventName.trim()}`,
           roomName,
           date, start, end,
           udfs: [{ Id: UDF_DESCRIPTION, FieldType: 1, Answer: description.trim(), Required: true }],
@@ -120,7 +120,10 @@ export default function NussoTablingModal({ room, date, start, end, onClose, onS
 
               <div>
                 <label className={label} htmlFor="t-event">Event name</label>
-                <input id="t-event" className={field} value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. SGA Membership Drive" maxLength={100} autoFocus />
+                <div className="flex items-center">
+                  <span className="text-sm text-[#93b8d8] bg-[#0a1628] border border-r-0 border-[#1e5080] rounded-l-lg px-3 py-2 whitespace-nowrap">SGA -</span>
+                  <input id="t-event" className={`${field} rounded-l-none`} value={eventName} onChange={e => setEventName(e.target.value)} placeholder="e.g. Membership Drive" maxLength={90} autoFocus />
+                </div>
               </div>
               <div>
                 <label className={label} htmlFor="t-desc">Describe the nature of this tabling event</label>

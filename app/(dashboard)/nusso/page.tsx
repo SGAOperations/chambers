@@ -188,27 +188,28 @@ export default function NussoPage() {
             ))}
           </div>
 
-          {/* Reservation type toggle */}
-          <div className="inline-flex rounded-lg border border-[#1e5080] p-0.5">
-            {(['room-request', 'tabling'] as ReservationType[]).map(t => (
-              <button
-                key={t}
-                onClick={() => switchType(t)}
-                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                  reservationType === t ? 'bg-[#c8102e] text-white' : 'text-[#93b8d8] hover:text-[#f0f6ff]'
-                }`}
-              >
-                {t === 'room-request' ? 'Room request' : 'Tabling'}
-              </button>
-            ))}
-          </div>
-
           <span className="text-xs text-[#6a96bb]">
             {mode === 'browse' ? 'Viewing only — booking is off in Browse.' : 'Booking on — dates before the NUSSO minimum are disabled.'}
           </span>
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <span className={labelCls}>Type</span>
+            <div className="inline-flex rounded-lg border border-[#1e5080] p-0.5 h-[38px] items-center">
+              {(['room-request', 'tabling'] as ReservationType[]).map(t => (
+                <button
+                  key={t}
+                  onClick={() => switchType(t)}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    reservationType === t ? 'bg-[#c8102e] text-white' : 'text-[#93b8d8] hover:text-[#f0f6ff]'
+                  }`}
+                >
+                  {t === 'room-request' ? 'Room request' : 'Tabling'}
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <label className={labelCls} htmlFor="s-date">Date</label>
             <input
