@@ -423,7 +423,7 @@ export default function DashboardShell({
               <span className="text-[#c8102e] font-bold text-xl tracking-tight">Chambers</span>
             </div>
             <p className="text-slate-500 text-xs mt-0.5">NU Student Gov. Association</p>
-            <p className="text-slate-600 text-xs mt-1">v1.17.0</p>
+            <p className="text-slate-600 text-xs mt-1">v2.0.0</p>
             {userName && (
               <div className="flex items-start justify-between mt-2">
                 <p className="text-slate-500 text-xs italic">{getGreeting()},<br />{userName}</p>
@@ -445,6 +445,7 @@ export default function DashboardShell({
           <div className="flex flex-col gap-1 px-3 py-4 flex-1">
             {navLink('/my-rooms', 'My Rooms')}
             {navLink('/sga-spaces', 'SGA Spaces')}
+            {navLink('/nusso', 'Browse/Book NUSSO')}
             {(isLeadership || isAdmin) && navLink('/request', 'Request a Booking')}
             {(isAdmin || isIEMS) && navLink('/events', 'Events')}
             {isAdmin && navLink('/bookings', 'Bookings')}
