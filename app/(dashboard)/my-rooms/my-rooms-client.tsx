@@ -105,8 +105,9 @@ export default function MyRoomsClient({
     date: string
     occurrenceId?: string
     sessionCount?: number
-    /** Present on bookings made through Browse/Book NUSSO; offers NUSSO Cancellation. */
     reservationCode?: string | null
+    /** True only when Chambers made this reservation through Browse/Book NUSSO. */
+    bookedViaNusso?: boolean
   } | null>(null)
   const [revisingBooking, setRevisingBooking] = useState<{
     id: string
@@ -435,6 +436,7 @@ export default function MyRoomsClient({
               occurrenceId: detailBooking.id,
               sessionCount,
               reservationCode: detailBooking.reservationCode,
+              bookedViaNusso: detailBooking.bookedViaNusso,
             })
             setDetailBooking(null)
           }}

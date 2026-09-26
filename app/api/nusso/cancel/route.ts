@@ -89,6 +89,31 @@ export async function POST(request: Request) {
     )
   }
 
+  // The lock that matters. The UI hides the action for a booking Chambers did
+  // not make, but a reservation_code is not permission and this route must not
+  // rely on the client to know that. Most codes in Chambers were entered by hand
+  // for reservations made outside it -- over the phone, or in NUSSO's own web UI
+  // -- whose EMS event name and window are not the ones recorded here. Releasing
+  // one would cancel something Chambers never made and does not model; at worst
+  // a weekly series, whose single reservation stands for a body's entire
+  // semester of meetings. Only a booking this codebase created in EMS may be
+  // released by it, so provenance is checked before anything else is read.
+  //
+  // The purpose comes along in the same read: it is what EMS titled the
+  // reservation with, so the booking-id lookup needs it later.
+  const { data: bookingRow } = await db
+    .from('bookings').select('purpose, booked_via_nusso').eq('id', bookingId).maybeSingle()
+
+  if (!bookingRow?.booked_via_nusso) {
+    return NextResponse.json(
+      {
+        error:
+          'This booking was not made through Browse/Book NUSSO, so Chambers cannot cancel it there. Submit a cancellation request instead.',
+      },
+      { status: 400 }
+    )
+  }
+
   // Every session in scope that is not already settled, including any without a
   // reservation code: those cannot be released, but they still have to be
   // cancelled, so they go down the fallback path rather than being skipped. That
@@ -109,11 +134,7 @@ export async function POST(request: Request) {
       ? `Event going virtual; room released via Chambers by ${who}.`
       : `Cancelled via Chambers by ${who}.`
 
-  // The purpose is what EMS titled the reservation with, so the booking-id
-  // lookup needs it; the scope guard does not carry it.
-  const { data: bookingRow } = await db
-    .from('bookings').select('purpose').eq('id', bookingId).maybeSingle()
-  const eventName = emsEventName(bookingRow?.purpose ?? '')
+  const eventName = emsEventName(bookingRow.purpose ?? '')
   const outcomes: NussoCancelOutcome[] = []
   for (const target of targets) {
     outcomes.push(await releaseOne(target, eventName, notes))

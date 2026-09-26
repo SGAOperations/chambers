@@ -18,6 +18,11 @@ interface CancelModalProps {
      * bookings have a reservation of ours to release.
      */
     reservationCode?: string | null
+    /**
+     * True only when Chambers created this reservation through Browse/Book
+     * NUSSO. This, not reservationCode, is what may enable an EMS cancellation.
+     */
+    bookedViaNusso?: boolean
   }
   onClose: () => void
   onSuccess: () => void
@@ -36,12 +41,22 @@ export default function CancelModal({ booking, onClose, onSuccess }: CancelModal
   /** A completed NUSSO cancellation that came back with something to say. */
   const [nussoWarning, setNussoWarning] = useState('')
 
-  // Whether this booking is one of ours in NUSSO. When it is, releasing the
-  // reservation IS the cancellation and there is no second option to pick: the
-  // manual request still exists, but only as the failsafe the route falls back
-  // to on its own. When it is not, nothing here changes -- the booking follows
-  // the ordinary request-an-admin path exactly as it always has.
-  const canCancelInNusso = !!booking.reservationCode && booking.type !== 'Weekly Room'
+  // Whether this booking is one Chambers itself made in NUSSO. When it is,
+  // releasing the reservation IS the cancellation and there is no second option
+  // to pick: the manual request still exists, but only as the failsafe the route
+  // falls back to on its own. When it is not, nothing here changes -- the
+  // booking follows the ordinary request-an-admin path exactly as it always has.
+  //
+  // The gate is provenance, deliberately, and not the presence of a
+  // reservationCode. Most codes in Chambers were typed in by an admin recording
+  // a reservation Operational Affairs made outside Chambers: a weekly series
+  // whose one code stands for a whole semester of meetings, a room booked over
+  // the phone. Releasing one of those would cancel something Chambers never
+  // made and does not model -- a semester of a body's meetings gone on a single
+  // click. Weekly is excluded on top of that, belt and braces, because no
+  // weekly booking is ever created through Browse/Book.
+  const canCancelInNusso =
+    !!booking.bookedViaNusso && !!booking.reservationCode && booking.type !== 'Weekly Room'
 
   const handleSubmit = async () => {
     setSubmitting(true)
