@@ -23,10 +23,15 @@ function nextDay(date: string): string {
 }
 
 /**
- * One VCALENDAR holding every session, so one email puts a whole series on a
- * calendar rather than sending a message per week.
+ * One VCALENDAR holding every session passed in.
  *
  * `sequence` is omitted for a first invite, which calendars read as 0.
+ *
+ * Outlook's METHOD:REQUEST handling only reads the first VEVENT of a file
+ * (issue #184) -- a REQUEST is meant to describe one instance, not a bundle of
+ * unrelated ones. roomIcsAttachments below is what puts a whole weekly series
+ * on a calendar in one email without hitting that: it gives each session its
+ * own single-VEVENT file rather than passing several sessions here.
  */
 export function buildRoomIcs(
   method: 'REQUEST' | 'CANCEL',
@@ -67,32 +72,38 @@ export function buildRoomIcs(
   return buildCalendar(method, blocks)
 }
 
+/** A session's UID with the domain dropped, for a filename unique to it. */
+function attachmentId(uid: string): string {
+  return uid.replace(/@.*$/, '')
+}
+
 /**
  * The attachments an email carries for one audience's invite, ready to spread
- * into a Resend send. Both files share a sequence, so a calendar sees the
- * additions and the removals as one revision.
+ * into a Resend send. Every session shares the one sequence passed in, so a
+ * calendar sees the additions and the removals of a single save as one
+ * revision.
  *
- * REQUEST and CANCEL cannot share a file: METHOD is a property of the calendar,
- * not of the event.
+ * Each session is its own single-VEVENT file rather than the request sessions
+ * sharing one file and the cancel sessions another: Outlook only reads the
+ * first VEVENT of a METHOD:REQUEST file (issue #184), so a weekly series'
+ * later sessions never reached a calendar when they rode along in one file
+ * with the first. Separate attachments in the same email still land in a
+ * single message.
  */
 export function roomIcsAttachments(
   plan: { request: RoomSession[]; cancel: RoomSession[] },
   sequence: number
 ): { filename: string; content: Buffer; contentType: string }[] {
-  const attachments = []
-  if (plan.request.length) {
-    attachments.push({
-      filename: 'booking.ics',
-      content: buildRoomIcs('REQUEST', plan.request, sequence),
+  return [
+    ...plan.request.map(s => ({
+      filename: `booking-${attachmentId(s.uid)}.ics`,
+      content: buildRoomIcs('REQUEST', [s], sequence),
       contentType: 'text/calendar; method=REQUEST',
-    })
-  }
-  if (plan.cancel.length) {
-    attachments.push({
-      filename: 'cancel.ics',
-      content: buildRoomIcs('CANCEL', plan.cancel, sequence),
+    })),
+    ...plan.cancel.map(s => ({
+      filename: `cancel-${attachmentId(s.uid)}.ics`,
+      content: buildRoomIcs('CANCEL', [s], sequence),
       contentType: 'text/calendar; method=CANCEL',
-    })
-  }
-  return attachments
+    })),
+  ]
 }
