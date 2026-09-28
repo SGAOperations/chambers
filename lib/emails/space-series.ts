@@ -1,7 +1,7 @@
 import { emailFrom, resend } from '@/lib/resend'
 import { sanitize, buildEmailHtml } from './utils'
 import {
-  buildSpaceIcs,
+  buildSpaceIcsAttachments,
   formatSpaceShortDate,
   formatSpaceTime,
   icsSequenceNow,
@@ -20,9 +20,11 @@ import {
  *
  * One email per series action rather than one per week: a semester-long series
  * would otherwise land a dozen or more near-identical messages at once. Each
- * carries a single calendar file holding every affected week, and each week's
- * UID is the one its booking row would get on its own -- so cancelling one week
- * later, through the ordinary cancellation email, removes just that week.
+ * affected week is its own calendar attachment on that one email (issue #184
+ * -- Outlook only reads the first VEVENT of a file that holds several), and
+ * each week's UID is the one its booking row would get on its own -- so
+ * cancelling one week later, through the ordinary cancellation email, removes
+ * just that week.
  */
 
 /** One week of a series, as the routes pass it in. */
@@ -156,11 +158,7 @@ export async function sendSpaceSeriesConfirmedEmail(params: SeriesBase & {
     subject: `Chambers — ${Cadence(params)} SGA Space Booking Confirmed: ${sanitize(params.title)}`,
     text,
     html,
-    attachments: [{
-      filename: 'booking.ics',
-      content: buildSpaceIcs('REQUEST', toEvents(params, weeks)),
-      contentType: 'text/calendar; method=REQUEST',
-    }],
+    attachments: buildSpaceIcsAttachments('REQUEST', toEvents(params, weeks)),
   })
 }
 
@@ -192,21 +190,10 @@ export async function sendSpaceSeriesUpdatedEmail(params: SeriesBase & {
   // One sequence for both files, so a calendar sees the update and the removal
   // as the same revision.
   const sequence = icsSequenceNow()
-  const attachments = []
-  if (weeks.length) {
-    attachments.push({
-      filename: 'booking.ics',
-      content: buildSpaceIcs('REQUEST', toEvents(params, weeks), sequence),
-      contentType: 'text/calendar; method=REQUEST',
-    })
-  }
-  if (removed.length) {
-    attachments.push({
-      filename: 'cancel.ics',
-      content: buildSpaceIcs('CANCEL', toEvents(params, removed), sequence),
-      contentType: 'text/calendar; method=CANCEL',
-    })
-  }
+  const attachments = [
+    ...(weeks.length ? buildSpaceIcsAttachments('REQUEST', toEvents(params, weeks), sequence) : []),
+    ...(removed.length ? buildSpaceIcsAttachments('CANCEL', toEvents(params, removed), sequence) : []),
+  ]
 
   await resend.emails.send({
     from: emailFrom(),
@@ -242,10 +229,6 @@ export async function sendSpaceSeriesCancelledEmail(params: SeriesBase & {
     subject: `Chambers — ${Cadence(params)} SGA Space Booking Cancelled: ${sanitize(params.title)}`,
     text,
     html,
-    attachments: [{
-      filename: 'cancel.ics',
-      content: buildSpaceIcs('CANCEL', toEvents(params, weeks), icsSequenceNow()),
-      contentType: 'text/calendar; method=CANCEL',
-    }],
+    attachments: buildSpaceIcsAttachments('CANCEL', toEvents(params, weeks), icsSequenceNow()),
   })
 }

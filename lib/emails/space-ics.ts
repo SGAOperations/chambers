@@ -38,10 +38,15 @@ export function spaceIcsUid(bookingId: string): string {
 }
 
 /**
- * One VCALENDAR holding every event. A series goes out as a single file with a
- * VEVENT per week, so one email puts the whole series on a calendar.
+ * One VCALENDAR holding every event passed in.
  *
  * `sequence` is omitted for a first invite, which calendars read as 0.
+ *
+ * Outlook's METHOD:REQUEST handling only reads the first VEVENT of a file
+ * (issue #184) -- a REQUEST is meant to describe one instance, not a bundle of
+ * unrelated ones. Callers that need to put several weeks of a series on a
+ * calendar in one email use buildSpaceIcsAttachments below, which gives each
+ * week its own single-VEVENT file, rather than passing several events here.
  */
 export function buildSpaceIcs(
   method: 'REQUEST' | 'CANCEL',
@@ -74,6 +79,32 @@ export function buildSpaceIcs(
   }
 
   return buildCalendar(method, blocks)
+}
+
+export interface IcsAttachment {
+  filename: string
+  content: Buffer
+  contentType: string
+}
+
+/**
+ * One attachment per event, each its own single-VEVENT calendar file, for an
+ * email that needs to put several weeks of a series on a calendar (issue
+ * #184). Outlook only honours the first VEVENT of a METHOD:REQUEST file, so a
+ * series' weeks must arrive as separate invites rather than one file holding
+ * all of them -- separate attachments in the same email still land in a
+ * single message.
+ */
+export function buildSpaceIcsAttachments(
+  method: 'REQUEST' | 'CANCEL',
+  events: SpaceIcsEvent[],
+  sequence?: number
+): IcsAttachment[] {
+  return events.map(e => ({
+    filename: `booking-${e.bookingId}.ics`,
+    content: buildSpaceIcs(method, [e], sequence),
+    contentType: `text/calendar; method=${method}`,
+  }))
 }
 
 /** "Tuesday, September 16, 2026, 6:00 PM" from a stored space time. */
