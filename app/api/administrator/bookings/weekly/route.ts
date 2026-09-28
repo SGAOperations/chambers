@@ -9,7 +9,7 @@ import { meetingTimeForStorage, resolveMeetingTime } from '@/lib/meeting-time'
 import { diffFields, formatEvent, formatVisibility, insertAuditRows, type AuditField, type AuditRow } from '@/lib/audit'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { planInvites } from '@/lib/room-calendar'
-import { appToday, sendPerAudience, weeklyRoomSessions, type OccurrenceRow } from '@/lib/room-invites'
+import { appToday, sendPerAudience, weeklyRoomSeries, weeklyRoomSessions, type OccurrenceRow } from '@/lib/room-invites'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { waitUntil } from '@vercel/functions'
 
@@ -191,14 +191,19 @@ export async function POST(request: Request) {
 
         // Everything upcoming goes on calendars; nothing comes off, since this
         // booking has never been sent to anybody.
+        const defaults = { room_name, start_time, end_time, status, purpose }
+        const sessions = weeklyRoomSessions(
+          (createdOccurrences ?? []) as OccurrenceRow[],
+          defaults,
+          bodyName
+        )
         const plan = planInvites(
           null,
-          weeklyRoomSessions(
-            (createdOccurrences ?? []) as OccurrenceRow[],
-            { room_name, start_time, end_time, status, purpose },
-            bodyName
-          ),
-          appToday()
+          sessions,
+          appToday(),
+          // The whole series goes out as one recurring event, so accepting it
+          // once puts every week on the calendar (issue #184).
+          weeklyRoomSeries(weekly.id, { ...defaults, start_date, end_date }, sessions, bodyName)
         )
 
         await sendPerAudience(recipients, plan, bodyName, async audience => {
@@ -554,7 +559,16 @@ export async function PATCH(request: Request) {
 
         // What this edit does to calendars: every upcoming week that is still a
         // meeting is (re)sent, and one that stopped being a meeting -- cancelled,
-        // waitlisted, or trimmed off the end of the series -- is taken off.
+        // waitlisted, or trimmed off the end of the series -- is taken off. Both
+        // reach a calendar through the one recurring event the series is sent as:
+        // a week that is no longer a meeting is EXDATEd out of the pattern, and a
+        // trimmed tail falls outside its COUNT (issue #184).
+        const nextDefaults = { room_name, start_time, end_time, status, purpose }
+        const nextSessions = weeklyRoomSessions(
+          (storedOccurrences ?? []) as OccurrenceRow[],
+          nextDefaults,
+          bodyName
+        )
         const plan = planInvites(
           weeklyRoomSessions(
             ((prevOccurrences ?? []) as PrevOccurrenceRow[]).map(o => ({
@@ -576,12 +590,9 @@ export async function PATCH(request: Request) {
             },
             bodyName
           ),
-          weeklyRoomSessions(
-            (storedOccurrences ?? []) as OccurrenceRow[],
-            { room_name, start_time, end_time, status, purpose },
-            bodyName
-          ),
-          appToday()
+          nextSessions,
+          appToday(),
+          weeklyRoomSeries(weekly_id, { ...nextDefaults, start_date, end_date }, nextSessions, bodyName)
         )
 
         await sendPerAudience(recipients, plan, bodyName, async audience => {

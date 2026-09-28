@@ -1,5 +1,5 @@
 import { buildCalendar, escapeIcs, icsUtcStamp } from './ics-core'
-import { calendarStateOf, type RoomSession } from '../room-calendar'
+import { calendarStateOf, weeklySeriesUid, type InvitePlan, type RoomSeries, type RoomSession } from '../room-calendar'
 
 /**
  * Calendar invites for room bookings (issue #69).
@@ -16,10 +16,23 @@ function toIcsLocal(date: string, time: string): string {
   return `${date.replace(/-/g, '')}T${h}${m}00`
 }
 
+/** 'YYYY-MM-DD' plus `days`, on the calendar. */
+function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
+}
+
 /** 'YYYY-MM-DD' plus one day, on the calendar. */
 function nextDay(date: string): string {
-  const [y, m, d] = date.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10)
+  return addDays(date, 1)
+}
+
+/**
+ * A session ending at or before it starts runs past midnight -- 11:00 PM to
+ * 12:00 AM is the common one -- so its end belongs to the next day.
+ */
+function endDateFor(date: string, startTime: string, endTime: string): string {
+  return endTime.slice(0, 5) <= startTime.slice(0, 5) ? nextDay(date) : date
 }
 
 /**
@@ -41,13 +54,16 @@ export function buildRoomIcs(
   const stamp = icsUtcStamp()
 
   const blocks = sessions.map(s => {
-    // A session ending at or before it starts runs past midnight -- 11:00 PM to
-    // 12:00 AM is the common one -- so its end belongs to the next day.
-    const endDate = s.endTime.slice(0, 5) <= s.startTime.slice(0, 5) ? nextDay(s.date) : s.date
+    const endDate = endDateFor(s.date, s.startTime, s.endTime)
 
     const lines = [
       'BEGIN:VEVENT',
-      `UID:${s.uid}`,
+      `UID:${s.seriesRef ? weeklySeriesUid(s.seriesRef.id) : s.uid}`,
+      // One week of a series is an occurrence of the recurring event, not an
+      // event of its own, so it is named by the slot it fills.
+      ...(s.seriesRef
+        ? [`RECURRENCE-ID;TZID=America/New_York:${toIcsLocal(s.date, s.seriesRef.startTime)}`]
+        : []),
       `DTSTAMP:${stamp}`,
       `DTSTART;TZID=America/New_York:${toIcsLocal(s.date, s.startTime)}`,
       `DTEND;TZID=America/New_York:${toIcsLocal(endDate, s.endTime)}`,
@@ -77,23 +93,163 @@ function attachmentId(uid: string): string {
   return uid.replace(/@.*$/, '')
 }
 
+/** Every date the weekly pattern generates, from the series' start through its end. */
+function patternDates(startDate: string, endDate: string): string[] {
+  const dates: string[] = []
+  for (let d = startDate; d <= endDate; d = addDays(d, 7)) dates.push(d)
+  return dates
+}
+
+/** STATUS for a session or series, as its booking status translates. */
+function statusLine(status: string): string {
+  return calendarStateOf(status) === 'tentative' ? 'STATUS:TENTATIVE' : 'STATUS:CONFIRMED'
+}
+
+function descriptionLine(status: string): string {
+  return `DESCRIPTION:${escapeIcs(`${status} in Chambers. See My Rooms for the booking.`)}`
+}
+
+/** Whether a week matches what the series' pattern would generate for it, and so needs no override. */
+function onPattern(s: RoomSession, series: RoomSeries): boolean {
+  return (
+    s.startTime.slice(0, 5) === series.startTime.slice(0, 5) &&
+    s.endTime.slice(0, 5) === series.endTime.slice(0, 5) &&
+    s.location === series.location &&
+    s.summary === series.summary &&
+    calendarStateOf(s.status) === calendarStateOf(series.status)
+  )
+}
+
+/**
+ * One VCALENDAR holding a whole weekly series: a master VEVENT carrying the
+ * RRULE, plus one RECURRENCE-ID override VEVENT per week whose room, time,
+ * purpose or status does not match what the pattern would generate for it.
+ *
+ * This is what actually puts a series on a calendar (issue #184). Outlook only
+ * auto-adds the first VEVENT of a METHOD:REQUEST file, and only the first .ics
+ * attachment of an email -- so neither one file per week nor one attachment per
+ * week ever got past week one. One recurring event does, because accepting it
+ * once is what Outlook already understands a recurring meeting to be.
+ *
+ * Removals need nothing of their own. A week that stopped being a meeting is
+ * EXDATEd out of the pattern, and weeks trimmed off the end simply fall outside
+ * COUNT -- both of which take the occurrence off a calendar that holds it, the
+ * same way Outlook's own "delete this occurrence" does.
+ *
+ * `series.meetingDates` spans the series' whole run, not just its future, so a
+ * past week that happened keeps its place. EXDATEing it would rewrite the
+ * record of what happened.
+ */
+export function buildRoomSeriesIcs(
+  series: RoomSeries,
+  upcoming: RoomSession[],
+  sequence: number
+): Buffer {
+  const stamp = icsUtcStamp()
+  const uid = weeklySeriesUid(series.id)
+  const dates = patternDates(series.startDate, series.endDate)
+  const meeting = new Set(series.meetingDates.map(d => d.date))
+  const skipped = dates.filter(d => !meeting.has(d))
+
+  const master = [
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART;TZID=America/New_York:${toIcsLocal(series.startDate, series.startTime)}`,
+    `DTEND;TZID=America/New_York:${toIcsLocal(endDateFor(series.startDate, series.startTime, series.endTime), series.endTime)}`,
+    `RRULE:FREQ=WEEKLY;INTERVAL=1;COUNT=${dates.length}`,
+    ...skipped.map(d => `EXDATE;TZID=America/New_York:${toIcsLocal(d, series.startTime)}`),
+    `SUMMARY:${escapeIcs(series.summary)}`,
+    `LOCATION:${escapeIcs(series.location)}`,
+    statusLine(series.status),
+    descriptionLine(series.status),
+    `SEQUENCE:${sequence}`,
+    'END:VEVENT',
+  ]
+
+  const blocks = [master]
+
+  for (const s of upcoming) {
+    if (onPattern(s, series)) continue
+    blocks.push([
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      // Derived, not stored: a weekly edit cannot move an occurrence's date, so
+      // the week's own date is always the pattern slot it fills.
+      `RECURRENCE-ID;TZID=America/New_York:${toIcsLocal(s.date, series.startTime)}`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART;TZID=America/New_York:${toIcsLocal(s.date, s.startTime)}`,
+      `DTEND;TZID=America/New_York:${toIcsLocal(endDateFor(s.date, s.startTime, s.endTime), s.endTime)}`,
+      `SUMMARY:${escapeIcs(s.summary)}`,
+      `LOCATION:${escapeIcs(s.location)}`,
+      statusLine(s.status),
+      descriptionLine(s.status),
+      `SEQUENCE:${sequence}`,
+      'END:VEVENT',
+    ])
+  }
+
+  return buildCalendar('REQUEST', blocks)
+}
+
+/**
+ * Cancels an entire weekly series in one VEVENT: no RRULE and no RECURRENCE-ID
+ * are needed to cancel by UID alone, matching how a one-off session is
+ * cancelled. Used when nothing of the series is a meeting any more.
+ */
+export function buildRoomSeriesCancelIcs(seriesId: string, sequence: number): Buffer {
+  return buildCalendar('CANCEL', [[
+    'BEGIN:VEVENT',
+    `UID:${weeklySeriesUid(seriesId)}`,
+    `DTSTAMP:${icsUtcStamp()}`,
+    'STATUS:CANCELLED',
+    `SEQUENCE:${sequence}`,
+    'END:VEVENT',
+  ]])
+}
+
 /**
  * The attachments an email carries for one audience's invite, ready to spread
  * into a Resend send. Every session shares the one sequence passed in, so a
  * calendar sees the additions and the removals of a single save as one
  * revision.
  *
- * Each session is its own single-VEVENT file rather than the request sessions
- * sharing one file and the cancel sessions another: Outlook only reads the
- * first VEVENT of a METHOD:REQUEST file (issue #184), so a weekly series'
- * later sessions never reached a calendar when they rode along in one file
- * with the first. Separate attachments in the same email still land in a
- * single message.
+ * A weekly series is one recurring event, built by buildRoomSeriesIcs above --
+ * one file, one VEVENT, every week. Its `cancel` list needs no attachment of
+ * its own: the master's EXDATEs and COUNT already take those weeks off a
+ * calendar, and a second file cancelling them by their old per-week UIDs would
+ * describe events the recurrence no longer owns.
+ *
+ * Everything else is a one-time booking, whose sessions are unrelated dates
+ * with no pattern between them, so each is its own single-VEVENT file. Note
+ * Outlook auto-adds only the *first* attachment of an email, so a one-time
+ * booking covering several dates still needs the later files imported by hand
+ * -- there is no recurrence to express them as, and that is the remaining edge
+ * of issue #184.
  */
 export function roomIcsAttachments(
-  plan: { request: RoomSession[]; cancel: RoomSession[] },
+  plan: InvitePlan,
   sequence: number
 ): { filename: string; content: Buffer; contentType: string }[] {
+  if (plan.series) {
+    const { series } = plan
+    // Nothing left of the series is a meeting -- past weeks included -- so the
+    // whole recurrence comes off rather than being resent as an all-EXDATE
+    // pattern with no occurrences in it.
+    if (!series.meetingDates.length) {
+      return [{
+        filename: 'cancel.ics',
+        content: buildRoomSeriesCancelIcs(series.id, sequence),
+        contentType: 'text/calendar; method=CANCEL',
+      }]
+    }
+    return [{
+      filename: 'booking.ics',
+      content: buildRoomSeriesIcs(series, plan.request, sequence),
+      contentType: 'text/calendar; method=REQUEST',
+    }]
+  }
+
   return [
     ...plan.request.map(s => ({
       filename: `booking-${attachmentId(s.uid)}.ics`,
