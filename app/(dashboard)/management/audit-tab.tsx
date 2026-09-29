@@ -6,6 +6,8 @@ import { Skeleton } from '@/app/_components/skeleton'
 interface BookingOption {
   id: string
   label: string
+  /** Made through Browse/Book NUSSO rather than here (issue #188). */
+  bookedViaNusso: boolean
 }
 
 interface AuditChange {
@@ -28,6 +30,14 @@ interface AuditLogEntry {
    * before the column existed, and on authors who hold no admin role.
    */
   admin_role: string | null
+  /**
+   * Where the action came from, stamped at write time (issue #188). 'nusso'
+   * means the Browse/Book NUSSO integration did this -- recorded a reservation
+   * it had just made, or released one in EMS. Null on every ordinary Chambers
+   * action and on entries written before the column existed, so it is read as
+   * "nothing recorded", never as "definitely not NUSSO".
+   */
+  source: 'nusso' | null
   users: { full_name: string; admin_role: string | null } | null
 }
 
@@ -141,6 +151,25 @@ function AdminRoleBadge({ role }: { role: string | null | undefined }) {
   return null
 }
 
+/**
+ * Marks something NUSSO did, rather than an admin working here (issue #188).
+ *
+ * The same pill as the Bookings and Archive lists, kept local the way
+ * AdminRoleBadge above it is. Here it sits on an *entry*, not a booking: an
+ * admin editing a NUSSO booking afterwards is not NUSSO acting, and the log has
+ * to be able to say which is which.
+ */
+function NussoBadge({ title }: { title: string }) {
+  return (
+    <span
+      title={title}
+      className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#3b0a2a] text-[#f472b6]"
+    >
+      NUSSO
+    </span>
+  )
+}
+
 const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
 
 export default function AuditTab() {
@@ -149,6 +178,16 @@ export default function AuditTab() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
   /** The selected booking's purpose, which leads every entry line below. */
   const [purpose, setPurpose] = useState<string | null>(null)
+  /**
+   * Whether the selected booking itself came through NUSSO. Read from the
+   * booking rather than from its entries, so it is still known for a booking
+   * whose history predates the `source` stamp (issue #188).
+   */
+  const [bookedViaNusso, setBookedViaNusso] = useState(false)
+  /** Narrows the selector to NUSSO bookings: the "which of these" question. */
+  const [nussoBookingsOnly, setNussoBookingsOnly] = useState(false)
+  /** Narrows the entries to NUSSO's own actions: the "what did it do" question. */
+  const [nussoActionsOnly, setNussoActionsOnly] = useState(false)
   const [loadingLogs, setLoadingLogs] = useState(false)
 
   useEffect(() => {
@@ -158,10 +197,19 @@ export default function AuditTab() {
 
       const options: BookingOption[] = []
 
+      // A NUSSO booking says so in its own option label. A <select> cannot hold
+      // a pill, and the selector is where an admin decides what to look at, so
+      // the marker has to be in the text or it is not there at all.
+      const suffix = (b: { booked_via_nusso?: boolean }) => (b.booked_via_nusso ? ' · NUSSO' : '')
+
       for (const b of data.oneTime || []) {
         const detail = b.one_time_room_bookings?.[0]
         const date = detail?.booking_date ? formatDate(detail.booking_date) : '—'
-        options.push({ id: b.id, label: `${b.bodies?.name ?? 'Unknown'} · One-Time · ${date}` })
+        options.push({
+          id: b.id,
+          label: `${b.bodies?.name ?? 'Unknown'} · One-Time · ${date}${suffix(b)}`,
+          bookedViaNusso: !!b.booked_via_nusso,
+        })
       }
 
       for (const b of data.weekly || []) {
@@ -169,13 +217,21 @@ export default function AuditTab() {
         const range = detail
           ? `${formatDate(detail.start_date)} – ${formatDate(detail.end_date)}`
           : '—'
-        options.push({ id: b.id, label: `${b.bodies?.name ?? 'Unknown'} · Weekly · ${range}` })
+        options.push({
+          id: b.id,
+          label: `${b.bodies?.name ?? 'Unknown'} · Weekly · ${range}${suffix(b)}`,
+          bookedViaNusso: !!b.booked_via_nusso,
+        })
       }
 
       for (const b of data.tabling || []) {
         const firstSession = b.tabling_bookings?.[0]?.tabling_sessions?.[0]
         const date = firstSession?.session_date ? formatDate(firstSession.session_date) : '—'
-        options.push({ id: b.id, label: `${b.bodies?.name ?? 'Unknown'} · Tabling · ${date}` })
+        options.push({
+          id: b.id,
+          label: `${b.bodies?.name ?? 'Unknown'} · Tabling · ${date}${suffix(b)}`,
+          bookedViaNusso: !!b.booked_via_nusso,
+        })
       }
 
       setBookings(options)
@@ -187,37 +243,107 @@ export default function AuditTab() {
     if (!selectedId) {
       setLogs([])
       setPurpose(null)
+      setBookedViaNusso(false)
       return
     }
     const fetchLogs = async () => {
       setLoadingLogs(true)
-      const res = await fetch(`/api/administrator/audit-logs?booking_id=${selectedId}`)
+      // The filter is applied server-side rather than over the rows already
+      // here: the log is the record, and narrowing it is a question to ask of
+      // the record, not a view over whatever this client happens to hold.
+      const query = new URLSearchParams({ booking_id: selectedId })
+      if (nussoActionsOnly) query.set('source', 'nusso')
+      const res = await fetch(`/api/administrator/audit-logs?${query}`)
       const data = await res.json()
       setLogs(data.logs || [])
       setPurpose(typeof data.purpose === 'string' && data.purpose.trim() ? data.purpose : null)
+      setBookedViaNusso(!!data.bookedViaNusso)
       setLoadingLogs(false)
     }
     fetchLogs()
-  }, [selectedId])
+  }, [selectedId, nussoActionsOnly])
+
+  const selectableBookings = nussoBookingsOnly
+    ? bookings.filter(b => b.bookedViaNusso)
+    : bookings
 
   return (
     <div className="space-y-4">
       <div>
-        <label className="block text-xs font-medium text-[#93b8d8] mb-1">Select Booking</label>
+        <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
+          <label className="block text-xs font-medium text-[#93b8d8]">Select Booking</label>
+          {/*
+            The audit control from issue #188. NUSSO bookings are a minority of
+            a semester's list, so the way to review them is to take everything
+            else out of the selector rather than to scan for the suffix.
+          */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={nussoBookingsOnly}
+              onChange={e => {
+                setNussoBookingsOnly(e.target.checked)
+                // A booking that just left the list would otherwise stay
+                // selected with its log still on screen, which reads as though
+                // the filter had not applied.
+                if (e.target.checked && selectedId
+                  && !bookings.find(b => b.id === selectedId)?.bookedViaNusso) {
+                  setSelectedId(null)
+                }
+              }}
+              className="accent-[#f472b6]"
+            />
+            <span className="text-xs text-[#93b8d8]">NUSSO bookings only</span>
+          </label>
+        </div>
         <select
           value={selectedId ?? ''}
           onChange={e => setSelectedId(e.target.value || null)}
           className={inputCls}
         >
           <option value="">— Select a booking —</option>
-          {bookings.map(b => (
+          {selectableBookings.map(b => (
             <option key={b.id} value={b.id}>{b.label}</option>
           ))}
         </select>
+        {nussoBookingsOnly && selectableBookings.length === 0 && (
+          <p className="text-[#6a96bb] text-xs mt-1">
+            No bookings in this list came through Browse/Book NUSSO.
+          </p>
+        )}
       </div>
 
       {!selectedId && (
         <p className="text-[#6a96bb] text-sm">Select a booking to view its audit log.</p>
+      )}
+
+      {selectedId && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            {/*
+              Stated for the booking as a whole, not only per entry: a NUSSO
+              booking created before `source` existed has no marked entries at
+              all, and that must not read as "not a NUSSO booking".
+            */}
+            {bookedViaNusso && (
+              <>
+                <NussoBadge title="This booking was made through Browse/Book NUSSO from inside Chambers." />
+                <span className="text-xs text-[#93b8d8]">
+                  Made through Browse/Book NUSSO, not entered by an administrator.
+                </span>
+              </>
+            )}
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={nussoActionsOnly}
+              onChange={e => setNussoActionsOnly(e.target.checked)}
+              className="accent-[#f472b6]"
+            />
+            <span className="text-xs text-[#93b8d8]">NUSSO actions only</span>
+          </label>
+        </div>
       )}
 
       {selectedId && loadingLogs && (
@@ -238,7 +364,15 @@ export default function AuditTab() {
       )}
 
       {selectedId && !loadingLogs && logs.length === 0 && (
-        <p className="text-[#6a96bb] text-sm">No audit log entries for this booking.</p>
+        <p className="text-[#6a96bb] text-sm">
+          {nussoActionsOnly
+            // Two things look the same here and only one is interesting: a
+            // booking NUSSO never touched, and a NUSSO booking whose entries
+            // were written before provenance was recorded. Say so rather than
+            // let the second be read as the first.
+            ? 'No entries on this booking are recorded as NUSSO’s. Entries written before provenance was recorded carry no source, so an older NUSSO booking can show none here.'
+            : 'No audit log entries for this booking.'}
+        </p>
       )}
 
       {selectedId && !loadingLogs && logs.length > 0 && (
@@ -274,9 +408,14 @@ export default function AuditTab() {
                           {entry.action ? ACTION_LABELS[entry.action] : 'Status set'}
                         </span>
                       </p>
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[entry.new_status] ?? 'bg-[#0f2a4a] text-[#93b8d8]'}`}>
-                        {entry.new_status}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {entry.source === 'nusso' && (
+                          <NussoBadge title="Written by the Browse/Book NUSSO integration: Chambers acted in EMS on SGA's shared account." />
+                        )}
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[entry.new_status] ?? 'bg-[#0f2a4a] text-[#93b8d8]'}`}>
+                          {entry.new_status}
+                        </span>
+                      </div>
                     </div>
 
                     {entry.changes && entry.changes.length > 0 && (
