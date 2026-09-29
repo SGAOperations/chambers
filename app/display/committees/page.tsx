@@ -7,6 +7,7 @@ import {
   directionTo,
   floorOf,
   isCancelled,
+  isInDisplayBuilding,
   isVirtual,
   ordinalFloor,
   splitByTime,
@@ -35,10 +36,12 @@ import {
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] })
 
-const ARROWS: Record<Direction, string> = {
+// No arrow for 'same-floor': which way to turn on this floor depends on where
+// the screen hangs in the corridor, and a '→' asserted that without knowing.
+const ARROWS: Record<Direction, string | null> = {
   up: '↑',
   down: '↓',
-  'same-floor': '→',
+  'same-floor': null,
 }
 
 const DIRECTION_WORDS: Record<Direction, string> = {
@@ -93,20 +96,23 @@ function Wayfinding({ meeting, viewerFloor, large }: {
   }
 
   const room = meeting.roomName || 'Room to be confirmed'
-  const floor = floorOf(meeting.roomName)
+  // A floor number only means anything in the building the screen is in: 'Egan
+  // 306' is not this building's third floor.
+  const floor = isInDisplayBuilding(meeting.roomName) ? floorOf(meeting.roomName) : null
   const cancelled = isCancelled(meeting.status)
   // No arrow for a cancelled meeting: an arrow is an instruction to walk, and
   // there is nothing at the other end of it.
   const direction = cancelled ? null : directionTo(meeting.roomName, viewerFloor)
+  const arrow = direction ? ARROWS[direction] : null
 
   return (
     <div className="flex items-baseline gap-4">
-      {direction && (
+      {arrow && (
         <span
           aria-hidden
           className={`${large ? 'text-6xl' : 'text-3xl'} font-bold text-[#4ade80] leading-none`}
         >
-          {ARROWS[direction]}
+          {arrow}
         </span>
       )}
       <div>

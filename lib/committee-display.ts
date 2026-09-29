@@ -59,6 +59,20 @@ export function floorOf(roomName: string | null | undefined): number | null {
   return match ? Number(match[1]) : null
 }
 
+/**
+ * The building the screen hangs in, and the only one it will point inside.
+ *
+ * A room number says nothing about its building: 'Egan 306' and 'Curry 336' are
+ * the same digit, and bookings in Snell, Egan, Ryder and Blackman are a quarter
+ * of the day's meetings. Without this, a meeting across campus drew a confident
+ * arrow up Curry's stairs.
+ */
+const DISPLAY_BUILDING = 'curry'
+
+export function isInDisplayBuilding(roomName: string | null | undefined): boolean {
+  return roomName?.trim().toLowerCase().startsWith(DISPLAY_BUILDING) ?? false
+}
+
 /** Which way someone standing at the display has to travel to reach the room. */
 export type Direction = 'up' | 'down' | 'same-floor'
 
@@ -66,13 +80,20 @@ export type Direction = 'up' | 'down' | 'same-floor'
  * Which way to point, given where the screen is hanging.
  *
  * `viewerFloor` comes from the display's own URL, so one page can serve a screen
- * on any floor. Without it -- and for a room whose floor cannot be read -- there
- * is no direction to give, and the display falls back to naming the room.
+ * on any floor. Without it -- and for a room whose floor cannot be read, or that
+ * is in another building -- there is no direction to give, and the display falls
+ * back to naming the room.
+ *
+ * 'same-floor' is not a direction and must not be drawn as an arrow: which way
+ * to turn on the floor you are already on depends on where the screen physically
+ * hangs in the corridor, which nothing here knows. It means only "you do not
+ * need to change floors".
  */
 export function directionTo(
   roomName: string | null | undefined,
   viewerFloor: number | null
 ): Direction | null {
+  if (!isInDisplayBuilding(roomName)) return null
   const floor = floorOf(roomName)
   if (floor === null || viewerFloor === null) return null
   if (floor > viewerFloor) return 'up'
