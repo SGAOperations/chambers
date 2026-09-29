@@ -168,14 +168,14 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
                     row: a divisional booking shows its division, and a multi-body
                     one its owner plus the others (issue #133).
 
-                    The reservation code rides along because the forms we have to
+                    The reservation code leads, because the forms we have to
                     cross-reference this grid against identify a booking by code
                     alone and never by name (issue #186). It is optional and often
-                    absent, so the parenthesis only appears when there is one.
+                    absent, so the row falls back to starting with the name.
                   */}
                   <td className="pr-4 text-[#93b8d8] whitespace-nowrap py-0.5">
+                    {code ? `${code} · ` : ''}
                     {formatScopeLabel(b, (b.booking_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))).short}
-                    {code ? ` (${code})` : ''}
                     {' — '}{formatTime(w.start_time)}
                   </td>
                   {weeks.map(wk => {
