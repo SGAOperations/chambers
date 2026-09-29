@@ -122,6 +122,17 @@ export function weeklySeriesUid(weeklyBookingId: string): string {
 export interface SeriesMeetingDate {
   date: string
   senateType?: string | null
+  /**
+   * The week as it actually stands, so one that has drifted from the pattern can
+   * ride along as a RECURRENCE-ID override.
+   *
+   * This spans the series' whole run rather than just its future for the same
+   * reason the date list does: a resent master's RRULE generates a pattern
+   * instance for every date in its COUNT, past ones included, so a past week
+   * left without its override would be reverted to the pattern's room and time
+   * on a calendar that already holds the truth.
+   */
+  session: RoomSession
 }
 
 /**

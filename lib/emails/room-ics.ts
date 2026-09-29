@@ -137,12 +137,12 @@ function onPattern(s: RoomSession, series: RoomSeries): boolean {
  * same way Outlook's own "delete this occurrence" does.
  *
  * `series.meetingDates` spans the series' whole run, not just its future, so a
- * past week that happened keeps its place. EXDATEing it would rewrite the
- * record of what happened.
+ * past week that happened keeps its place -- both its place in the pattern and,
+ * if it drifted, its override. EXDATEing it, or letting the pattern put it back
+ * at the series' room and time, would rewrite the record of what happened.
  */
 export function buildRoomSeriesIcs(
   series: RoomSeries,
-  upcoming: RoomSession[],
   sequence: number
 ): Buffer {
   const stamp = icsUtcStamp()
@@ -169,14 +169,14 @@ export function buildRoomSeriesIcs(
 
   const blocks = [master]
 
-  for (const s of upcoming) {
+  for (const { date, session: s } of series.meetingDates) {
     if (onPattern(s, series)) continue
     blocks.push([
       'BEGIN:VEVENT',
       `UID:${uid}`,
       // Derived, not stored: a weekly edit cannot move an occurrence's date, so
       // the week's own date is always the pattern slot it fills.
-      `RECURRENCE-ID;TZID=America/New_York:${toIcsLocal(s.date, series.startTime)}`,
+      `RECURRENCE-ID;TZID=America/New_York:${toIcsLocal(date, series.startTime)}`,
       `DTSTAMP:${stamp}`,
       `DTSTART;TZID=America/New_York:${toIcsLocal(s.date, s.startTime)}`,
       `DTEND;TZID=America/New_York:${toIcsLocal(endDateFor(s.date, s.startTime, s.endTime), s.endTime)}`,
@@ -245,7 +245,7 @@ export function roomIcsAttachments(
     }
     return [{
       filename: 'booking.ics',
-      content: buildRoomSeriesIcs(series, plan.request, sequence),
+      content: buildRoomSeriesIcs(series, sequence),
       contentType: 'text/calendar; method=REQUEST',
     }]
   }

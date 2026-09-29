@@ -103,7 +103,7 @@ export function weeklyRoomSeries(
     status: series.status,
     meetingDates: sessions
       .filter(s => calendarStateOf(s.status) !== 'off')
-      .map(s => ({ date: s.date, senateType: s.senateType })),
+      .map(s => ({ date: s.date, senateType: s.senateType, session: s })),
   }
 }
 
