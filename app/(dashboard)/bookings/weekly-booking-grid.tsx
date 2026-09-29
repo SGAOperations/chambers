@@ -144,6 +144,7 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
           <tbody>
             {active.map((b, i) => {
               const w = b.weekly_room_bookings![0]
+              const code = w.reservation_code?.trim()
               const day = weekdayIndex(w.start_date)
               const prevBooking = i > 0 ? active[i - 1].weekly_room_bookings?.[0] : null
               const showDayHeader = !prevBooking || weekdayIndex(prevBooking.start_date) !== day
@@ -166,9 +167,15 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
                     Named for who the booking is for, not the body that owns the
                     row: a divisional booking shows its division, and a multi-body
                     one its owner plus the others (issue #133).
+
+                    The reservation code rides along because the forms we have to
+                    cross-reference this grid against identify a booking by code
+                    alone and never by name (issue #186). It is optional and often
+                    absent, so the parenthesis only appears when there is one.
                   */}
                   <td className="pr-4 text-[#93b8d8] whitespace-nowrap py-0.5">
                     {formatScopeLabel(b, (b.booking_bodies ?? []).map(x => ({ id: x.body_id, name: x.bodies?.name ?? '' }))).short}
+                    {code ? ` (${code})` : ''}
                     {' — '}{formatTime(w.start_time)}
                   </td>
                   {weeks.map(wk => {
