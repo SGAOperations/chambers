@@ -1,6 +1,9 @@
 import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
-import { todayInAppZone } from '@/lib/app-zone'
+// todayInAppZone is imported from My Rooms' shared module rather than
+// @/lib/app-zone because that is the one path that resolves both before and
+// after PR #189, which moves the function to lib/ but keeps a re-export here.
+import { todayInAppZone } from '@/app/(dashboard)/my-rooms/shared'
 import {
   resolveOneTime,
   resolveWeekly,
