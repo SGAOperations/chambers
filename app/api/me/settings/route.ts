@@ -101,13 +101,14 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'senate_type_preferences must be a plain object' }, { status: 400 })
   }
 
-  // Where SGA Spaces emails go (issue #109). Sent together, because whether the
+  // Where booking emails go -- SGA Spaces and rooms alike (issues #109, #190).
+  // Sent together, because whether the
   // inbox is required depends on the destination. The inbox must be one the user
   // may choose right now -- the send path re-checks this too, but refusing here
   // means Settings never shows a choice as saved that would silently not apply.
   if (spaces_email_destination !== undefined) {
     if (!isSpacesEmailDestination(spaces_email_destination)) {
-      return NextResponse.json({ error: 'Invalid SGA Spaces email destination.' }, { status: 400 })
+      return NextResponse.json({ error: 'Invalid booking email destination.' }, { status: 400 })
     }
     if (spaces_email_destination !== 'personal' || spaces_sga_email) {
       const options = (await loadSgaEmailOptions(adminSupabase, [user.id])).get(user.id)

@@ -42,6 +42,32 @@ export function wantsSenateSession(
 }
 
 /**
+ * The preferences of one address that several people route their emails to.
+ *
+ * A shared SGA inbox can be the destination for more than one leader (issue
+ * #190), and those leaders need not follow the same session types. The inbox
+ * gets the union of what they follow: suppressing a session somebody asked to
+ * hear about is the worse failure, and it is the same bias wantsAnySenateSession
+ * already takes. Merging also means the inbox lands in exactly one audience, so
+ * it never receives two emails carrying the same event.
+ *
+ * Null on either side means "follows everything", which absorbs the other. A key
+ * missing from one side is a yes there, by the same default wantsSenateSession
+ * applies.
+ */
+export function mergeSenatePreferences(
+  a: Record<string, boolean> | null | undefined,
+  b: Record<string, boolean> | null | undefined
+): Record<string, boolean> | null {
+  if (!a || !b) return null
+  const merged: Record<string, boolean> = {}
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    merged[key] = (a[key] ?? true) || (b[key] ?? true)
+  }
+  return merged
+}
+
+/**
  * Whether this member wants to hear about an edit that touched several sessions
  * at once.
  *
