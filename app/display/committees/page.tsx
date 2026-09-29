@@ -12,7 +12,7 @@ import {
   ordinalFloor,
   splitByTime,
   type CommitteeMeeting,
-  type Direction,
+  type Bearing,
 } from '@/lib/committee-display'
 
 /**
@@ -36,18 +36,20 @@ import {
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] })
 
-// No arrow for 'same-floor': which way to turn on this floor depends on where
-// the screen hangs in the corridor, and a '→' asserted that without knowing.
-const ARROWS: Record<Direction, string | null> = {
+const ARROWS: Record<Bearing, string> = {
   up: '↑',
   down: '↓',
-  'same-floor': null,
+  left: '←',
+  'up-left': '↖',
+  'up-right': '↗',
 }
 
-const DIRECTION_WORDS: Record<Direction, string> = {
+const BEARING_WORDS: Record<Bearing, string> = {
   up: 'Upstairs',
   down: 'Downstairs',
-  'same-floor': 'This floor',
+  left: 'To your left',
+  'up-left': 'Upstairs',
+  'up-right': 'Upstairs',
 }
 
 /**
@@ -85,10 +87,9 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** The room line, plus which way to walk when the screen knows where it is. */
-function Wayfinding({ meeting, viewerFloor, large }: {
+/** The room line, plus which way to walk when the screen knows the way. */
+function Wayfinding({ meeting, large }: {
   meeting: CommitteeMeeting
-  viewerFloor: number | null
   large?: boolean
 }) {
   if (isVirtual(meeting.status)) {
@@ -102,8 +103,8 @@ function Wayfinding({ meeting, viewerFloor, large }: {
   const cancelled = isCancelled(meeting.status)
   // No arrow for a cancelled meeting: an arrow is an instruction to walk, and
   // there is nothing at the other end of it.
-  const direction = cancelled ? null : directionTo(meeting.roomName, viewerFloor)
-  const arrow = direction ? ARROWS[direction] : null
+  const direction = cancelled ? null : directionTo(meeting.roomName)
+  const arrow = direction ? ARROWS[direction.bearing] : null
 
   return (
     <div className="flex items-baseline gap-4">
@@ -126,7 +127,7 @@ function Wayfinding({ meeting, viewerFloor, large }: {
         {!cancelled && (direction || floor !== null) && (
           <p className={`${large ? 'text-2xl' : 'text-xl'} text-[#93b8d8] mt-1`}>
             {[
-              direction ? DIRECTION_WORDS[direction] : null,
+              direction ? (direction.note ?? BEARING_WORDS[direction.bearing]) : null,
               floor !== null ? `${ordinalFloor(floor)} floor` : null,
             ].filter(Boolean).join(' · ')}
           </p>
@@ -146,6 +147,13 @@ function MeetingHeading({ meeting, large }: { meeting: CommitteeMeeting; large?:
         }`}
       >
         {meeting.bodyName}
+        {meeting.isEvent && (
+          <span
+            className={`${large ? 'text-2xl' : 'text-lg'} font-semibold uppercase tracking-wide align-middle ml-4 px-3 py-1 rounded-full bg-[#062f3b] text-[#22d3ee]`}
+          >
+            Event
+          </span>
+        )}
       </p>
       {/* Immediately under the name, at the name's own weight -- not a footnote
           below the room, where the room is the larger thing on the line. */}
@@ -172,11 +180,6 @@ function Shell({ children }: { children: React.ReactNode }) {
 function CommitteeDisplayContent() {
   const searchParams = useSearchParams()
   const key = searchParams.get('key')
-  const floorParam = searchParams.get('floor')
-  // A single digit, because floorOf() reads a floor off the hundreds digit of a
-  // room number and so only ever returns 1-9. A wider pattern would accept
-  // ?floor=42 and point every room on the board downstairs.
-  const viewerFloor = floorParam && /^[1-9]$/.test(floorParam) ? Number(floorParam) : null
 
   const [meetings, setMeetings] = useState<CommitteeMeeting[]>([])
   const [now, setNow] = useState(new Date())
@@ -257,8 +260,8 @@ function CommitteeDisplayContent() {
   }
 
   // Never got an answer, so there is nothing to say about today. Drawing the
-  // board here would show an empty schedule -- "No committee meetings left
-  // today" -- which is a claim this screen has no grounds to make, and the one
+  // board here would show an empty schedule -- "Nothing left today" --
+  // which is a claim this screen has no grounds to make, and the one
   // failure mode that actively sends people home. The interval keeps retrying
   // behind this.
   if (lastLoaded === null) {
@@ -282,7 +285,7 @@ function CommitteeDisplayContent() {
 
   const header = (
     <div className="flex-shrink-0">
-      <Eyebrow>Committee meetings</Eyebrow>
+      <Eyebrow>Meetings &amp; events</Eyebrow>
       <p className="text-7xl font-bold text-[#f0f6ff] tabular-nums mt-4">{formatClock(now)}</p>
       <p className="text-2xl text-[#93b8d8] mt-2">{formatDate(now)}</p>
     </div>
@@ -304,7 +307,7 @@ function CommitteeDisplayContent() {
                 {formatTime(featured.meetingTime)}
               </p>
               <div className="mt-8">
-                <Wayfinding meeting={featured} viewerFloor={viewerFloor} large />
+                <Wayfinding meeting={featured} large />
               </div>
             </div>
           </div>
@@ -327,7 +330,7 @@ function CommitteeDisplayContent() {
                     </p>
                   </div>
                   <div className="mt-3">
-                    <Wayfinding meeting={m} viewerFloor={viewerFloor} />
+                    <Wayfinding meeting={m} />
                   </div>
                 </div>
               ))}
@@ -346,7 +349,7 @@ function CommitteeDisplayContent() {
           {header}
           <div className="flex-1 flex items-center justify-center">
             <p className="text-6xl font-semibold text-[#93b8d8] text-center">
-              No committee meetings left today
+              Nothing left today
             </p>
           </div>
         </div>

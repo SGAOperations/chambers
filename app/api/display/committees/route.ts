@@ -39,6 +39,7 @@ interface BodyRow {
 interface BookingRow {
   hidden: boolean | null
   purpose: string | null
+  is_event: boolean | null
   bodies: BodyRow | BodyRow[] | null
 }
 
@@ -51,6 +52,7 @@ interface WeeklyRow {
   status: string | null
   hidden: boolean | null
   purpose: string | null
+  is_event: boolean | null
   weekly_room_bookings: {
     room_name: string | null
     start_time: string
@@ -78,19 +80,19 @@ interface OneTimeRow {
   bookings: BookingRow | BookingRow[] | null
 }
 
-// !inner throughout, so the body_type filter narrows the occurrence rows rather
-// than just nulling out the embed.
+// !inner throughout, so a filter on an embedded column narrows the occurrence
+// rows rather than just nulling out the embed.
 const WEEKLY_SELECT = `
-  id, room_name, start_time, end_time, meeting_time, status, hidden, purpose,
+  id, room_name, start_time, end_time, meeting_time, status, hidden, purpose, is_event,
   weekly_room_bookings!inner(
     room_name, start_time, end_time, meeting_time, status,
-    bookings!inner(hidden, purpose, bodies!inner(name, body_type))
+    bookings!inner(hidden, purpose, is_event, bodies!inner(name, body_type))
   )
 `
 
 const ONE_TIME_SELECT = `
   id, room_name, start_time, end_time, meeting_time, status,
-  bookings!inner(hidden, purpose, bodies!inner(name, body_type))
+  bookings!inner(hidden, purpose, is_event, bodies!inner(name, body_type))
 `
 
 export async function GET(request: Request) {
@@ -106,27 +108,63 @@ export async function GET(request: Request) {
   // where today is already tomorrow after 8 PM Eastern (issues #87, #177).
   const date = searchParams.get('date') || todayInAppZone()
 
-  const [weeklyResult, oneTimeResult] = await Promise.all([
+  // Four queries, not two. The screen draws committee meetings *and* IEMS
+  // events, and those are different predicates on the same tables: a body's
+  // type, versus an is_event flag. PostgREST's `or=` cannot span an embedded
+  // column, so they cannot be one request each.
+  //
+  // is_event lives in a different place for each kind. A one-off carries it on
+  // the booking; a weekly series carries it per occurrence, where it is
+  // authoritative and inherits nothing -- so a series' own booking flag would be
+  // the wrong thing to filter on.
+  const [weeklyResult, weeklyEventResult, oneTimeResult, oneTimeEventResult] = await Promise.all([
     adminSupabase
       .from('weekly_room_occurrences')
       .select(WEEKLY_SELECT)
       .eq('occurrence_date', date)
       .eq('weekly_room_bookings.bookings.bodies.body_type', 'Committee'),
     adminSupabase
+      .from('weekly_room_occurrences')
+      .select(WEEKLY_SELECT)
+      .eq('occurrence_date', date)
+      .eq('is_event', true),
+    adminSupabase
       .from('one_time_room_bookings')
       .select(ONE_TIME_SELECT)
       .eq('booking_date', date)
       .eq('bookings.bodies.body_type', 'Committee'),
+    adminSupabase
+      .from('one_time_room_bookings')
+      .select(ONE_TIME_SELECT)
+      .eq('booking_date', date)
+      .eq('bookings.is_event', true),
   ])
 
-  if (weeklyResult.error || oneTimeResult.error) {
-    console.error('committee display query failed:', weeklyResult.error ?? oneTimeResult.error)
+  const results = [weeklyResult, weeklyEventResult, oneTimeResult, oneTimeEventResult]
+  const failed = results.find(r => r.error)
+  if (failed) {
+    console.error('committee display query failed:', failed.error)
     return NextResponse.json({ error: 'Could not load meetings' }, { status: 500 })
   }
 
   const meetings: CommitteeMeeting[] = []
 
-  for (const row of (weeklyResult.data ?? []) as WeeklyRow[]) {
+  // A committee's own booking is very often flagged as an event too, so the two
+  // queries of each pair overlap heavily and the same row arrives twice. Keyed
+  // by the session row's id, which is what a duplicate shares.
+  const seen = new Set<string>()
+  const fresh = <T extends { id: string }>(rows: T[]) => rows.filter(r => {
+    if (seen.has(r.id)) return false
+    seen.add(r.id)
+    return true
+  })
+
+  const weeklyRows = fresh([
+    ...((weeklyResult.data ?? []) as WeeklyRow[]),
+    ...((weeklyEventResult.data ?? []) as WeeklyRow[]),
+  ])
+
+  for (const row of weeklyRows) {
     const series = one(row.weekly_room_bookings)
     const booking = series && one(series.bookings)
     const body = booking && one(booking.bodies)
@@ -148,13 +186,19 @@ export async function GET(request: Request) {
         meeting_time: series.meeting_time,
         status: series.status,
       },
+      is_event: row.is_event,
       booking: { hidden: booking.hidden, purpose: booking.purpose, bodyName: body.name },
     }
     const resolved = resolveWeekly(candidate)
     if (resolved) meetings.push(resolved)
   }
 
-  for (const row of (oneTimeResult.data ?? []) as OneTimeRow[]) {
+  const oneTimeRows = fresh([
+    ...((oneTimeResult.data ?? []) as OneTimeRow[]),
+    ...((oneTimeEventResult.data ?? []) as OneTimeRow[]),
+  ])
+
+  for (const row of oneTimeRows) {
     const booking = one(row.bookings)
     const body = booking && one(booking.bodies)
     if (!booking || !body) continue
@@ -166,7 +210,12 @@ export async function GET(request: Request) {
       end_time: row.end_time,
       meeting_time: row.meeting_time,
       status: row.status,
-      booking: { hidden: booking.hidden, purpose: booking.purpose, bodyName: body.name },
+      booking: {
+        hidden: booking.hidden,
+        purpose: booking.purpose,
+        bodyName: body.name,
+        isEvent: booking.is_event ?? false,
+      },
     }
     const resolved = resolveOneTime(candidate)
     if (resolved) meetings.push(resolved)

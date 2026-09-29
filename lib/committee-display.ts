@@ -55,7 +55,16 @@ export function isCancelled(status: string): boolean {
  */
 export function floorOf(roomName: string | null | undefined): number | null {
   if (!roomName) return null
-  const match = roomName.match(/\b([1-9])\d{2}\b/)
+  // A trailing letter is part of the room, not a reason to give up: 'Suite 228B'
+  // is on the second floor just as much as '228' would be.
+  const match = roomName.match(/\b([1-9])\d{2}[A-Za-z]?\b/)
+  return match ? Number(match[1]) : null
+}
+
+/** The room number itself, so a bearing can be looked up by it. */
+function roomNumber(roomName: string | null | undefined): number | null {
+  if (!roomName) return null
+  const match = roomName.match(/\b([1-9]\d{2})[A-Za-z]?\b/)
   return match ? Number(match[1]) : null
 }
 
@@ -70,35 +79,85 @@ export function floorOf(roomName: string | null | undefined): number | null {
 const DISPLAY_BUILDING = 'curry'
 
 export function isInDisplayBuilding(roomName: string | null | undefined): boolean {
-  return roomName?.trim().toLowerCase().startsWith(DISPLAY_BUILDING) ?? false
+  const name = roomName?.trim().toLowerCase()
+  if (!name) return false
+  // 'Suite 228B' is booked without its building, but the suites are Curry's --
+  // there is no other 'Suite' in the booking tables.
+  return name.startsWith(DISPLAY_BUILDING) || name.startsWith('suite')
 }
 
 /** Which way someone standing at the display has to travel to reach the room. */
-export type Direction = 'up' | 'down' | 'same-floor'
+export type Bearing = 'up' | 'down' | 'left' | 'up-left' | 'up-right'
+
+export interface Wayfinding {
+  bearing: Bearing
+  /** Replaces the computed wording when the bearing alone would mislead. */
+  note?: string
+}
 
 /**
- * Which way to point, given where the screen is hanging.
+ * Which way the screen points for each room.
  *
- * `viewerFloor` comes from the display's own URL, so one page can serve a screen
- * on any floor. Without it -- and for a room whose floor cannot be read, or that
- * is in another building -- there is no direction to give, and the display falls
- * back to naming the room.
+ * There is one screen -- in the SGA office, facing the hallway -- so these are
+ * absolute, given by the people who sit there, not derived. 'left' means left as
+ * you stand in the hallway reading it. A floor number cannot produce any of
+ * this: which way to turn on the floor you are already on depends entirely on
+ * where the screen hangs, and 333 is behind the reader despite being on it.
  *
- * 'same-floor' is not a direction and must not be drawn as an arrow: which way
- * to turn on the floor you are already on depends on where the screen physically
- * hangs in the corridor, which nothing here knows. It means only "you do not
- * need to change floors".
+ * Keyed by room number so the free-text name can vary ('Curry 333', 'Curry 333
+ * (Senate Chambers)') without needing an entry each.
  */
-export function directionTo(
-  roomName: string | null | undefined,
-  viewerFloor: number | null
-): Direction | null {
+const ROOM_BEARINGS: Record<number, Wayfinding> = {
+  333: { bearing: 'down', note: 'Right behind you' },
+  334: { bearing: 'left' },
+  335: { bearing: 'left' },
+  336: { bearing: 'left' },
+  342: { bearing: 'left' },
+  344: { bearing: 'left' },
+  346: { bearing: 'left' },
+  348: { bearing: 'left' },
+  433: { bearing: 'up-right' },
+  435: { bearing: 'up-left' },
+}
+
+/** Rooms named rather than numbered, matched on the name. */
+const NAMED_BEARINGS: [RegExp, Wayfinding][] = [
+  [/indoor quad/i, { bearing: 'down' }],
+  [/2nd floor/i, { bearing: 'down' }],
+]
+
+/**
+ * Everything on a floor, for rooms with no bearing of their own.
+ *
+ * The second-floor suites are down from here whichever one is meant, so the
+ * floor answers for all of them.
+ */
+const FLOOR_BEARINGS: Record<number, Wayfinding> = {
+  2: { bearing: 'down' },
+}
+
+/**
+ * Which way to point, or null to name the room and point nowhere.
+ *
+ * Null for another building, and for a room in this one that nothing above
+ * recognises. A corridor screen that points the wrong way is worse than one that
+ * names the room and stops, so an unknown room gets silence rather than a guess
+ * from its floor.
+ */
+export function directionTo(roomName: string | null | undefined): Wayfinding | null {
   if (!isInDisplayBuilding(roomName)) return null
+
+  for (const [pattern, found] of NAMED_BEARINGS) {
+    if (pattern.test(roomName!)) return found
+  }
+
+  const number = roomNumber(roomName)
+  if (number !== null && ROOM_BEARINGS[number]) return ROOM_BEARINGS[number]
+
   const floor = floorOf(roomName)
-  if (floor === null || viewerFloor === null) return null
-  if (floor > viewerFloor) return 'up'
-  if (floor < viewerFloor) return 'down'
-  return 'same-floor'
+  if (floor !== null && FLOOR_BEARINGS[floor]) return FLOOR_BEARINGS[floor]
+
+  return null
 }
 
 /** '3' -> '3rd'. */
@@ -107,10 +166,12 @@ export function ordinalFloor(floor: number): string {
   return `${floor}${suffix}`
 }
 
-/** One committee meeting, as the display draws it. */
+/** One committee meeting or event, as the display draws it. */
 export interface CommitteeMeeting {
   id: string
   bodyName: string
+  /** An IEMS event rather than an ordinary meeting, badged as such. */
+  isEvent: boolean
   /** What the meeting is for, when the booking says. */
   purpose: string | null
   roomName: string | null
@@ -132,6 +193,8 @@ export interface WeeklyCandidate {
   status: string | null
   hidden: boolean | null
   purpose: string | null
+  /** Authoritative per occurrence, inheriting nothing from the series. */
+  is_event: boolean | null
   series: {
     room_name: string | null
     start_time: string
@@ -170,6 +233,7 @@ export function resolveWeekly(c: WeeklyCandidate): CommitteeMeeting | null {
   return {
     id: c.id,
     bodyName: c.booking.bodyName,
+    isEvent: c.is_event ?? false,
     purpose: c.purpose ?? c.booking.purpose,
     roomName: c.room_name ?? c.series.room_name,
     startTime,
@@ -191,6 +255,8 @@ export interface OneTimeCandidate {
     hidden: boolean | null
     purpose: string | null
     bodyName: string
+    /** On the booking for a one-off, unlike weekly's per-occurrence flag. */
+    isEvent: boolean
   }
 }
 
@@ -201,6 +267,7 @@ export function resolveOneTime(c: OneTimeCandidate): CommitteeMeeting | null {
   return {
     id: c.id,
     bodyName: c.booking.bodyName,
+    isEvent: c.booking.isEvent,
     purpose: c.booking.purpose,
     roomName: c.room_name,
     startTime: c.start_time,
