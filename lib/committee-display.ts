@@ -300,8 +300,12 @@ export function splitByTime(
   const upcoming: CommitteeMeeting[] = []
 
   for (const m of meetings) {
-    if (hm(m.startTime) > nowHm) upcoming.push(m)
-    else if (hm(m.endTime) > nowHm && !isCancelled(m.status)) ongoing.push(m)
+    if (hm(m.endTime) <= nowHm) continue
+    // Past its start but nothing is happening in there, so it is not ongoing --
+    // it stays listed until its slot ends, which is the whole point of drawing a
+    // cancellation. Someone arriving mid-slot is exactly who needs to be told.
+    if (isCancelled(m.status) || hm(m.startTime) > nowHm) upcoming.push(m)
+    else ongoing.push(m)
   }
 
   const byStart = (a: CommitteeMeeting, b: CommitteeMeeting) => a.startTime.localeCompare(b.startTime)
