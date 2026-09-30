@@ -1,7 +1,7 @@
 import { db } from './db/data-api'
 import { appZoneParts } from './meeting-reminders'
 import { resolveBookingRecipients, type Recipient, type ScopedRow } from './booking-scope'
-import { calendarStateOf, occurrenceUid, sessionUid, splitByAudience, type RoomSeries, type RoomSession } from './room-calendar'
+import { calendarRecipientsFor, calendarStateOf, occurrenceUid, sessionUid, splitByAudience, type RoomSeries, type RoomSession } from './room-calendar'
 import { sendBookingCancelledEmail } from './emails/booking-cancelled'
 
 /**
@@ -137,6 +137,9 @@ export function oneTimeRoomSessions(
  * Sends one email per audience, so a Senate member who follows only Full Body
  * gets only those sessions on their calendar. For every other body this is a
  * single email, since everyone wants every session.
+ *
+ * A recipient can have more than one address -- personal and a shared SGA inbox
+ * (issue #190) -- so calendarRecipientsFor flattens and deduplicates them first.
  */
 export async function sendPerAudience(
   recipients: Recipient[],
@@ -144,11 +147,7 @@ export async function sendPerAudience(
   ownerBodyName: string | null | undefined,
   send: (audience: { recipients: string[]; plan: { request: RoomSession[]; cancel: RoomSession[] } }) => Promise<void>
 ): Promise<void> {
-  const audiences = splitByAudience(
-    recipients.map(r => ({ email: r.email, senatePreferences: r.senatePreferences })),
-    plan,
-    ownerBodyName
-  )
+  const audiences = splitByAudience(calendarRecipientsFor(recipients), plan, ownerBodyName)
   for (const audience of audiences) await send(audience)
 }
 

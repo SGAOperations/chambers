@@ -1,4 +1,4 @@
-import { wantsSenateSession } from './senate-types'
+import { mergeSenatePreferences, wantsSenateSession } from './senate-types'
 
 /**
  * Which room sessions belong on a calendar, and what an edit has to send to keep
@@ -241,6 +241,45 @@ export function planInvites(
 export interface CalendarRecipient {
   email: string
   senatePreferences?: Record<string, boolean> | null
+}
+
+/**
+ * Flattens recipients-with-several-addresses into the one-address-each shape
+ * splitByAudience works in (issue #190).
+ *
+ * Someone who chose "both" in Settings appears twice, once per address, and
+ * because the two land in the same audience they share a single email -- their
+ * personal address and their SGA inbox get one invite each, with the same UIDs,
+ * which is exactly what any other pair of attendees gets. Two mailboxes holding
+ * one UID is how invites work; two copies in *one* mailbox is not, and that is
+ * what the deduplication here prevents: one shared inbox that several leaders
+ * all send to is one address, with their preferences merged, so it cannot end up
+ * in two audiences and receive the same event twice.
+ *
+ * Compared case-insensitively, keeping the first spelling seen, matching
+ * dedupeEmails.
+ */
+export function calendarRecipientsFor(
+  recipients: { addresses: string[]; senatePreferences?: Record<string, boolean> | null }[]
+): CalendarRecipient[] {
+  const byAddress = new Map<string, CalendarRecipient>()
+
+  for (const person of recipients) {
+    for (const address of person.addresses) {
+      const key = address.toLowerCase()
+      const existing = byAddress.get(key)
+      if (existing) {
+        existing.senatePreferences = mergeSenatePreferences(
+          existing.senatePreferences,
+          person.senatePreferences
+        )
+      } else {
+        byAddress.set(key, { email: address, senatePreferences: person.senatePreferences ?? null })
+      }
+    }
+  }
+
+  return [...byAddress.values()]
 }
 
 /** One email to send: the people who share an invite, and the invite they get. */

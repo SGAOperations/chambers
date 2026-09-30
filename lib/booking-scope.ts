@@ -2,6 +2,7 @@ import type { Db } from './db/data-api'
 import { NextResponse } from 'next/server'
 import { hasLiveAdmin, type AuthedUser } from './auth-types'
 import { wantsAnySenateSession } from './senate-types'
+import { dedupeEmails, loadSgaEmailOptions, spacesAddressesFor } from './spaces-email'
 
 /**
  * Multi-body bookings (issue #19).
@@ -336,7 +337,16 @@ export async function syncBookingBodies(
 
 export interface Recipient {
   userId: string
-  email: string
+  /**
+   * Every address this person's booking emails go to -- usually just their
+   * personal one, but a shared SGA inbox instead of or as well as it when they
+   * have chosen that in Settings (issues #109, #190). Never empty: a user with
+   * no address to reach is not a recipient at all.
+   *
+   * A list rather than one address on purpose. The "both" choice yields two, and
+   * a single-address field would have quietly dropped one of them.
+   */
+  addresses: string[]
   fullName: string
   /**
    * What they follow, for callers that decide session by session rather than
@@ -350,6 +360,8 @@ interface RecipientUser {
   full_name: string
   is_active: boolean
   senate_type_preferences: Record<string, boolean> | null
+  spaces_email_destination: string | null
+  spaces_sga_email: string | null
 }
 
 interface RecipientRow {
@@ -386,6 +398,19 @@ interface RecipientRow {
  * which is what that preference was always supposed to mean, rather than only hiding the rows on
  * the My Rooms page (issues #92, #93). Omit it for a notification that is not about particular
  * sessions; nobody is filtered then.
+ *
+ * *Where* each of them is written is their own Settings choice, not this function's: personal
+ * email, a shared SGA inbox of a body they lead, or both (issues #109, #190). That choice was
+ * built for SGA Spaces and governed only those emails; room bookings addressed everyone's personal
+ * email regardless, which is what #190 asked to fix. Only Leadership can have picked anything
+ * else -- an inbox is only ever offered off a Leadership membership -- so for every other member
+ * this still resolves to exactly the one address it always did.
+ *
+ * The destination is honored for hidden bookings too, which is worth being explicit about next to
+ * #21: a hidden booking's audience is still only Leadership, and the inboxes on offer are SGA's own
+ * leadership inboxes, chosen by the leader themselves. Silently overriding someone's stated
+ * destination for some bookings and not others would be the more surprising rule, and would leave
+ * them wondering why a booking never arrived.
  */
 export async function resolveBookingRecipients(
   adminSupabase: Db,
@@ -398,7 +423,9 @@ export async function resolveBookingRecipients(
   const [{ data }, { data: bookingRow }] = await Promise.all([
     adminSupabase
       .from('board_memberships')
-      .select('user_id, body_id, role, users(email, full_name, is_active, senate_type_preferences)')
+      .select(
+        'user_id, body_id, role, users(email, full_name, is_active, senate_type_preferences, spaces_email_destination, spaces_sga_email)'
+      )
       .in('body_id', bodyIds),
     // bodies(name) is read for the Senate session-type filter below, which keys on the owning
     // body being the one literally named "Senate" -- the same thing the My Rooms filter keys on.
@@ -413,7 +440,7 @@ export async function resolveBookingRecipients(
   const leadershipOnly = !!opts.leadershipOnly || !!bookingRow?.hidden
 
   const rows = (data ?? []) as RecipientRow[]
-  const byUser = new Map<string, Recipient>()
+  const byUser = new Map<string, RecipientUser>()
 
   for (const m of rows) {
     const user = Array.isArray(m.users) ? m.users[0] : m.users
@@ -442,17 +469,38 @@ export async function resolveBookingRecipients(
       continue
     }
 
-    if (!byUser.has(m.user_id)) {
-      byUser.set(m.user_id, {
-        userId: m.user_id,
-        email: user.email,
-        fullName: user.full_name,
-        senatePreferences: user.senate_type_preferences ?? null,
-      })
-    }
+    if (!byUser.has(m.user_id)) byUser.set(m.user_id, user)
   }
 
-  return [...byUser.values()]
+  if (byUser.size === 0) return []
+
+  // A second query rather than reading the rows above: the inbox someone may
+  // choose comes from their Leadership memberships anywhere, which need not be
+  // among this booking's bodies. The Operations lead who sits on a committee as
+  // an ordinary member still has sgaOperations to send to.
+  //
+  // Recomputed on every send, deliberately -- the same reason the SGA Spaces
+  // path does it (issue #109). Trusting the stored value would keep writing a
+  // body's invites into its shared inbox after the person who chose it stepped
+  // down.
+  const sgaOptions = await loadSgaEmailOptions(adminSupabase, [...byUser.keys()])
+
+  const recipients: Recipient[] = []
+  for (const [userId, user] of byUser) {
+    const addresses = dedupeEmails(spacesAddressesFor(user, sgaOptions.get(userId)))
+    // spacesAddressesFor falls back to the personal address, so this is empty
+    // only for a user with no address at all -- already filtered above. Belt and
+    // braces: an empty recipient would become an email addressed to nobody.
+    if (!addresses.length) continue
+    recipients.push({
+      userId,
+      addresses,
+      fullName: user.full_name,
+      senatePreferences: user.senate_type_preferences ?? null,
+    })
+  }
+
+  return recipients
 }
 
 // ---------------------------------------------------------------------------
