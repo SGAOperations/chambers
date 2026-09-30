@@ -284,12 +284,27 @@ export function resolveOneTime(c: OneTimeCandidate): CommitteeMeeting | null {
 }
 
 /**
+ * When a booking ends, in minutes from the start of the day it began on.
+ *
+ * An end at or before the start is the clock having gone round: 23:00-00:00 is
+ * an hour long, not minus twenty-three of them. Comparing the raw strings made
+ * such a booking look finished from the instant its day began -- an 11pm meeting
+ * ending at midnight was invisible for the whole hour it was actually running.
+ *
+ * Minutes rather than a Date: the booking tables hold a plain clock time against
+ * a plain date, and building an instant out of them is how a meeting ends up an
+ * hour out across a DST change. This is still only clock arithmetic.
+ */
+function endMinutesOf(m: { startTime: string; endTime: string }): number {
+  const start = minutesOf(m.startTime)
+  const end = minutesOf(m.endTime)
+  return end <= start ? end + MINUTES_IN_DAY : end
+}
+
+/**
  * Splits the day's meetings around a moment.
  *
- * `nowHm` is 'HH:MM' in Boston. Times compare as strings because the booking
- * tables store a plain clock time against a plain date -- there is no instant to
- * reconstruct, and reconstructing one is how a booking ends up an hour out
- * across a DST change.
+ * `nowHm` is 'HH:MM' in Boston.
  *
  * A meeting is ongoing from its reservation start, not its meeting time: the
  * room is occupied for the whole window, which is what someone reading the door
@@ -301,16 +316,16 @@ export function splitByTime(
   meetings: CommitteeMeeting[],
   nowHm: string
 ): { ongoing: CommitteeMeeting[]; upcoming: CommitteeMeeting[] } {
-  const hm = (t: string) => t.slice(0, 5)
+  const now = minutesOf(nowHm)
   const ongoing: CommitteeMeeting[] = []
   const upcoming: CommitteeMeeting[] = []
 
   for (const m of meetings) {
-    if (hm(m.endTime) <= nowHm) continue
+    if (now >= endMinutesOf(m)) continue
     // Past its start but nothing is happening in there, so it is not ongoing --
     // it stays listed until its slot ends, which is the whole point of drawing a
     // cancellation. Someone arriving mid-slot is exactly who needs to be told.
-    if (isCancelled(m.status) || hm(m.startTime) > nowHm) upcoming.push(m)
+    if (isCancelled(m.status) || minutesOf(m.startTime) > now) upcoming.push(m)
     else ongoing.push(m)
   }
 
@@ -325,6 +340,8 @@ export function splitByTime(
  * "now" rather than "at some point".
  */
 export const ARROW_LEAD_MINUTES = 30
+
+const MINUTES_IN_DAY = 24 * 60
 
 function minutesOf(hm: string): number {
   return Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
@@ -348,7 +365,7 @@ export function shouldPointAt(
   if (isCancelled(meeting.status) || isVirtual(meeting.status)) return false
 
   const now = minutesOf(nowHm)
-  if (now >= minutesOf(meeting.endTime)) return false
+  if (now >= endMinutesOf(meeting)) return false
   // Negative once it has started, which is the ongoing case.
   return minutesOf(meeting.startTime) - now <= ARROW_LEAD_MINUTES
 }
