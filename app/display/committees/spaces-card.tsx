@@ -39,7 +39,7 @@ const HOUR_TICKS = [7, 9, 11, 13, 15, 17, 19, 21, 23]
  * margin guessed against them drifts the moment the type rescales, which on a
  * viewport-sized board is every screen it gets hung on.
  */
-const PANEL_INSET = 'border-[0.25vh] p-[1.4vh]'
+const PANEL_INSET = 'border-[0.35vh] p-[1.4vh]'
 const HEADER_NAME = 'text-[min(2.19vw,3.89vh)] font-bold'
 const HEADER_STATUS = 'text-[min(1.41vw,2.5vh)] font-medium mt-[0.8vh]'
 const BAR_TOP = 'relative flex-1 min-h-0 mt-[1.8vh]'
@@ -157,7 +157,7 @@ export function SpacesCard({ spaces, nowMinutes }: { spaces: DisplaySpace[]; now
           return (
             <div
               key={space.id}
-              className={`flex-1 min-w-0 flex flex-col rounded-[1.6vh] border-white/75 transition-colors duration-1000 ease-in-out ${PANEL_INSET} ${TINTS[occupancy.state]}`}
+              className={`flex-1 min-w-0 flex flex-col rounded-[1.6vh] border-white transition-colors duration-1000 ease-in-out ${PANEL_INSET} ${TINTS[occupancy.state]}`}
             >
               <p className={`${HEADER_NAME} text-[#f0f6ff] truncate`}>{space.name}</p>
               <p className={`${HEADER_STATUS} truncate ${status.className}`}>{status.text}</p>
