@@ -169,6 +169,8 @@ export function ordinalFloor(floor: number): string {
 /** One committee meeting or event, as the display draws it. */
 export interface CommitteeMeeting {
   id: string
+  /** 'YYYY-MM-DD'. The board can be showing a day other than today. */
+  date: string
   bodyName: string
   /** An IEMS event rather than an ordinary meeting, badged as such. */
   isEvent: boolean
@@ -186,6 +188,7 @@ export interface CommitteeMeeting {
 /** A weekly occurrence with its series and body attached, as the route selects it. */
 export interface WeeklyCandidate {
   id: string
+  date: string
   room_name: string | null
   start_time: string | null
   end_time: string | null
@@ -232,6 +235,7 @@ export function resolveWeekly(c: WeeklyCandidate): CommitteeMeeting | null {
 
   return {
     id: c.id,
+    date: c.date,
     bodyName: c.booking.bodyName,
     isEvent: c.is_event ?? false,
     purpose: c.purpose ?? c.booking.purpose,
@@ -246,6 +250,7 @@ export function resolveWeekly(c: WeeklyCandidate): CommitteeMeeting | null {
 /** A one-off committee booking, which has no series to inherit from. */
 export interface OneTimeCandidate {
   id: string
+  date: string
   room_name: string | null
   start_time: string
   end_time: string
@@ -266,6 +271,7 @@ export function resolveOneTime(c: OneTimeCandidate): CommitteeMeeting | null {
 
   return {
     id: c.id,
+    date: c.date,
     bodyName: c.booking.bodyName,
     isEvent: c.booking.isEvent,
     purpose: c.booking.purpose,
@@ -310,4 +316,89 @@ export function splitByTime(
 
   const byStart = (a: CommitteeMeeting, b: CommitteeMeeting) => a.startTime.localeCompare(b.startTime)
   return { ongoing: ongoing.sort(byStart), upcoming: upcoming.sort(byStart) }
+}
+
+/**
+ * How long before a meeting starts that pointing at it becomes useful.
+ *
+ * Long enough to get up and walk there, short enough that the arrow still means
+ * "now" rather than "at some point".
+ */
+export const ARROW_LEAD_MINUTES = 30
+
+function minutesOf(hm: string): number {
+  return Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
+}
+
+/**
+ * Whether the screen should point at this meeting, as opposed to merely saying
+ * where it is.
+ *
+ * An arrow is an instruction to walk, so it has to be wrong to follow it at any
+ * other time. A meeting tomorrow, or at four this afternoon, is not somewhere to
+ * go now -- the board still names the room and the floor, it just stops
+ * gesturing. Cancelled never points: there is nothing at the other end of it.
+ */
+export function shouldPointAt(
+  meeting: CommitteeMeeting,
+  daysAhead: number,
+  nowHm: string
+): boolean {
+  if (daysAhead !== 0) return false
+  if (isCancelled(meeting.status) || isVirtual(meeting.status)) return false
+
+  const now = minutesOf(nowHm)
+  if (now >= minutesOf(meeting.endTime)) return false
+  // Negative once it has started, which is the ongoing case.
+  return minutesOf(meeting.startTime) - now <= ARROW_LEAD_MINUTES
+}
+
+/** What the board is currently showing, and which day it belongs to. */
+export interface Board {
+  /** 'YYYY-MM-DD' of the day on screen, which is not always today. */
+  date: string
+  /** 0 for today, 1 for tomorrow, and so on. */
+  daysAhead: number
+  ongoing: CommitteeMeeting[]
+  upcoming: CommitteeMeeting[]
+}
+
+/** Whole days between two 'YYYY-MM-DD' dates, read as dates rather than instants. */
+function daysBetween(from: string, to: string): number {
+  const at = (d: string) => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10))
+  return Math.round((at(to) - at(from)) / 86_400_000)
+}
+
+/**
+ * Picks the day to show: today while anything is left of it, otherwise the next
+ * day that has something.
+ *
+ * A wall screen is never blank on purpose. "Nothing left today" is true but
+ * useless to someone reading it at nine in the evening, and it looks
+ * indistinguishable from a broken display -- so once today is spent the board
+ * rolls forward to whatever is next, however far off that is. Only a genuinely
+ * empty lookahead returns null, and the caller has to say so in as many words.
+ *
+ * A future day has nothing in progress by definition, so everything on it is
+ * upcoming no matter what the clock says.
+ */
+export function selectBoard(
+  meetings: CommitteeMeeting[],
+  today: string,
+  nowHm: string
+): Board | null {
+  const todayLeft = splitByTime(meetings.filter(m => m.date === today), nowHm)
+  if (todayLeft.ongoing.length || todayLeft.upcoming.length) {
+    return { date: today, daysAhead: 0, ...todayLeft }
+  }
+
+  const later = meetings.filter(m => m.date > today)
+  if (!later.length) return null
+
+  const nextDate = later.reduce((a, m) => (m.date < a ? m.date : a), later[0].date)
+  const onThatDay = later
+    .filter(m => m.date === nextDate)
+    .sort((a, b) => a.startTime.localeCompare(b.startTime))
+
+  return { date: nextDate, daysAhead: daysBetween(today, nextDate), ongoing: [], upcoming: onThatDay }
 }

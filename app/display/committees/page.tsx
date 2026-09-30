@@ -10,7 +10,8 @@ import {
   isInDisplayBuilding,
   isVirtual,
   ordinalFloor,
-  splitByTime,
+  selectBoard,
+  shouldPointAt,
   type CommitteeMeeting,
   type Bearing,
 } from '@/lib/committee-display'
@@ -85,6 +86,20 @@ function formatDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+/**
+ * Names a day the board has rolled forward to.
+ *
+ * A weekday alone is unambiguous inside a week and reads faster than a date;
+ * past that it needs the date, since "Tuesday" two weeks out is a guess.
+ */
+function futureDayLabel(date: string, daysAhead: number): string {
+  if (daysAhead === 1) return 'Tomorrow'
+  const d = new Date(`${date}T00:00:00`)
+  return daysAhead < 7
+    ? d.toLocaleDateString('en-GB', { weekday: 'long' })
+    : d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
     <p className="text-2xl font-medium text-[#93b8d8] uppercase tracking-widest">{children}</p>
@@ -98,7 +113,11 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
  * the whole board rather than a column of it -- read at a walking pace from the
  * far end of a corridor.
  */
-function MeetingCard({ meeting, label }: { meeting: CommitteeMeeting; label: string }) {
+function MeetingCard({ meeting, label, pointTheWay }: {
+  meeting: CommitteeMeeting
+  label: string
+  pointTheWay: boolean
+}) {
   const cancelled = isCancelled(meeting.status)
   const virtual = isVirtual(meeting.status)
 
@@ -106,10 +125,11 @@ function MeetingCard({ meeting, label }: { meeting: CommitteeMeeting; label: str
   // A floor number only means anything in the building the screen is in: 'Egan
   // 306' is not this building's third floor.
   const floor = isInDisplayBuilding(meeting.roomName) ? floorOf(meeting.roomName) : null
-  // No arrow for a cancelled meeting: an arrow is an instruction to walk, and
-  // there is nothing at the other end of it.
+  // The room and floor are stated whenever they are known, but the arrow is an
+  // instruction to walk and only appears when walking is the right thing to do
+  // -- see shouldPointAt.
   const direction = cancelled || virtual ? null : directionTo(meeting.roomName)
-  const arrow = direction ? ARROWS[direction.bearing] : null
+  const arrow = pointTheWay && direction ? ARROWS[direction.bearing] : null
   const directionLine = [
     direction ? (direction.note ?? BEARING_WORDS[direction.bearing]) : null,
     floor !== null ? `${ordinalFloor(floor)} floor` : null,
@@ -275,13 +295,17 @@ function CommitteeDisplayContent() {
   }, [key, keyRejected])
 
   const nowHm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-  const { ongoing, upcoming } = useMemo(() => splitByTime(meetings, nowHm), [meetings, nowHm])
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+
+  // Today while any of it is left, otherwise whatever day is next. The screen
+  // does not go blank at the end of an afternoon.
+  const board = useMemo(() => selectBoard(meetings, todayStr, nowHm), [meetings, todayStr, nowHm])
 
   // What is happening now comes round first, then the rest of the day in start
   // order. One flat rotation rather than a board: there is no second column to
   // put anything in.
-  const order = useMemo(() => [...ongoing, ...upcoming], [ongoing, upcoming])
-  const ongoingIds = useMemo(() => new Set(ongoing.map(m => m.id)), [ongoing])
+  const order = useMemo(() => (board ? [...board.ongoing, ...board.upcoming] : []), [board])
+  const ongoingIds = useMemo(() => new Set(board?.ongoing.map(m => m.id) ?? []), [board])
 
   const [cardIndex, setCardIndex] = useState(0)
 
@@ -326,13 +350,19 @@ function CommitteeDisplayContent() {
   // The rotation can shrink under the index when a meeting ends, so wrap rather
   // than trusting the timer's own count.
   const current = order.length ? order[cardIndex % order.length] : null
-  const label = current
-    ? isCancelled(current.status)
-      ? 'Cancelled'
-      : ongoingIds.has(current.id)
-        ? 'Meeting now'
-        : 'Up next'
-    : ''
+  // On a future day the label says which day, because "Up next" beside tonight's
+  // clock would read as tonight. Nothing on a future day is in progress, so
+  // "Meeting now" cannot arise there.
+  const dayPrefix = board && board.daysAhead > 0 ? futureDayLabel(board.date, board.daysAhead) : null
+  const label = !current
+    ? ''
+    : dayPrefix
+      ? (isCancelled(current.status) ? `${dayPrefix} · Cancelled` : dayPrefix)
+      : isCancelled(current.status)
+        ? 'Cancelled'
+        : ongoingIds.has(current.id)
+          ? 'Meeting now'
+          : 'Up next'
 
   return (
     <div className={`h-screen w-screen overflow-hidden flex flex-col bg-[#0a1628] ${spaceGrotesk.className}`}>
@@ -347,10 +377,16 @@ function CommitteeDisplayContent() {
       </div>
 
       {current ? (
-        <MeetingCard key={current.id} meeting={current} label={label} />
+        <MeetingCard
+          key={current.id}
+          meeting={current}
+          label={label}
+          pointTheWay={shouldPointAt(current, board!.daysAhead, nowHm)}
+        />
       ) : (
-        <div className="flex-1 min-h-0 flex items-center justify-center px-16">
-          <p className="text-7xl font-semibold text-[#93b8d8] text-center">Nothing left today</p>
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center px-16">
+          <p className="text-7xl font-semibold text-[#93b8d8] text-center">Nothing scheduled</p>
+          <p className="text-3xl text-[#6a96bb] text-center mt-6">Nothing in the next two weeks</p>
         </div>
       )}
 

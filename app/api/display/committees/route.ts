@@ -27,6 +27,22 @@ const adminSupabase = db
  * wholesale here.
  */
 
+/**
+ * How many days past today the lookahead reaches.
+ *
+ * Long enough to carry the screen over a holiday or the gap between terms;
+ * short enough that a quiet fortnight does not mean shipping a term of rows to
+ * a display that draws one at a time. Past this the board admits it has nothing.
+ */
+const LOOKAHEAD_DAYS = 14
+
+/** 'YYYY-MM-DD' plus n days, as a date rather than an instant. */
+function addDays(date: string, n: number): string {
+  const d = new Date(Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10)))
+  d.setUTCDate(d.getUTCDate() + n)
+  return d.toISOString().slice(0, 10)
+}
+
 /** PostgREST types an embedded to-one relation as a possible array. */
 function one<T>(v: T | T[] | null): T | null {
   return Array.isArray(v) ? v[0] ?? null : v
@@ -45,6 +61,7 @@ interface BookingRow {
 
 interface WeeklyRow {
   id: string
+  occurrence_date: string
   room_name: string | null
   start_time: string | null
   end_time: string | null
@@ -72,6 +89,7 @@ interface WeeklyRow {
 
 interface OneTimeRow {
   id: string
+  booking_date: string
   room_name: string | null
   start_time: string
   end_time: string
@@ -83,7 +101,7 @@ interface OneTimeRow {
 // !inner throughout, so a filter on an embedded column narrows the occurrence
 // rows rather than just nulling out the embed.
 const WEEKLY_SELECT = `
-  id, room_name, start_time, end_time, meeting_time, status, hidden, purpose, is_event,
+  id, occurrence_date, room_name, start_time, end_time, meeting_time, status, hidden, purpose, is_event,
   weekly_room_bookings!inner(
     room_name, start_time, end_time, meeting_time, status,
     bookings!inner(hidden, purpose, is_event, bodies!inner(name, body_type))
@@ -91,7 +109,7 @@ const WEEKLY_SELECT = `
 `
 
 const ONE_TIME_SELECT = `
-  id, room_name, start_time, end_time, meeting_time, status,
+  id, booking_date, room_name, start_time, end_time, meeting_time, status,
   bookings!inner(hidden, purpose, is_event, bodies!inner(name, body_type))
 `
 
@@ -108,6 +126,13 @@ export async function GET(request: Request) {
   // where today is already tomorrow after 8 PM Eastern (issues #87, #177).
   const date = searchParams.get('date') || todayInAppZone()
 
+  // Not just today. Once today is spent the screen rolls forward to the next day
+  // that has anything, so the window has to be wide enough to carry it across a
+  // quiet stretch -- a reading week, the end of a term -- without going blank.
+  // Bounded because a term's worth of rows is not worth shipping to a screen
+  // that will draw one of them.
+  const through = addDays(date, LOOKAHEAD_DAYS)
+
   // Four queries, not two. The screen draws committee meetings *and* IEMS
   // events, and those are different predicates on the same tables: a body's
   // type, versus an is_event flag. PostgREST's `or=` cannot span an embedded
@@ -121,22 +146,26 @@ export async function GET(request: Request) {
     adminSupabase
       .from('weekly_room_occurrences')
       .select(WEEKLY_SELECT)
-      .eq('occurrence_date', date)
+      .gte('occurrence_date', date)
+      .lte('occurrence_date', through)
       .eq('weekly_room_bookings.bookings.bodies.body_type', 'Committee'),
     adminSupabase
       .from('weekly_room_occurrences')
       .select(WEEKLY_SELECT)
-      .eq('occurrence_date', date)
+      .gte('occurrence_date', date)
+      .lte('occurrence_date', through)
       .eq('is_event', true),
     adminSupabase
       .from('one_time_room_bookings')
       .select(ONE_TIME_SELECT)
-      .eq('booking_date', date)
+      .gte('booking_date', date)
+      .lte('booking_date', through)
       .eq('bookings.bodies.body_type', 'Committee'),
     adminSupabase
       .from('one_time_room_bookings')
       .select(ONE_TIME_SELECT)
-      .eq('booking_date', date)
+      .gte('booking_date', date)
+      .lte('booking_date', through)
       .eq('bookings.is_event', true),
   ])
 
@@ -172,6 +201,7 @@ export async function GET(request: Request) {
 
     const candidate: WeeklyCandidate = {
       id: row.id,
+      date: row.occurrence_date,
       room_name: row.room_name,
       start_time: row.start_time,
       end_time: row.end_time,
@@ -205,6 +235,7 @@ export async function GET(request: Request) {
 
     const candidate: OneTimeCandidate = {
       id: row.id,
+      date: row.booking_date,
       room_name: row.room_name,
       start_time: row.start_time,
       end_time: row.end_time,
@@ -221,5 +252,5 @@ export async function GET(request: Request) {
     if (resolved) meetings.push(resolved)
   }
 
-  return NextResponse.json({ date, meetings })
+  return NextResponse.json({ date, through, meetings })
 }
