@@ -41,6 +41,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  // This row's calendar entry is a RECURRENCE-ID override on its series'
+  // master event when it belongs to one, not a standalone invite of its own
+  // (issue #184) -- recurrence_id says which occurrence, and this route never
+  // writes it: only a series-level create or edit re-anchors it.
+  const seriesInfo = existing.series_id
+    ? { seriesId: existing.series_id as string, recurrenceId: existing.recurrence_id as string }
+    : undefined
+
   const { title, start_time, end_time, attendee_ids, external_attendees, space_id } = await request.json()
 
   if (!title || !start_time || !end_time) {
@@ -184,7 +192,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             // Everyone on the booking now, including anyone just added: the
             // invite puts the event on a calendar that lacks it and moves it on
             // one that has it.
-            await sendSpaceBookingUpdatedEmail({ bookingId: id, booking, previous, recipients: current })
+            await sendSpaceBookingUpdatedEmail({ bookingId: id, booking, previous, recipients: current, series: seriesInfo })
           } else if (addedAttendees.length > 0) {
             // Nothing moved, so only the new attendees need the invite. An inbox
             // someone already on the booking also uses -- a shared SGA inbox --
@@ -194,6 +202,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             await sendSpaceBookingUpdatedEmail({
               bookingId: id, booking, previous: booking, recipients,
               intro: 'You have been added to an SGA Space booking.',
+              series: seriesInfo,
             })
           }
 
@@ -211,6 +220,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
               to: [process.env.RESEND_FROM_EMAIL!],
               bcc: dropped,
               intro: 'You have been removed from this SGA Space booking.',
+              series: seriesInfo,
             })
           }
         } catch (e) {
@@ -247,6 +257,12 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const { error: deleteError } = await adminSupabase.from('space_bookings').delete().eq('id', id)
   if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 })
 
+  // One week of a series cancels as a RECURRENCE-ID override on the series'
+  // master event, not by a UID of its own (issue #184).
+  const seriesInfo = booking.series_id
+    ? { seriesId: booking.series_id as string, recurrenceId: booking.recurrence_id as string }
+    : undefined
+
   // The row is already deleted, so notifying is a post-commit side effect.
   waitUntil(
     (async () => {
@@ -266,6 +282,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
           endTime: booking.end_time,
           to,
           bcc,
+          series: seriesInfo,
         })
       } catch (e) {
         console.error('Space booking cancellation email failed:', e)

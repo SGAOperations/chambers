@@ -1,11 +1,12 @@
 import { emailFrom, resend } from '@/lib/resend'
 import { sanitize, buildEmailHtml } from './utils'
 import {
-  buildSpaceIcs,
+  buildSpaceSeriesCancelIcs,
+  buildSpaceSeriesIcs,
   formatSpaceShortDate,
   formatSpaceTime,
   icsSequenceNow,
-  type SpaceIcsEvent,
+  type SeriesOccurrence,
 } from './space-ics'
 import {
   SERIES_CADENCE,
@@ -19,10 +20,13 @@ import {
  * Emails for recurring SGA Space bookings (issue #112).
  *
  * One email per series action rather than one per week: a semester-long series
- * would otherwise land a dozen or more near-identical messages at once. Each
- * carries a single calendar file holding every affected week, and each week's
- * UID is the one its booking row would get on its own -- so cancelling one week
- * later, through the ordinary cancellation email, removes just that week.
+ * would otherwise land a dozen or more near-identical messages at once. The
+ * calendar file is one VEVENT with an RRULE, not one VEVENT per week (issue
+ * #184 -- Outlook only reads the first VEVENT of a file that holds several, so
+ * a series sent that way never put its later weeks on a calendar). A week that
+ * has drifted from the pattern rides along as a RECURRENCE-ID override under
+ * the same UID; the routes are what decide which weeks those are and compute
+ * each one's recurrenceId (see space-ics.ts).
  */
 
 /** One week of a series, as the routes pass it in. */
@@ -32,9 +36,15 @@ export interface SeriesWeek {
   endTime: string
   /** Set only for a week in a space other than the series' own. */
   spaceName?: string
+  /**
+   * The instant the series' pattern generates for this week -- this row's
+   * recurrence_id column. Equal to startTime unless the week has diverged.
+   */
+  recurrenceId: string
 }
 
 interface SeriesBase {
+  seriesId: string
   title: string
   spaceName: string
   /**
@@ -59,13 +69,13 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function toEvents(base: SeriesBase, weeks: SeriesWeek[]): SpaceIcsEvent[] {
+function toOccurrences(weeks: SeriesWeek[]): SeriesOccurrence[] {
   return weeks.map(w => ({
     bookingId: w.bookingId,
-    title: base.title,
-    spaceName: w.spaceName ?? base.spaceName,
+    recurrenceId: w.recurrenceId,
     startTime: w.startTime,
     endTime: w.endTime,
+    spaceName: w.spaceName,
   }))
 }
 
@@ -133,6 +143,13 @@ function sections(
 }
 
 export async function sendSpaceSeriesConfirmedEmail(params: SeriesBase & {
+  /** The first occurrence's DTSTART/DTEND, Boston wall-clock digits. */
+  patternStart: string
+  patternEnd: string
+  /** Every pattern slot from the first occurrence through the end date, gaps included (see SpaceSeriesIcsPlan.count). */
+  count: number
+  /** Skipped dates, each at the pattern's time of day. */
+  gaps: string[]
   weeks: SeriesWeek[]
   skipped: SeriesConflict[]
   recipients: string[]
@@ -158,16 +175,33 @@ export async function sendSpaceSeriesConfirmedEmail(params: SeriesBase & {
     html,
     attachments: [{
       filename: 'booking.ics',
-      content: buildSpaceIcs('REQUEST', toEvents(params, weeks)),
+      content: buildSpaceSeriesIcs({
+        seriesId: params.seriesId,
+        title: params.title,
+        spaceName: params.spaceName,
+        frequency: cadenceOf(params),
+        patternStart: params.patternStart,
+        patternEnd: params.patternEnd,
+        count: params.count,
+        gaps: params.gaps,
+        occurrences: toOccurrences(weeks),
+      }),
       contentType: 'text/calendar; method=REQUEST',
     }],
   })
 }
 
 export async function sendSpaceSeriesUpdatedEmail(params: SeriesBase & {
-  /** Every upcoming week as it now stands. */
+  /** The first occurrence's DTSTART/DTEND under the pattern as it now stands. */
+  patternStart: string
+  patternEnd: string
+  /** Every pattern slot from the first occurrence through the (possibly new) end date, gaps included. */
+  count: number
+  /** Every date across the series' whole history with no row at all, at the current pattern's time of day. */
+  gaps: string[]
+  /** Every upcoming week as it now stands, on-pattern or kept at its own time alike. */
   weeks: SeriesWeek[]
-  /** Weeks this edit removed by moving the end date earlier. */
+  /** Weeks this edit removed by moving the end date earlier -- dropped by count alone; they need no attachment of their own. */
   removed: SeriesWeek[]
   /** Weeks that could not take the change, and so keep their previous time. */
   unchanged: SeriesConflict[]
@@ -189,25 +223,6 @@ export async function sendSpaceSeriesUpdatedEmail(params: SeriesBase & {
     ]
   )
 
-  // One sequence for both files, so a calendar sees the update and the removal
-  // as the same revision.
-  const sequence = icsSequenceNow()
-  const attachments = []
-  if (weeks.length) {
-    attachments.push({
-      filename: 'booking.ics',
-      content: buildSpaceIcs('REQUEST', toEvents(params, weeks), sequence),
-      contentType: 'text/calendar; method=REQUEST',
-    })
-  }
-  if (removed.length) {
-    attachments.push({
-      filename: 'cancel.ics',
-      content: buildSpaceIcs('CANCEL', toEvents(params, removed), sequence),
-      contentType: 'text/calendar; method=CANCEL',
-    })
-  }
-
   await resend.emails.send({
     from: emailFrom(),
     to: process.env.RESEND_FROM_EMAIL!,
@@ -215,7 +230,23 @@ export async function sendSpaceSeriesUpdatedEmail(params: SeriesBase & {
     subject: `Chambers — ${Cadence(params)} SGA Space Booking Updated: ${sanitize(params.title)}`,
     text,
     html,
-    attachments,
+    ...(weeks.length ? {
+      attachments: [{
+        filename: 'booking.ics',
+        content: buildSpaceSeriesIcs({
+          seriesId: params.seriesId,
+          title: params.title,
+          spaceName: params.spaceName,
+          frequency: cadenceOf(params),
+          patternStart: params.patternStart,
+          patternEnd: params.patternEnd,
+          count: params.count,
+          gaps: params.gaps,
+          occurrences: toOccurrences(weeks),
+        }, icsSequenceNow()),
+        contentType: 'text/calendar; method=REQUEST',
+      }],
+    } : {}),
   })
 }
 
@@ -244,7 +275,10 @@ export async function sendSpaceSeriesCancelledEmail(params: SeriesBase & {
     html,
     attachments: [{
       filename: 'cancel.ics',
-      content: buildSpaceIcs('CANCEL', toEvents(params, weeks), icsSequenceNow()),
+      // Cancels the whole series by its master UID -- no need to name a week,
+      // since ending the series or removing one person from all of it both
+      // mean "take every occurrence off this calendar" (issue #184).
+      content: buildSpaceSeriesCancelIcs(params.seriesId, icsSequenceNow()),
       contentType: 'text/calendar; method=CANCEL',
     }],
   })

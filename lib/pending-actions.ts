@@ -1,5 +1,6 @@
 import type { Db } from './db/data-api'
 import { isManagementRole } from './admin-roles'
+import { todayInAppZone } from './app-zone'
 import { OPS_REVIEW } from './request-status'
 
 /**
@@ -93,8 +94,14 @@ export const DEFAULT_PA_SETTINGS: PendingActionSettings = {
 const SEVERITY_RANK: Record<Severity, number> = { regular: 0, warning: 1, danger: 2 }
 
 // ---------------------------------------------------------------------------
-// Date helpers -- everything in whole UTC days. The function runs in UTC; the
-// small skew vs. Eastern near midnight is acceptable for a severity badge.
+// Date helpers -- everything in whole days, each anchored at the nominal UTC
+// midnight of a Boston calendar date.
+//
+// Both sides of every comparison have to be built that way. A reference date
+// comes from a DATE column, which already means a Boston day; "today" has to be
+// resolved in APP_TIME_ZONE to match. Reading the UTC fields of `new Date()`
+// instead is what made this module run a day ahead from 8pm Eastern onward,
+// firing every next-day severity four hours early (issue #177).
 // ---------------------------------------------------------------------------
 
 function utcMidnight(dateStr: string): number {
@@ -309,7 +316,11 @@ export interface PendingActionsFetchOptions {
    * leaking them.
    */
   adminRole?: string | null
-  /** Overridable clock; severity is measured in whole days from this date. */
+  /**
+   * Overridable clock -- a real instant, not a wall-clock stand-in. The Boston
+   * calendar day is resolved from it; severity is measured in whole days from
+   * there.
+   */
   now?: Date
 }
 
@@ -317,10 +328,10 @@ export async function fetchPendingActions(
   adminSupabase: Db,
   { adminRole = null, now = new Date() }: PendingActionsFetchOptions = {}
 ): Promise<PendingActionsResult> {
-  const base = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const [todayY, todayM, todayD] = todayInAppZone(now).split('-').map(Number)
+  const base = Date.UTC(todayY, todayM - 1, todayD)
   // The far date at which event-form actions start appearing = today + N months.
-  const triggerCutoffMs = (months: number) =>
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + months, now.getUTCDate())
+  const triggerCutoffMs = (months: number) => Date.UTC(todayY, todayM - 1 + months, todayD)
 
   const [
     { data: settingsRow },

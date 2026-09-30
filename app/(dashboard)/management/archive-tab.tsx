@@ -42,6 +42,8 @@ interface OneTimeBooking {
   purpose: string
   bodies: { name: string } | null
   creator_role: string | null
+  /** Came in through Browse/Book NUSSO rather than being entered here (#188). */
+  booked_via_nusso?: boolean
   one_time_room_bookings: {
     id: string
     room_name: string
@@ -59,6 +61,8 @@ interface WeeklyBooking {
   purpose: string
   bodies: { name: string } | null
   creator_role: string | null
+  /** Came in through Browse/Book NUSSO rather than being entered here (#188). */
+  booked_via_nusso?: boolean
   weekly_room_bookings: {
     id: string
     room_name: string
@@ -87,6 +91,8 @@ interface TablingBooking {
   purpose: string
   bodies: { name: string } | null
   creator_role: string | null
+  /** Came in through Browse/Book NUSSO rather than being entered here (#188). */
+  booked_via_nusso?: boolean
   tabling_bookings: {
     id: string
     reservation_code: string | null
@@ -169,6 +175,23 @@ function AdminRoleBadge({ role }: { role: string | null | undefined }) {
   return null
 }
 
+/**
+ * Marks a booking Chambers made in EMS on a member's behalf (issue #188). Same
+ * pill as the live Bookings list, kept local the way AdminRoleBadge above it is:
+ * three small copies beat one import that drags a whole tab's module along.
+ */
+function NussoBadge({ bookedViaNusso }: { bookedViaNusso: boolean | undefined }) {
+  if (!bookedViaNusso) return null
+  return (
+    <span
+      title="Booked through Browse/Book NUSSO from inside Chambers, not entered by an administrator."
+      className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#3b0a2a] text-[#f472b6]"
+    >
+      NUSSO
+    </span>
+  )
+}
+
 interface CsvRow {
   semester: string
   type: string
@@ -181,6 +204,12 @@ interface CsvRow {
   endTime: string
   status: string
   reservationCode: string
+  /**
+   * 'Yes' or '' -- issue #188. The export is the one copy of this data that
+   * leaves Chambers, so provenance has to survive it; a CSV that cannot tell a
+   * NUSSO booking from an admin-entered one cannot be audited anywhere else.
+   */
+  bookedViaNusso: string
 }
 
 function buildCsvRows(group: SemesterGroup): CsvRow[] {
@@ -201,6 +230,7 @@ function buildCsvRows(group: SemesterGroup): CsvRow[] {
         endTime: d.end_time,
         status: d.status,
         reservationCode: d.reservation_code || '',
+        bookedViaNusso: b.booked_via_nusso ? 'Yes' : '',
       })
     }
   }
@@ -220,6 +250,7 @@ function buildCsvRows(group: SemesterGroup): CsvRow[] {
         endTime: w.end_time,
         status: w.status,
         reservationCode: w.reservation_code || '',
+        bookedViaNusso: b.booked_via_nusso ? 'Yes' : '',
       })
     }
   }
@@ -240,6 +271,7 @@ function buildCsvRows(group: SemesterGroup): CsvRow[] {
           endTime: s.end_time,
           status: s.status,
           reservationCode: s.reservation_code || '',
+          bookedViaNusso: b.booked_via_nusso ? 'Yes' : '',
         })
       }
     }
@@ -249,10 +281,11 @@ function buildCsvRows(group: SemesterGroup): CsvRow[] {
 }
 
 function exportCSV(rows: CsvRow[], filename: string) {
-  const header = ['Semester', 'Type', 'Body', 'Purpose', 'Room/Location', 'Date', 'End Date', 'Start Time', 'End Time', 'Status', 'Reservation Code']
+  const header = ['Semester', 'Type', 'Body', 'Purpose', 'Room/Location', 'Date', 'End Date', 'Start Time', 'End Time', 'Status', 'Reservation Code', 'Booked via NUSSO']
   const dataRows = rows.map(r => [
     r.semester, r.type, r.body, r.purpose, r.roomOrLocation,
     r.date, r.endDate, r.startTime, r.endTime, r.status, r.reservationCode,
+    r.bookedViaNusso,
   ])
   const csv = [header, ...dataRows]
     .map(row => row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
@@ -333,6 +366,7 @@ export default function ArchiveTab() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
+                      <NussoBadge bookedViaNusso={b.booked_via_nusso} />
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {firstSession.status}
                       </span>
@@ -365,6 +399,7 @@ export default function ArchiveTab() {
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
+                      <NussoBadge bookedViaNusso={b.booked_via_nusso} />
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {w.status}
                       </span>
@@ -390,6 +425,7 @@ export default function ArchiveTab() {
                     <p className="font-semibold text-[#f0f6ff]">{b.bodies?.name}</p>
                     <div className="flex items-center gap-3">
                       <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
+                      <NussoBadge bookedViaNusso={b.booked_via_nusso} />
                       <span className="text-xs text-[#6a96bb] font-medium">Tabling</span>
                     </div>
                   </div>

@@ -30,6 +30,12 @@ export async function GET() {
 
   const semesterList = semesters || []
 
+  // Every select below carries booked_via_nusso (issue #188). The Archive tab is
+  // where an admin goes to look back over a whole semester, and its CSV is what
+  // leaves Chambers entirely, so a booking that came in through Browse/Book
+  // NUSSO has to say so here as well as in the live list -- an export that
+  // flattens the distinction is the one place it can never be recovered.
+
   // Build groups: one per semester + one for unassigned
   const groups = await Promise.all(
     semesterList.map(async (sem: { id: string; name: string; is_active: boolean; created_at: string }) => {
@@ -37,7 +43,7 @@ export async function GET() {
         adminSupabase
           .from('bookings')
           .select(`
-            id, purpose, body_id,
+            id, purpose, body_id, booked_via_nusso,
             bodies(name),
             creator_role,
             one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
@@ -49,7 +55,7 @@ export async function GET() {
         adminSupabase
           .from('bookings')
           .select(`
-            id, purpose, body_id,
+            id, purpose, body_id, booked_via_nusso,
             bodies(name),
             creator_role,
             weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
@@ -63,7 +69,7 @@ export async function GET() {
         adminSupabase
           .from('bookings')
           .select(`
-            id, purpose, body_id,
+            id, purpose, body_id, booked_via_nusso,
             bodies(name),
             creator_role,
             tabling_bookings(id, reservation_code,
@@ -89,7 +95,7 @@ export async function GET() {
     adminSupabase
       .from('bookings')
       .select(`
-        id, purpose, body_id,
+        id, purpose, body_id, booked_via_nusso,
         bodies(name),
         creator_role,
         one_time_room_bookings(id, room_name, booking_date, start_time, end_time, status, reservation_code)
@@ -101,7 +107,7 @@ export async function GET() {
     adminSupabase
       .from('bookings')
       .select(`
-        id, purpose, body_id,
+        id, purpose, body_id, booked_via_nusso,
         bodies(name),
         creator_role,
         weekly_room_bookings(id, room_name, start_date, end_date, start_time, end_time, status, reservation_code,
@@ -115,7 +121,7 @@ export async function GET() {
     adminSupabase
       .from('bookings')
       .select(`
-        id, purpose, body_id,
+        id, purpose, body_id, booked_via_nusso,
         bodies(name),
         creator_role,
         tabling_bookings(id, reservation_code,

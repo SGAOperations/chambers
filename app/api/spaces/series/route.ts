@@ -159,6 +159,10 @@ export async function POST(request: Request) {
       attendee_ids: attendees,
       external_attendees: externals,
       series_id: series.id,
+      // Brand new, so it sits exactly on the pattern it was planned from
+      // (issue #184). A later series-level edit or one-off change is what can
+      // move this row away from its recurrence_id -- never this insert.
+      recurrence_id: w.interval.start,
     })))
     .select('id, start_time, end_time')
 
@@ -178,11 +182,20 @@ export async function POST(request: Request) {
           resolveSpacesAddresses(adminSupabase, userIds),
         ])
         await sendSpaceSeriesConfirmedEmail({
+          seriesId: series.id,
           title: title.trim(),
           spaceName: space?.name ?? 'SGA Space',
           frequency: cadence,
+          // DTSTART is the very first requested date, whether or not it was
+          // bookable -- RRULE's anchor does not itself need a real booking.
+          patternStart: weeks[0].interval.start,
+          patternEnd: weeks[0].interval.end,
+          count: weeks.length,
+          gaps: conflicts.map(c => intervalFor(c.date, start_time, end_time).start),
           weeks: rows
-            .map((r: { id: string; start_time: string; end_time: string }) => ({ bookingId: r.id, startTime: r.start_time, endTime: r.end_time }))
+            .map((r: { id: string; start_time: string; end_time: string }) => ({
+              bookingId: r.id, startTime: r.start_time, endTime: r.end_time, recurrenceId: r.start_time,
+            }))
             .sort((a, b) => a.startTime.localeCompare(b.startTime)),
           skipped: conflicts,
           recipients: dedupeEmails(userIds.flatMap(id => addresses.get(id) ?? [])),

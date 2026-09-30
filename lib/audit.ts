@@ -23,6 +23,22 @@ export type AuditTarget = 'booking' | 'series' | 'occurrence' | 'session'
 /** What happened to it. */
 export type AuditAction = 'created' | 'updated' | 'added' | 'removed' | 'cancelled' | 'dismissed'
 
+/**
+ * Where an action came from, when it came from somewhere other than an admin
+ * working in Chambers' own UI (issue #188).
+ *
+ * Only the Browse/Book NUSSO integration claims one, and only the two places
+ * that actually drive EMS do: recording a reservation it just made
+ * (lib/nusso/record-booking.ts) and releasing one (lib/nusso/cancel-booking.ts).
+ * Everything else leaves it unset, which is why 'nusso' is a positive claim and
+ * an unset value is never read as "definitely not NUSSO".
+ *
+ * Deliberately not derived from bookings.booked_via_nusso: that flag is about
+ * the booking, and the ordinary admin edits a NUSSO booking collects afterwards
+ * are not NUSSO acting. See db/neon/0011_audit_log_source.sql.
+ */
+export type AuditSource = 'nusso'
+
 export interface AuditRow {
   booking_id: string
   admin_id: string
@@ -43,6 +59,11 @@ export interface AuditRow {
   action: AuditAction
   /** The fields that moved. Null where there is nothing to diff, e.g. on creation. */
   changes: BookingChange[] | null
+  /**
+   * Where the action came from. Left unset by everything except the NUSSO
+   * writers, and stored as null then.
+   */
+  source?: AuditSource | null
 }
 
 /**
@@ -70,6 +91,20 @@ async function currentRoles(db: Db, adminIds: string[]): Promise<Map<string, str
 }
 
 /**
+ * The columns added to audit_logs after its baseline, newest first.
+ *
+ * The Data API only sees a column once its schema cache has been refreshed by
+ * hand (db/neon/README.md), so code deployed ahead of that refresh has its
+ * writes rejected outright -- and an audit write that fails is history lost.
+ * Dropping the newest column and trying again costs an unmarked entry instead,
+ * which stops mattering the moment the cache catches up.
+ *
+ * Newest first, and dropped one at a time, so a missing `source` does not also
+ * cost the `admin_role` badge that has been landed and cached since 0008.
+ */
+const NEWER_COLUMNS = ['source', 'admin_role'] as const
+
+/**
  * Writes `rows` in one insert and returns the first one's id, or null.
  *
  * One insert so every entry from a single save shares its created_at -- now() is
@@ -92,33 +127,36 @@ export async function insertAuditRows(
 
   const needRole = rows.filter(r => r.admin_role === undefined)
   const roles = await currentRoles(db, [...new Set(needRole.map(r => r.admin_id))])
-  const stamped = rows.map(r =>
-    r.admin_role === undefined ? { ...r, admin_role: roles.get(r.admin_id) ?? null } : r
-  )
+  // Both newer columns are set on every row, even when the caller said nothing
+  // about them: PostgREST rejects a bulk insert whose objects disagree on their
+  // keys, so a batch where only some rows named `source` would fail as a whole.
+  const stamped = rows.map(r => ({
+    ...r,
+    admin_role: r.admin_role === undefined ? roles.get(r.admin_id) ?? null : r.admin_role,
+    source: r.source ?? null,
+  }))
 
-  const { data, error } = await db.from('audit_logs').insert(stamped).select('id')
-  if (!error) return (data as { id: string }[] | null)?.[0]?.id ?? null
+  // First attempt writes everything; each retry drops one more newer column.
+  for (let drop = 0; drop <= NEWER_COLUMNS.length; drop++) {
+    const omitted = NEWER_COLUMNS.slice(0, drop)
+    const payload = stamped.map(r => {
+      const row: Record<string, unknown> = { ...r }
+      for (const column of omitted) delete row[column]
+      return row
+    })
 
-  // The one failure worth a second attempt: admin_role is a newer column, and
-  // the Data API only sees it once its schema cache has been refreshed
-  // (db/neon/README.md). Deployed ahead of that refresh, every audit write here
-  // would be rejected and the history simply lost. Retrying without the column
-  // costs an unbadged entry instead, and stops mattering the moment the cache
-  // catches up.
-  console.error('Audit log write failed:', error)
-  const { data: retry, error: retryError } = await db
-    .from('audit_logs')
-    .insert(rows.map(r => {
-      const bare: AuditRow = { ...r }
-      delete bare.admin_role
-      return bare
-    }))
-    .select('id')
-  if (retryError) {
-    console.error('Audit log write failed without admin_role too:', retryError)
-    return null
+    const { data, error } = await db.from('audit_logs').insert(payload).select('id')
+    if (!error) return (data as { id: string }[] | null)?.[0]?.id ?? null
+
+    console.error(
+      omitted.length
+        ? `Audit log write failed without ${omitted.join(', ')} too:`
+        : 'Audit log write failed:',
+      error
+    )
   }
-  return (retry as { id: string }[] | null)?.[0]?.id ?? null
+
+  return null
 }
 
 /** One comparable field of a session-like row. */

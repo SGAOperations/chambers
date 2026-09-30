@@ -31,10 +31,15 @@ export async function GET(request: Request) {
 
   const semesterId = (!all && activeSemester) ? activeSemester.id : null
 
+  // booked_via_nusso rides along on all three so the admin lists can mark which
+  // bookings came in through Browse/Book NUSSO rather than being made here
+  // (issue #188). It is only ever true on One-Time Room and Tabling -- weekly
+  // series are never bookable through NUSSO -- but it is selected uniformly
+  // rather than by type, so the three shapes stay interchangeable.
   let oneTimeQ = supabase
     .from('bookings')
     .select(`
-      id, purpose, body_id, is_event, hidden, scope, division,
+      id, purpose, body_id, is_event, hidden, scope, division, booked_via_nusso,
       bodies(name),
       booking_bodies(body_id, bodies(name)),
       creator_role,
@@ -47,7 +52,7 @@ export async function GET(request: Request) {
   let weeklyQ = supabase
     .from('bookings')
     .select(`
-      id, purpose, body_id, is_event, hidden, scope, division,
+      id, purpose, body_id, is_event, hidden, scope, division, booked_via_nusso,
       bodies(name),
       booking_bodies(body_id, bodies(name)),
       creator_role,
@@ -62,7 +67,7 @@ export async function GET(request: Request) {
   let tablingQ = supabase
     .from('bookings')
     .select(`
-      id, purpose, body_id, is_event, hidden, scope, division,
+      id, purpose, body_id, is_event, hidden, scope, division, booked_via_nusso,
       bodies(name),
       booking_bodies(body_id, bodies(name)),
       creator_role,
