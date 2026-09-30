@@ -87,12 +87,33 @@ export function isInDisplayBuilding(roomName: string | null | undefined): boolea
 }
 
 /** Which way someone standing at the display has to travel to reach the room. */
-export type Bearing = 'up' | 'down' | 'left' | 'up-left' | 'up-right'
+export type Bearing = 'up' | 'down' | 'left' | 'right' | 'up-left' | 'up-right'
 
 export interface Wayfinding {
   bearing: Bearing
   /** Replaces the computed wording when the bearing alone would mislead. */
   note?: string
+  /**
+   * The room is in another building, so the arrow means "leave and walk", not
+   * "take the stairs".
+   *
+   * The display draws these differently -- a double chevron, and wording that
+   * does not say "Upstairs" of a building across campus -- and it cannot work
+   * that out from the bearing alone, because 'up' is the same glyph either way.
+   */
+  offBuilding?: boolean
+  /**
+   * The room is in this building but not on this floor.
+   *
+   * Resolved from the room number against DISPLAY_FLOOR, so a new fourth-floor
+   * room needs no thought. Set explicitly only where there is no number to read
+   * it from, which is every entry in NAMED_BEARINGS.
+   *
+   * The display draws one chevron for these, against a plain arrow for the
+   * floor you are standing on and two for another building. That is the whole
+   * scale: how far the arrow is asking you to go.
+   */
+  offFloor?: boolean
 }
 
 /**
@@ -107,11 +128,21 @@ export interface Wayfinding {
  * Keyed by room number so the free-text name can vary ('Curry 333', 'Curry 333
  * (Senate Chambers)') without needing an entry each.
  */
+/**
+ * The floor the screen itself hangs on.
+ *
+ * Everything on it gets a plain arrow: 333 is behind you and 334 to your left,
+ * and neither is a journey. A room off this floor gets a chevron instead, which
+ * is what makes the bare arrow mean "you are already here".
+ */
+const DISPLAY_FLOOR = 3
+
 const ROOM_BEARINGS: Record<number, Wayfinding> = {
   333: { bearing: 'down', note: 'Right behind you' },
   334: { bearing: 'left' },
   335: { bearing: 'left' },
   336: { bearing: 'left' },
+  340: { bearing: 'left' },
   342: { bearing: 'left' },
   344: { bearing: 'left' },
   346: { bearing: 'left' },
@@ -122,8 +153,8 @@ const ROOM_BEARINGS: Record<number, Wayfinding> = {
 
 /** Rooms named rather than numbered, matched on the name. */
 const NAMED_BEARINGS: [RegExp, Wayfinding][] = [
-  [/indoor quad/i, { bearing: 'down' }],
-  [/2nd floor/i, { bearing: 'down' }],
+  [/indoor quad/i, { bearing: 'down', offFloor: true }],
+  [/2nd floor/i, { bearing: 'down', offFloor: true }],
 ]
 
 /**
@@ -137,25 +168,86 @@ const FLOOR_BEARINGS: Record<number, Wayfinding> = {
 }
 
 /**
+ * Fills in offFloor from the room number, leaving an explicit one alone.
+ *
+ * Derived rather than tabulated so adding a fourth-floor room is one line in
+ * ROOM_BEARINGS and not two facts to keep in step. A room with no number in it
+ * has nothing to derive from, and keeps whatever its table entry said.
+ */
+function withFloor(found: Wayfinding, roomName: string): Wayfinding {
+  if (found.offFloor !== undefined) return found
+  const floor = floorOf(roomName)
+  if (floor === null) return found
+  return { ...found, offFloor: floor !== DISPLAY_FLOOR }
+}
+
+/**
+ * Which way each other building lies from the screen.
+ *
+ * Given for this screen, exactly as ROOM_BEARINGS is: nothing in the booking
+ * tables says which way Snell is from a hallway in Curry, and a room number
+ * says less than nothing, since 'Egan 306' and 'Curry 336' share a digit.
+ *
+ * Keyed on the first word of the room name, which is how these are written --
+ * 'Snell 001', 'Egan 206', 'Krentzman Quad', 'West Village Quad', 'Centennial
+ * Common', 'Blackman Auditorium', 'Ryder 145'. A first word not listed here
+ * gets no arrow, which is the same silence an unrecognised Curry room gets:
+ * 'No Room' is in the data too, and it is not a place.
+ */
+const BUILDING_BEARINGS: Record<string, Bearing> = {
+  snell: 'up-left',
+  egan: 'up-left',
+  krentzman: 'right',
+  blackman: 'right',
+  ryder: 'up',
+  west: 'up',
+  centennial: 'up',
+}
+
+/** The first word of a room name, lowercased, or null if there isn't one. */
+function buildingWord(roomName: string | null | undefined): string | null {
+  const word = roomName?.trim().split(/\s+/)[0]?.toLowerCase()
+  return word || null
+}
+
+/**
+ * Which way to point for a room outside this building, or null when the
+ * building is not one we have been given a direction for.
+ */
+function directionToBuilding(roomName: string | null | undefined): Wayfinding | null {
+  const word = buildingWord(roomName)
+  if (!word) return null
+  const bearing = BUILDING_BEARINGS[word]
+  return bearing ? { bearing, offBuilding: true } : null
+}
+
+/**
  * Which way to point, or null to name the room and point nowhere.
  *
- * Null for another building, and for a room in this one that nothing above
- * recognises. A corridor screen that points the wrong way is worse than one that
- * names the room and stops, so an unknown room gets silence rather than a guess
- * from its floor.
+ * Null for a room this screen has no direction for -- a building missing from
+ * BUILDING_BEARINGS, or a room in this one that nothing above recognises. A
+ * corridor screen that points the wrong way is worse than one that names the
+ * room and stops, so an unknown room gets silence rather than a guess from its
+ * floor.
  */
 export function directionTo(roomName: string | null | undefined): Wayfinding | null {
-  if (!isInDisplayBuilding(roomName)) return null
+  // Another building is now answerable rather than silent, where we have been
+  // given its direction.
+  if (!isInDisplayBuilding(roomName)) return directionToBuilding(roomName)
 
   for (const [pattern, found] of NAMED_BEARINGS) {
-    if (pattern.test(roomName!)) return found
+    if (pattern.test(roomName!)) return withFloor(found, roomName!)
   }
 
   const number = roomNumber(roomName)
-  if (number !== null && ROOM_BEARINGS[number]) return ROOM_BEARINGS[number]
+  if (number !== null && ROOM_BEARINGS[number]) {
+    return withFloor(ROOM_BEARINGS[number], roomName!)
+  }
 
   const floor = floorOf(roomName)
-  if (floor !== null && FLOOR_BEARINGS[floor]) return FLOOR_BEARINGS[floor]
+  if (floor !== null && FLOOR_BEARINGS[floor]) {
+    return withFloor(FLOOR_BEARINGS[floor], roomName!)
+  }
 
   return null
 }

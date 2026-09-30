@@ -14,6 +14,7 @@ import {
   shouldPointAt,
   type CommitteeMeeting,
   type Bearing,
+  type Wayfinding,
 } from '@/lib/committee-display'
 import { type DisplaySpace } from '@/lib/spaces-display'
 import { SpacesCard } from './spaces-card'
@@ -46,6 +47,7 @@ const ARROWS: Record<Bearing, string> = {
   up: '↑',
   down: '↓',
   left: '←',
+  right: '→',
   'up-left': '↖',
   'up-right': '↗',
 }
@@ -54,8 +56,96 @@ const BEARING_WORDS: Record<Bearing, string> = {
   up: 'Upstairs',
   down: 'Downstairs',
   left: 'To your left',
+  right: 'To your right',
   'up-left': 'Upstairs',
   'up-right': 'Upstairs',
+}
+
+/**
+ * The wording for a room in another building.
+ *
+ * BEARING_WORDS is about this building: it reads 'up' as a staircase, which is
+ * the wrong thing to say about Ryder. These say which way to walk and leave the
+ * building name to the room line, which already carries it.
+ */
+const BUILDING_BEARING_WORDS: Record<Bearing, string> = {
+  up: 'Straight ahead',
+  down: 'Back the way you came',
+  left: 'To your left',
+  right: 'To your right',
+  'up-left': 'Ahead and to your left',
+  'up-right': 'Ahead and to your right',
+}
+
+/**
+ * How far a right-pointing glyph must turn to face each bearing.
+ *
+ * Used to aim the double chevron, which exists only pointing right. Rotating
+ * one glyph beats collecting six: Unicode has no double chevron for the
+ * diagonals at all, and the arrowhead pairs it does have (U+21C7 and friends)
+ * are missing from enough fonts that the board would fall back to tofu on a
+ * screen nobody is standing at to notice.
+ */
+const BEARING_ROTATION: Record<Bearing, number> = {
+  right: 0,
+  'up-right': -45,
+  up: -90,
+  'up-left': -135,
+  left: 180,
+  down: 90,
+}
+
+/**
+ * Which way to walk, and how far the walk is.
+ *
+ * A plain arrow for a room on this floor, one chevron for another floor of this
+ * building, two for another building. The shape carries the distance, so a
+ * reader learns the scale once and then reads it at a glance: the arrow for 333
+ * means "turn round", and nothing that means "go upstairs" wears the same mark.
+ *
+ * The chevrons are drawn rather than typed. U+00BB is punctuation -- sized to
+ * sit between lowercase letters, and in Space Grotesk it comes out as two
+ * hairline carets about two thirds the ink of an arrow, which scaling up only
+ * made into bigger hairlines. These are mitred strokes at the weight of the
+ * arrows beside them, which is what the shape has to be to read at distance.
+ *
+ * One square drawing rotated, rather than one per bearing: Unicode has no
+ * double chevron for the diagonals at all, and the arrowhead pairs it does have
+ * are missing from enough fonts to risk tofu on a screen nobody is watching.
+ */
+function DirectionArrow({ direction }: { direction: Wayfinding }) {
+  if (!direction.offBuilding && !direction.offFloor) {
+    return (
+      <span aria-hidden className="text-[min(6.67vw,11.85vh)] font-bold text-[#4ade80] leading-none">
+        {ARROWS[direction.bearing]}
+      </span>
+    )
+  }
+
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className="w-[min(6.67vw,11.85vh)] h-[min(6.67vw,11.85vh)] flex-shrink-0"
+      style={{ transform: `rotate(${BEARING_ROTATION[direction.bearing]}deg)` }}
+      fill="none"
+      stroke="#4ade80"
+      strokeWidth={4}
+      // Butt ends and a mitred point: square cuts and a sharp apex, rather than
+      // the rounded nib a default cap would give it.
+      strokeLinecap="butt"
+      strokeLinejoin="miter"
+    >
+      {direction.offBuilding ? (
+        <>
+          <polyline points="3,5 11,12 3,19" />
+          <polyline points="12,5 20,12 12,19" />
+        </>
+      ) : (
+        <polyline points="8,5 16,12 8,19" />
+      )}
+    </svg>
+  )
 }
 
 /**
@@ -152,13 +242,15 @@ function MeetingCard({ meeting, label, pointTheWay }: {
   // virtual. The room name is left standing on its own, since saying where
   // something is helps a reader whatever the hour.
   const direction = pointTheWay ? directionTo(meeting.roomName) : null
-  const arrow = direction ? ARROWS[direction.bearing] : null
   // A floor number only means anything in the building the screen is in: 'Egan
   // 306' is not this building's third floor.
   const floor = direction && isInDisplayBuilding(meeting.roomName) ? floorOf(meeting.roomName) : null
   const directionLine = direction
     ? [
-        direction.note ?? BEARING_WORDS[direction.bearing],
+        direction.note ??
+          (direction.offBuilding
+            ? BUILDING_BEARING_WORDS[direction.bearing]
+            : BEARING_WORDS[direction.bearing]),
         floor !== null ? `${ordinalFloor(floor)} floor` : null,
       ].filter(Boolean).join(' · ')
     : ''
@@ -198,11 +290,7 @@ function MeetingCard({ meeting, label, pointTheWay }: {
         <p className="text-[min(3.75vw,6.67vh)] font-semibold text-[#93b8d8] mt-[5.2vh]">Virtual — no room</p>
       ) : (
         <div className="flex items-center gap-[2.1vw] mt-[5.2vh]">
-          {arrow && (
-            <span aria-hidden className="text-[min(6.67vw,11.85vh)] font-bold text-[#4ade80] leading-none">
-              {arrow}
-            </span>
-          )}
+          {direction && <DirectionArrow direction={direction} />}
           <div>
             <p
               className={`text-[min(5vw,8.89vh)] font-semibold ${
