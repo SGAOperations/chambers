@@ -2,8 +2,11 @@ import { APP_TIME_ZONE } from '@/lib/app-zone'
 import { resolveMeetingTime } from '@/lib/meeting-time'
 
 /**
- * Working out which committee meetings the Slack bot should remind a channel
- * about, and what to say (issue #95).
+ * Working out which meetings the Slack bot should remind a channel about, and
+ * what to say (issues #95, #104).
+ *
+ * Applies to any body with a channel linked, not just committees; nothing here
+ * ever looked at the body type.
  *
  * Kept apart from the route so the selection rules -- which weeks count, which
  * are suppressed, how an override resolves against its series -- can be read and
@@ -20,7 +23,7 @@ export const REMINDER_HOUR = 9
  * An allow-list rather than a block-list: anything not named here -- Waitlisted,
  * Tentative, Pending Cancellation, Unavailable, Missed, Repurposed, and any
  * status added later -- posts nothing, because none of them says plainly whether
- * or where the committee is meeting.
+ * or where the body is meeting.
  */
 const REMINDED_STATUSES = new Set([
   'Reserved',

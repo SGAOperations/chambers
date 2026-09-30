@@ -1,7 +1,6 @@
 import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { postSlackMessage } from '@/lib/slack'
-import { SLACK_REMINDER_BODY_TYPES } from '@/lib/body-types'
 import {
   REMINDER_HOUR,
   appZoneParts,
@@ -12,8 +11,11 @@ import {
 } from '@/lib/meeting-reminders'
 
 /**
- * Posts tomorrow's committee meetings -- or that tomorrow's meeting is off -- to
- * each committee's Slack channel (issues #95, #104).
+ * Posts tomorrow's meetings -- or that tomorrow's meeting is off -- to each
+ * body's Slack channel (issues #95, #104).
+ *
+ * Every body is eligible, whatever its type. What decides is whether the body
+ * has a channel linked and its reminders switched on, both filtered for below.
  *
  * Driven by .github/workflows/slack-reminders.yml, following the same pattern as
  * /api/cron/warm: a scheduled GitHub Action rather than a Vercel cron, because
@@ -43,7 +45,7 @@ const SELECT = `
     room_name, start_time, end_time, meeting_time, status,
     bookings!inner(
       hidden,
-      bodies!inner(name, body_type, slack_channel_id, slack_reminders_enabled)
+      bodies!inner(name, slack_channel_id, slack_reminders_enabled)
     )
   )
 `
@@ -66,7 +68,7 @@ export async function GET(request: Request) {
   const { date: today, hour } = appZoneParts()
 
   // Before the posting hour there is nothing to do. The date rolls over at
-  // midnight Eastern, and an overnight run would otherwise ping every committee
+  // midnight Eastern, and an overnight run would otherwise ping every linked
   // channel at 1am.
   if (hour < REMINDER_HOUR) {
     return NextResponse.json({ ok: true, skipped: 'before posting hour', hour })
@@ -78,7 +80,6 @@ export async function GET(request: Request) {
     .from('weekly_room_occurrences')
     .select(SELECT)
     .eq('occurrence_date', target)
-    .in('weekly_room_bookings.bookings.bodies.body_type', [...SLACK_REMINDER_BODY_TYPES])
     .eq('weekly_room_bookings.bookings.bodies.slack_reminders_enabled', true)
     .not('weekly_room_bookings.bookings.bodies.slack_channel_id', 'is', null)
 

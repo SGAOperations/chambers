@@ -1,7 +1,7 @@
 name: slack-reminders
 
-# Hits /api/cron/slack-reminders on production, which posts tomorrow's committee
-# meetings to each committee's Slack channel (issue #95).
+# Hits /api/cron/slack-reminders on production, which posts tomorrow's meetings
+# to each body's Slack channel (issue #95).
 #
 # A GitHub Action rather than a Vercel cron, for the same reason keep-warm.yml is
 # one: Hobby plans cap Vercel crons at once per day, and this needs to retry.
@@ -29,7 +29,7 @@ jobs:
   post:
     runs-on: ubuntu-latest
     steps:
-      - name: Post tomorrow's committee meetings
+      - name: Post tomorrow's meetings
         run: |
           curl -fsS -m 60 --retry 2 \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
