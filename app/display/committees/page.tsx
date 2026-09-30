@@ -14,7 +14,10 @@ import {
   shouldPointAt,
   type CommitteeMeeting,
   type Bearing,
+  type Wayfinding,
 } from '@/lib/committee-display'
+import { type DisplaySpace } from '@/lib/spaces-display'
+import { SpacesCard } from './spaces-card'
 
 /**
  * The committee wayfinding display (issue #187).
@@ -44,6 +47,7 @@ const ARROWS: Record<Bearing, string> = {
   up: '↑',
   down: '↓',
   left: '←',
+  right: '→',
   'up-left': '↖',
   'up-right': '↗',
 }
@@ -52,8 +56,96 @@ const BEARING_WORDS: Record<Bearing, string> = {
   up: 'Upstairs',
   down: 'Downstairs',
   left: 'To your left',
+  right: 'To your right',
   'up-left': 'Upstairs',
   'up-right': 'Upstairs',
+}
+
+/**
+ * The wording for a room in another building.
+ *
+ * BEARING_WORDS is about this building: it reads 'up' as a staircase, which is
+ * the wrong thing to say about Ryder. These say which way to walk and leave the
+ * building name to the room line, which already carries it.
+ */
+const BUILDING_BEARING_WORDS: Record<Bearing, string> = {
+  up: 'Straight ahead',
+  down: 'Back the way you came',
+  left: 'To your left',
+  right: 'To your right',
+  'up-left': 'Ahead and to your left',
+  'up-right': 'Ahead and to your right',
+}
+
+/**
+ * How far a right-pointing glyph must turn to face each bearing.
+ *
+ * Used to aim the double chevron, which exists only pointing right. Rotating
+ * one glyph beats collecting six: Unicode has no double chevron for the
+ * diagonals at all, and the arrowhead pairs it does have (U+21C7 and friends)
+ * are missing from enough fonts that the board would fall back to tofu on a
+ * screen nobody is standing at to notice.
+ */
+const BEARING_ROTATION: Record<Bearing, number> = {
+  right: 0,
+  'up-right': -45,
+  up: -90,
+  'up-left': -135,
+  left: 180,
+  down: 90,
+}
+
+/**
+ * Which way to walk, and how far the walk is.
+ *
+ * A plain arrow for a room on this floor, one chevron for another floor of this
+ * building, two for another building. The shape carries the distance, so a
+ * reader learns the scale once and then reads it at a glance: the arrow for 333
+ * means "turn round", and nothing that means "go upstairs" wears the same mark.
+ *
+ * The chevrons are drawn rather than typed. U+00BB is punctuation -- sized to
+ * sit between lowercase letters, and in Space Grotesk it comes out as two
+ * hairline carets about two thirds the ink of an arrow, which scaling up only
+ * made into bigger hairlines. These are mitred strokes at the weight of the
+ * arrows beside them, which is what the shape has to be to read at distance.
+ *
+ * One square drawing rotated, rather than one per bearing: Unicode has no
+ * double chevron for the diagonals at all, and the arrowhead pairs it does have
+ * are missing from enough fonts to risk tofu on a screen nobody is watching.
+ */
+function DirectionArrow({ direction }: { direction: Wayfinding }) {
+  if (!direction.offBuilding && !direction.offFloor) {
+    return (
+      <span aria-hidden className="text-[min(6.67vw,11.85vh)] font-bold text-[#4ade80] leading-none">
+        {ARROWS[direction.bearing]}
+      </span>
+    )
+  }
+
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className="w-[min(6.67vw,11.85vh)] h-[min(6.67vw,11.85vh)] flex-shrink-0"
+      style={{ transform: `rotate(${BEARING_ROTATION[direction.bearing]}deg)` }}
+      fill="none"
+      stroke="#4ade80"
+      strokeWidth={4}
+      // Butt ends and a mitred point: square cuts and a sharp apex, rather than
+      // the rounded nib a default cap would give it.
+      strokeLinecap="butt"
+      strokeLinejoin="miter"
+    >
+      {direction.offBuilding ? (
+        <>
+          <polyline points="3,5 11,12 3,19" />
+          <polyline points="12,5 20,12 12,19" />
+        </>
+      ) : (
+        <polyline points="8,5 16,12 8,19" />
+      )}
+    </svg>
+  )
 }
 
 /**
@@ -85,6 +177,16 @@ function formatTime(time: string): string {
   const [h, m] = time.split(':').map(Number)
   const ampm = h >= 12 ? 'PM' : 'AM'
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`
+}
+
+/**
+ * The screen's own date, so "today" matches the clock beside it.
+ *
+ * Local fields rather than UTC: the display hangs in Boston, which is the same
+ * reason nowHm below is read the same way.
+ */
+function localDateString(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function formatClock(d: Date): string {
@@ -140,13 +242,15 @@ function MeetingCard({ meeting, label, pointTheWay }: {
   // virtual. The room name is left standing on its own, since saying where
   // something is helps a reader whatever the hour.
   const direction = pointTheWay ? directionTo(meeting.roomName) : null
-  const arrow = direction ? ARROWS[direction.bearing] : null
   // A floor number only means anything in the building the screen is in: 'Egan
   // 306' is not this building's third floor.
   const floor = direction && isInDisplayBuilding(meeting.roomName) ? floorOf(meeting.roomName) : null
   const directionLine = direction
     ? [
-        direction.note ?? BEARING_WORDS[direction.bearing],
+        direction.note ??
+          (direction.offBuilding
+            ? BUILDING_BEARING_WORDS[direction.bearing]
+            : BEARING_WORDS[direction.bearing]),
         floor !== null ? `${ordinalFloor(floor)} floor` : null,
       ].filter(Boolean).join(' · ')
     : ''
@@ -186,11 +290,7 @@ function MeetingCard({ meeting, label, pointTheWay }: {
         <p className="text-[min(3.75vw,6.67vh)] font-semibold text-[#93b8d8] mt-[5.2vh]">Virtual — no room</p>
       ) : (
         <div className="flex items-center gap-[2.1vw] mt-[5.2vh]">
-          {arrow && (
-            <span aria-hidden className="text-[min(6.67vw,11.85vh)] font-bold text-[#4ade80] leading-none">
-              {arrow}
-            </span>
-          )}
+          {direction && <DirectionArrow direction={direction} />}
           <div>
             <p
               className={`text-[min(5vw,8.89vh)] font-semibold ${
@@ -239,11 +339,23 @@ function Shell({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * One turn of the rotation: a meeting, or the All Spaces card.
+ *
+ * A union rather than a nullable meeting, so adding a third kind of card later
+ * is a case to handle rather than a flag to thread through.
+ */
+type Card = { kind: 'meeting'; meeting: CommitteeMeeting } | { kind: 'spaces' }
+
 function CommitteeDisplayContent() {
   const searchParams = useSearchParams()
   const key = searchParams.get('key')
 
   const [meetings, setMeetings] = useState<CommitteeMeeting[]>([])
+  // Null until the spaces route has answered once. Distinct from an empty
+  // list, which is a real answer meaning there are no spaces to show: the
+  // card joins the rotation only once there is something true to put on it.
+  const [spaces, setSpaces] = useState<DisplaySpace[] | null>(null)
   const [now, setNow] = useState(new Date())
   // Only the 401 needs to be remembered: a missing ?key= is already knowable
   // from the URL at render time, so deriving it beats an effect that sets state
@@ -265,9 +377,7 @@ function CommitteeDisplayContent() {
     if (!key || keyRejected) return
 
     async function fetchData() {
-      // The screen's own date, so "today" matches the clock beside it.
-      const localNow = new Date()
-      const localDate = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, '0')}-${String(localNow.getDate()).padStart(2, '0')}`
+      const localDate = localDateString()
       try {
         const res = await fetch(`/api/display/committees?key=${encodeURIComponent(key!)}&date=${localDate}`)
         if (res.status === 401) {
@@ -289,18 +399,41 @@ function CommitteeDisplayContent() {
       }
     }
 
+    // Its own request, and its own failure. A spaces query that goes wrong
+    // must not take the meetings board down with it, and vice versa -- so this
+    // keeps whatever was last on the card and lets the next tick try again.
+    async function fetchSpaces() {
+      try {
+        const res = await fetch(
+          `/api/display/all-spaces?key=${encodeURIComponent(key!)}&date=${localDateString()}`
+        )
+        if (!res.ok) return
+        const data = await res.json()
+        setSpaces(data.spaces ?? [])
+      } catch {
+        // Nobody is here to retry it. Leave the last good card up.
+      }
+    }
+
     fetchData()
+    fetchSpaces()
 
     // Same shape as the SGA Spaces kiosk (issue #25): the interval keeps running,
     // but the request is skipped while the tab is backgrounded, and a
     // visibilitychange listener catches the display up on return rather than
     // making it wait out the rest of the interval.
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') fetchData()
+      if (document.visibilityState === 'visible') {
+        fetchData()
+        fetchSpaces()
+      }
     }, 50_000)
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') fetchData()
+      if (document.visibilityState === 'visible') {
+        fetchData()
+        fetchSpaces()
+      }
     }
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
@@ -320,8 +453,23 @@ function CommitteeDisplayContent() {
   // What is happening now comes round first, then the rest of the day in start
   // order. One flat rotation rather than a board: there is no second column to
   // put anything in.
-  const order = useMemo(() => (board ? [...board.ongoing, ...board.upcoming] : []), [board])
+  //
+  // The spaces card rides at the end of the turn, once per rotation. It is a
+  // card of a different kind rather than a meeting, hence the tag: everything
+  // downstream has to know which of the two it is drawing.
+  const order = useMemo<Card[]>(() => {
+    const cards: Card[] = board
+      ? [...board.ongoing, ...board.upcoming].map(meeting => ({ kind: 'meeting' as const, meeting }))
+      : []
+    // Only once the route has answered, and only if there is a space to draw.
+    // An empty card in the rotation is a dead turn on a screen whose whole
+    // budget is how long a passer-by will stand there.
+    if (spaces && spaces.length) cards.push({ kind: 'spaces' })
+    return cards
+  }, [board, spaces])
   const ongoingIds = useMemo(() => new Set(board?.ongoing.map(m => m.id) ?? []), [board])
+  // Minutes since midnight, in the same wall-clock domain the bookings use.
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
 
   const [cardIndex, setCardIndex] = useState(0)
   const [visible, setVisible] = useState(true)
@@ -378,17 +526,18 @@ function CommitteeDisplayContent() {
   // The rotation can shrink under the index when a meeting ends, so wrap rather
   // than trusting the timer's own count.
   const current = order.length ? order[cardIndex % order.length] : null
+  const currentMeeting = current?.kind === 'meeting' ? current.meeting : null
   // On a future day the label says which day, because "Up next" beside tonight's
   // clock would read as tonight. Nothing on a future day is in progress, so
   // "Meeting now" cannot arise there.
   const dayPrefix = board && board.daysAhead > 0 ? futureDayLabel(board.date, board.daysAhead) : null
-  const label = !current
+  const label = !currentMeeting
     ? ''
     : dayPrefix
-      ? (isCancelled(current.status) ? `${dayPrefix} · Cancelled` : dayPrefix)
-      : isCancelled(current.status)
+      ? (isCancelled(currentMeeting.status) ? `${dayPrefix} · Cancelled` : dayPrefix)
+      : isCancelled(currentMeeting.status)
         ? 'Cancelled'
-        : ongoingIds.has(current.id)
+        : ongoingIds.has(currentMeeting.id)
           ? 'Meeting now'
           : 'Up next'
 
@@ -397,7 +546,7 @@ function CommitteeDisplayContent() {
       {/* Standing chrome: the clock stays put while the meetings turn over, so a
           reader can tell the board is live rather than frozen on one card. */}
       <div className="flex items-start justify-between px-[4.2vw] pt-[4.4vh] flex-shrink-0">
-        <Eyebrow>Meetings &amp; events</Eyebrow>
+        <Eyebrow>{current?.kind === 'spaces' ? 'SGA Spaces' : <>Meetings &amp; events</>}</Eyebrow>
         <div className="text-right">
           <p className="text-[min(3.13vw,5.56vh)] font-bold text-[#f0f6ff] tabular-nums leading-none">{formatClock(now)}</p>
           <p className="text-[min(1.25vw,2.22vh)] text-[#93b8d8] mt-[1.1vh]">{formatDate(now)}</p>
@@ -414,11 +563,15 @@ function CommitteeDisplayContent() {
           }`}
           style={{ transitionDuration: `${FADE_MS}ms` }}
         >
-          <MeetingCard
-            meeting={current}
-            label={label}
-            pointTheWay={shouldPointAt(current, board!.daysAhead, nowHm)}
-          />
+          {current.kind === 'spaces' ? (
+            <SpacesCard spaces={spaces!} nowMinutes={nowMinutes} />
+          ) : (
+            <MeetingCard
+              meeting={current.meeting}
+              label={label}
+              pointTheWay={shouldPointAt(current.meeting, board!.daysAhead, nowHm)}
+            />
+          )}
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center px-16">

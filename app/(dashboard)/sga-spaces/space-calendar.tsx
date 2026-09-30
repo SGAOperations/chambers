@@ -62,6 +62,43 @@ const DEAD_ZONE_START = 0  // slot index 0 = 00:00
 const DEAD_ZONE_END = 28   // slot index 28 = 07:00 (7 * 4)
 
 /**
+ * The first slot the calendar draws: 06:00.
+ *
+ * Midnight to six was a quarter of the grid -- 336px of every week -- that
+ * nothing could ever occupy. touchesDeadZone in lib/space-series.ts refuses any
+ * booking starting before 07:00, so those hours were unusable as well as empty,
+ * and on a laptop they pushed the hours people actually book below the fold.
+ *
+ * Six rather than seven so the CSC Closed band still reads as a band with a
+ * bottom edge. Starting flush at 07:00 would leave nothing of it on screen and
+ * the rule it states -- that the morning is closed -- would go unsaid.
+ *
+ * Slots stay numbered from midnight everywhere else. They are derived from UTC
+ * clock fields and handed back out as ISO strings, so shifting the numbering
+ * would touch the booking payloads; only the geometry moves, and topOf is the
+ * single place it moves in.
+ */
+const VIEW_START_SLOT = 24
+const VIEW_SLOTS = TOTAL_SLOTS - VIEW_START_SLOT
+
+/** Where a slot sits in the drawn grid, in px from the top. Negative above it. */
+function topOf(slot: number): number {
+  return (slot - VIEW_START_SLOT) * SLOT_HEIGHT
+}
+
+/**
+ * Top and height for a span of slots, clipped to the drawn window.
+ *
+ * Bookings cannot begin before 07:00, but blackouts carry no such rule -- an
+ * admin may close a space at 2am -- and a span starting above the window would
+ * otherwise be given a negative top and hang over the header.
+ */
+function spanStyle(startSlot: number, endSlot: number): { top: number; height: number } {
+  const top = Math.max(0, topOf(startSlot))
+  return { top, height: Math.max(0, topOf(endSlot) - top) }
+}
+
+/**
  * How long a plain click books: an hour. A 15-minute default meant nearly every
  * booking started with dragging the end out, which on a phone -- where there is
  * no drag, only a tap -- meant fixing the time in the form every time.
@@ -349,8 +386,10 @@ export default function SpaceCalendar({
     })
   }, [now, minHoursAdvance, weekStart])
 
-  // Pixel-precise position of the current time within today's column
-  const todayLineTopPx = (wallClockNow.getUTCHours() * 60 + wallClockNow.getUTCMinutes()) / 15 * SLOT_HEIGHT
+  // Pixel-precise position of the current time within today's column. Negative
+  // before 06:00, which is what hides the line rather than parking it at the top
+  // pretending the day has started.
+  const todayLineTopPx = topOf((wallClockNow.getUTCHours() * 60 + wallClockNow.getUTCMinutes()) / 15)
 
   // ── Slot state helpers ───────────────────────────────────────────────────────
   const isSlotInNoticeZone = useCallback((dayIdx: number, slot: number): boolean => {
@@ -374,7 +413,9 @@ export default function SpaceCalendar({
     const rect = scrollRef.current.getBoundingClientRect()
     const headerHeight = headerRef.current?.offsetHeight ?? 0
     const y = clientY - rect.top - headerHeight + scrollRef.current.scrollTop
-    return Math.max(0, Math.min(TOTAL_SLOTS - 1, Math.floor(y / SLOT_HEIGHT)))
+    // Back into absolute slot numbering, which is what every caller expects.
+    const slot = Math.floor(y / SLOT_HEIGHT) + VIEW_START_SLOT
+    return Math.max(VIEW_START_SLOT, Math.min(TOTAL_SLOTS - 1, slot))
   }, [])
 
   /** Which lane of the column the pointer is over. Always 0 for a single space. */
@@ -498,7 +539,7 @@ export default function SpaceCalendar({
     }
   }, [weekStart, onSlotClick, slotFromClientY, clampEndSlot, freeSpaceIdsFor])
 
-  const totalHeight = TOTAL_SLOTS * SLOT_HEIGHT
+  const totalHeight = VIEW_SLOTS * SLOT_HEIGHT
 
   /** Horizontal placement of something drawn in one lane of a day column. */
   const laneStyle = (lane: number) => ({
@@ -603,13 +644,14 @@ export default function SpaceCalendar({
         <div className="flex" style={{ height: totalHeight }}>
           {/* Time labels column */}
           <div className="w-14 flex-shrink-0 border-r border-[#1e5080] relative">
-            {Array.from({ length: TOTAL_SLOTS }, (_, slot) => {
+            {Array.from({ length: VIEW_SLOTS }, (_, i) => {
+              const slot = i + VIEW_START_SLOT
               if (slot % 4 !== 0) return null
               return (
                 <div
                   key={slot}
                   className="absolute right-1 text-[10px] text-[#93b8d8] leading-none"
-                  style={{ top: Math.max(2, slot * SLOT_HEIGHT - 5) }}
+                  style={{ top: Math.max(2, topOf(slot) - 5) }}
                 >
                   {slotToLabel(slot)}
                 </div>
@@ -629,15 +671,18 @@ export default function SpaceCalendar({
                 style={{ height: totalHeight }}
               >
                 {/* Hour grid lines */}
-                {Array.from({ length: TOTAL_SLOTS }, (_, slot) => (
-                  <div
-                    key={slot}
-                    className={`absolute inset-x-0 border-t ${
-                      slot % 4 === 0 ? 'border-[#1e5080]' : 'border-white/5'
-                    }`}
-                    style={{ top: slot * SLOT_HEIGHT, height: SLOT_HEIGHT }}
-                  />
-                ))}
+                {Array.from({ length: VIEW_SLOTS }, (_, i) => {
+                  const slot = i + VIEW_START_SLOT
+                  return (
+                    <div
+                      key={slot}
+                      className={`absolute inset-x-0 border-t ${
+                        slot % 4 === 0 ? 'border-[#1e5080]' : 'border-white/5'
+                      }`}
+                      style={{ top: topOf(slot), height: SLOT_HEIGHT }}
+                    />
+                  )
+                })}
 
                 {/* Lane dividers (All spaces view) */}
                 {lanes.slice(1).map(lane => (
@@ -649,20 +694,17 @@ export default function SpaceCalendar({
                 ))}
 
                 {/* Advance notice zone — darkened band */}
-                {noticeEndSlot > 0 && (
+                {topOf(noticeEndSlot) > 0 && (
                   <div
                     className="absolute inset-x-0 bg-black/[0.18] z-10 pointer-events-none"
-                    style={{ top: 0, height: noticeEndSlot * SLOT_HEIGHT }}
+                    style={spanStyle(VIEW_START_SLOT, noticeEndSlot)}
                   />
                 )}
 
                 {/* Dead zone band */}
                 <div
                   className="absolute inset-x-0 bg-[#c8102e]/8 z-10 pointer-events-none"
-                  style={{
-                    top: DEAD_ZONE_START * SLOT_HEIGHT,
-                    height: (DEAD_ZONE_END - DEAD_ZONE_START) * SLOT_HEIGHT,
-                  }}
+                  style={spanStyle(DEAD_ZONE_START, DEAD_ZONE_END)}
                 >
                   <div className="flex items-center justify-center h-full">
                     <span className="text-[9px] text-[#c8102e]/60 font-medium tracking-wide">CSC Closed</span>
@@ -676,8 +718,7 @@ export default function SpaceCalendar({
                     className="absolute z-20 pointer-events-none"
                     style={{
                       ...laneStyle(lane),
-                      top: bl.startSlot * SLOT_HEIGHT,
-                      height: (bl.endSlot - bl.startSlot) * SLOT_HEIGHT,
+                      ...spanStyle(bl.startSlot, bl.endSlot),
                     }}
                   >
                     <div
@@ -700,8 +741,7 @@ export default function SpaceCalendar({
                       className="absolute z-30 pointer-events-none"
                       style={{
                         ...laneStyle(bs.lane),
-                        top: bs.startSlot * SLOT_HEIGHT,
-                        height: (bs.endSlot - bs.startSlot) * SLOT_HEIGHT,
+                        ...spanStyle(bs.startSlot, bs.endSlot),
                       }}
                       title={laneSpaces ? `${bs.booking.title} · ${laneSpaces[bs.lane].name}` : bs.booking.title}
                     >
@@ -747,7 +787,7 @@ export default function SpaceCalendar({
                 })}
 
                 {/* Current time line — only on today's column */}
-                {isToday && (
+                {isToday && todayLineTopPx >= 0 && (
                   <div
                     className="absolute inset-x-0 z-35 pointer-events-none"
                     style={{ top: todayLineTopPx }}
@@ -763,10 +803,7 @@ export default function SpaceCalendar({
                 {canBook && dragPreview && dragPreview.dayIdx === dayIdx && (
                   <div
                     className="absolute inset-x-0 z-40 pointer-events-none"
-                    style={{
-                      top: dragPreview.startSlot * SLOT_HEIGHT,
-                      height: (dragPreview.endSlot - dragPreview.startSlot) * SLOT_HEIGHT,
-                    }}
+                    style={spanStyle(dragPreview.startSlot, dragPreview.endSlot)}
                   >
                     <div className="h-full mx-0.5 rounded bg-[#c8102e]/25 border border-[#c8102e]/70 border-dashed flex items-start px-1 pt-0.5 overflow-hidden">
                       <span className="text-[9px] text-[#c8102e] font-semibold">
