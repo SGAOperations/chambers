@@ -112,7 +112,12 @@ export async function recordChambersBooking(
     if (sessionError) throw new Error(sessionError.message)
   }
 
-  // Best-effort audit trail, matching the admin create flow.
+  // Best-effort audit trail, matching the admin create flow -- except for
+  // `source`, which is the whole point of the entry here (issue #188). Without
+  // it this reads as an ordinary "Booking - Created" by an author with no role
+  // badge (a body Leadership member holds none; see db/neon/0008), which is
+  // indistinguishable from any other creation, so the log could not be asked
+  // which bookings came in through NUSSO.
   await insertAuditRows(supabase, [{
     booking_id: booking.id,
     admin_id: user.id,
@@ -121,6 +126,7 @@ export async function recordChambersBooking(
     target_date: null,
     action: 'created',
     changes: null,
+    source: 'nusso',
   }])
 
   return booking.id

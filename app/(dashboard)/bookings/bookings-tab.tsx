@@ -44,6 +44,13 @@ interface BookingBase {
   scope: BookingScope
   division: Division | null
   booking_bodies: { body_id: string; bodies: { name: string } | null }[] | null
+  /**
+   * This booking was made through Browse/Book NUSSO rather than here, which is
+   * what the NUSSO pill marks (issue #188). Optional because a deployment whose
+   * Data API schema cache has not caught up simply will not send it; treat its
+   * absence as "not recorded", never as false.
+   */
+  booked_via_nusso?: boolean
 }
 
 interface OneTimeBooking extends BookingBase {
@@ -176,6 +183,28 @@ function AdminRoleBadge({ role }: { role: string | null | undefined }) {
   return null
 }
 
+/**
+ * Marks a booking Chambers made in EMS on a member's behalf, rather than one an
+ * admin entered here (issue #188).
+ *
+ * Deliberately pink: the two pills already on these rows say something an admin
+ * chose about a booking -- cyan Event, amber Hidden -- and this says where the
+ * booking came from, which is a different kind of fact and the one a security
+ * audit is looking for. Nothing else in the admin UI uses this colour, so it
+ * does not read as another status.
+ */
+function NussoBadge({ bookedViaNusso }: { bookedViaNusso: boolean | undefined }) {
+  if (!bookedViaNusso) return null
+  return (
+    <span
+      title="Booked through Browse/Book NUSSO from inside Chambers, not entered by an administrator."
+      className="text-xs font-medium px-2 py-0.5 rounded-full bg-[#3b0a2a] text-[#f472b6]"
+    >
+      NUSSO
+    </span>
+  )
+}
+
 export default function BookingsTab() {
   const [subTab, setSubTab] = useState<BookingSubTab>('One-Time Rooms')
   const [oneTime, setOneTime] = useState<OneTimeBooking[]>([])
@@ -184,6 +213,13 @@ export default function BookingsTab() {
   const [bodies, setBodies] = useState<Body[]>([])
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [showAll, setShowAll] = useState(false)
+  /**
+   * Narrow all three sub-tabs to bookings that came through Browse/Book NUSSO
+   * (issue #188). Client-side, because the rows are already in hand and the list
+   * has no server-side filtering to extend -- the only other control here is the
+   * semester toggle above, which is a different query rather than a filter.
+   */
+  const [nussoOnly, setNussoOnly] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingBooking, setEditingBooking] = useState<OneTimeBooking | null>(null)
@@ -251,7 +287,14 @@ export default function BookingsTab() {
     }
   }, [showAll])
 
-  const sortedWeekly = loading ? [] : [...weekly].sort((a, b) => {
+  // One predicate for all three sub-tabs, so the toggle cannot end up meaning
+  // something slightly different on one of them.
+  const matchesNussoFilter = (b: BookingBase) => !nussoOnly || !!b.booked_via_nusso
+  const visibleOneTime = oneTime.filter(matchesNussoFilter)
+  const visibleWeekly = weekly.filter(matchesNussoFilter)
+  const visibleTabling = tabling.filter(matchesNussoFilter)
+
+  const sortedWeekly = loading ? [] : [...visibleWeekly].sort((a, b) => {
     const wa = a.weekly_room_bookings?.[0]
     const wb = b.weekly_room_bookings?.[0]
     if (!wa || !wb) return 0
@@ -294,15 +337,31 @@ export default function BookingsTab() {
 
       {/* Create button + all-semesters toggle */}
       <div className="flex items-center justify-between">
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <div
-            onClick={() => setShowAll(v => !v)}
-            className={`relative w-8 h-4.5 rounded-full transition-colors ${showAll ? 'bg-[#c8102e]' : 'bg-[#1e5080]'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${showAll ? 'translate-x-3.5' : 'translate-x-0'}`} />
-          </div>
-          <span className="text-xs text-[#93b8d8]">Show Inactive Bookings</span>
-        </label>
+        <div className="flex items-center gap-5">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <div
+              onClick={() => setShowAll(v => !v)}
+              className={`relative w-8 h-4.5 rounded-full transition-colors ${showAll ? 'bg-[#c8102e]' : 'bg-[#1e5080]'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${showAll ? 'translate-x-3.5' : 'translate-x-0'}`} />
+            </div>
+            <span className="text-xs text-[#93b8d8]">Show Inactive Bookings</span>
+          </label>
+          {/*
+            The audit control from issue #188: an admin asked "which of these
+            did Chambers book in NUSSO" gets the answer in one click rather than
+            by reading every pill down the list.
+          */}
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <div
+              onClick={() => setNussoOnly(v => !v)}
+              className={`relative w-8 h-4.5 rounded-full transition-colors ${nussoOnly ? 'bg-[#f472b6]' : 'bg-[#1e5080]'}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${nussoOnly ? 'translate-x-3.5' : 'translate-x-0'}`} />
+            </div>
+            <span className="text-xs text-[#93b8d8]">NUSSO Bookings Only</span>
+          </label>
+        </div>
         <button
           onClick={() => setShowModal(true)}
           disabled={loading}
@@ -347,6 +406,7 @@ export default function BookingsTab() {
       {editingBooking && (
         <BookingModal
             title="Edit One-Time/Multiple Room Booking"
+            badge={<NussoBadge bookedViaNusso={editingBooking.booked_via_nusso} />}
             onClose={() => setEditingBooking(null)}
         >
             <EditOneTimeForm
@@ -361,6 +421,7 @@ export default function BookingsTab() {
       {editingWeekly && (
         <BookingModal
             title="Edit Weekly Room Booking"
+            badge={<NussoBadge bookedViaNusso={editingWeekly.booked_via_nusso} />}
             onClose={() => { setEditingWeekly(null); setEditingWeeklyOcc(null) }}
         >
             <EditWeeklyForm
@@ -376,6 +437,7 @@ export default function BookingsTab() {
       {editingTabling && (
         <BookingModal
             title="Edit Tabling Booking"
+            badge={<NussoBadge bookedViaNusso={editingTabling.booked_via_nusso} />}
             onClose={() => setEditingTabling(null)}
         >
             <EditTablingForm
@@ -424,10 +486,14 @@ export default function BookingsTab() {
       {/* One-Time Rooms */}
       {!loading && subTab === 'One-Time Rooms' && (
         <div className="space-y-3">
-          {oneTime.length === 0 ? (
-            <p className="text-[#6a96bb] text-sm">No one-time room bookings found.</p>
+          {visibleOneTime.length === 0 ? (
+            <p className="text-[#6a96bb] text-sm">
+              {nussoOnly
+                ? 'No one-time room bookings came through NUSSO.'
+                : 'No one-time room bookings found.'}
+            </p>
           ) : (
-            oneTime.map(b => {
+            visibleOneTime.map(b => {
               if (!b.one_time_room_bookings?.length) return null
               const firstSession = b.one_time_room_bookings[0]
               return (
@@ -445,6 +511,13 @@ export default function BookingsTab() {
                       {b.hidden && (
                         <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#2a1a00] text-[#f59e0b]">Hidden</span>
                       )}
+                      {/*
+                        Not hidden below md, unlike the pills above it. Those
+                        describe how a booking is presented; this says where it
+                        came from, and a narrow screen is no reason to withhold
+                        the one fact an audit is after.
+                      */}
+                      <NussoBadge bookedViaNusso={b.booked_via_nusso} />
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {firstSession.status}
                       </span>
@@ -501,12 +574,16 @@ export default function BookingsTab() {
       {!loading && subTab === 'Weekly Rooms' && (
         <div className="space-y-4">
           <WeeklyBookingGrid
-            bookings={weekly}
+            bookings={visibleWeekly}
             onBookingClick={(b, occurrenceDate) => { setEditingWeekly(b); setEditingWeeklyOcc(occurrenceDate ?? null) }}
           />
           <div className="space-y-6">
-          {weekly.length === 0 ? (
-            <p className="text-[#6a96bb] text-sm">No weekly room bookings found.</p>
+          {visibleWeekly.length === 0 ? (
+            <p className="text-[#6a96bb] text-sm">
+              {nussoOnly
+                ? 'No weekly room bookings came through NUSSO. Weekly series cannot be booked there.'
+                : 'No weekly room bookings found.'}
+            </p>
           ) : (
             weeklyByDay.map(group => (
               <div key={group.day} className="space-y-3">
@@ -529,6 +606,12 @@ export default function BookingsTab() {
                       {b.hidden && (
                         <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#2a1a00] text-[#f59e0b]">Hidden</span>
                       )}
+                      {/*
+                        A weekly series cannot be booked through NUSSO today, so
+                        this is a no-op here -- kept anyway so the flag is never
+                        the thing that is true and unshown if that changes.
+                      */}
+                      <NussoBadge bookedViaNusso={b.booked_via_nusso} />
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {w.status}
                       </span>
@@ -570,10 +653,14 @@ export default function BookingsTab() {
       {/* Tables */}
       {!loading && subTab === 'Tables' && (
         <div className="space-y-3">
-          {tabling.length === 0 ? (
-            <p className="text-[#6a96bb] text-sm">No tabling bookings found.</p>
+          {visibleTabling.length === 0 ? (
+            <p className="text-[#6a96bb] text-sm">
+              {nussoOnly
+                ? 'No tabling bookings came through NUSSO.'
+                : 'No tabling bookings found.'}
+            </p>
           ) : (
-            tabling.map(b => {
+            visibleTabling.map(b => {
               const t = b.tabling_bookings?.[0]
               if (!t) return null
               return (
@@ -588,6 +675,7 @@ export default function BookingsTab() {
                       {b.hidden && (
                         <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#2a1a00] text-[#f59e0b]">Hidden</span>
                       )}
+                      <NussoBadge bookedViaNusso={b.booked_via_nusso} />
                       <button
                         onClick={() => toggleEvent(b.id, b.is_event)}
                         className="text-xs text-[#22d3ee] hover:text-[#67e8f9] font-medium transition-colors"
