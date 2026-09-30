@@ -52,9 +52,30 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.3</h2>
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.4</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
-              The version shown under the Chambers name in the sidebar is now read from the build itself, so it always matches what you are actually running. It had been typed in by hand and could sit a release behind, which made telling anyone which version you were on unreliable.
+              On the corridor display, a meeting whose body name runs to two lines no longer pushes the room and its arrow down onto the footer. The spacing closes up instead, so the room is clear of the bottom of the screen whatever the body is called.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The arrows are drawn heavier, too. They were letters borrowed from the typeface and read as too thin from across a corridor next to the chevrons beside them.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.3 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The corridor display now carries the SGA Spaces too. A panel each for President&apos;s Corner, Recess Corner and the Conference Room comes round in the rotation, showing the day as a bar and colouring the whole panel green when the space is free and red when it is not, so you can tell from down the hall whether there is anywhere to sit.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              It also points at rooms outside Curry. Snell, Egan, Krentzman, Blackman, Ryder, West Village and Centennial each have a direction now, where before they got a room name and nothing else. How far the walk is shows in the mark: an arrow for this floor, one chevron for another floor, two for another building.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The SGA Spaces calendar no longer draws midnight to six. Nothing can be booked before 7 AM, so those hours were a quarter of the grid you had to scroll past to reach the times you actually wanted.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The version under the Chambers name in the sidebar is now read from the build itself, so it always matches what you are running. It had been typed in by hand and could sit a release behind.
             </p>
           </section>
         </div>

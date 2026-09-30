@@ -43,15 +43,6 @@ import { SpacesCard } from './spaces-card'
 
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'] })
 
-const ARROWS: Record<Bearing, string> = {
-  up: '↑',
-  down: '↓',
-  left: '←',
-  right: '→',
-  'up-left': '↖',
-  'up-right': '↗',
-}
-
 const BEARING_WORDS: Record<Bearing, string> = {
   up: 'Upstairs',
   down: 'Downstairs',
@@ -96,6 +87,17 @@ const BEARING_ROTATION: Record<Bearing, number> = {
 }
 
 /**
+ * How big every direction mark is drawn.
+ *
+ * One size for all three, so an arrow and a chevron carry the same weight and
+ * only their shape says how far the walk is. Larger than the text arrows it
+ * replaced: a glyph only ever inks part of its em box -- the old arrow used
+ * about 70% of its height and a good deal less of its width -- while a drawing
+ * uses all of it.
+ */
+const MARK_SIZE = 'w-[min(7.5vw,13.3vh)] h-[min(7.5vw,13.3vh)]'
+
+/**
  * Which way to walk, and how far the walk is.
  *
  * A plain arrow for a room on this floor, one chevron for another floor of this
@@ -103,30 +105,42 @@ const BEARING_ROTATION: Record<Bearing, number> = {
  * reader learns the scale once and then reads it at a glance: the arrow for 333
  * means "turn round", and nothing that means "go upstairs" wears the same mark.
  *
- * The chevrons are drawn rather than typed. U+00BB is punctuation -- sized to
- * sit between lowercase letters, and in Space Grotesk it comes out as two
- * hairline carets about two thirds the ink of an arrow, which scaling up only
- * made into bigger hairlines. These are mitred strokes at the weight of the
- * arrows beside them, which is what the shape has to be to read at distance.
+ * All three are drawn rather than typed. The arrows were glyphs until the board
+ * went up and they proved too light beside the chevrons to read from the far
+ * end of a corridor -- a font gives no way to thicken one, and U+00BB was worse
+ * still, punctuation whose ink runs about two thirds of an arrow's. These are
+ * mitred strokes at a weight chosen for the wall.
  *
- * One square drawing rotated, rather than one per bearing: Unicode has no
- * double chevron for the diagonals at all, and the arrowhead pairs it does have
- * are missing from enough fonts to risk tofu on a screen nobody is watching.
+ * One square drawing rotated per bearing, rather than six drawn: the glyph sets
+ * have no diagonals for the chevrons at all, and this way every mark turns on
+ * the same axis and cannot drift out of step with the others.
  */
+/**
+ * A gap that holds its size while there is room and gives it up when there is not.
+ *
+ * The card's vertical rhythm was fixed margins, which is right until a body
+ * name wraps: "Global Experience Committee" takes two lines of the largest type
+ * on the board, and the room and its arrow were pushed down onto the footer
+ * with the day's meetings still to come. Centring does not help -- the content
+ * is simply taller than the card.
+ *
+ * As flex basis instead, every gap shrinks in proportion once the content stops
+ * fitting, and the text keeps its size because only these give way. A one-line
+ * card is spaced exactly as it was; a two- or three-line one closes up rather
+ * than running off the bottom.
+ */
+function Gap({ size, min }: { size: string; min: string }) {
+  return <div aria-hidden style={{ flexBasis: size, minHeight: min }} />
+}
+
 function DirectionArrow({ direction }: { direction: Wayfinding }) {
-  if (!direction.offBuilding && !direction.offFloor) {
-    return (
-      <span aria-hidden className="text-[min(6.67vw,11.85vh)] font-bold text-[#4ade80] leading-none">
-        {ARROWS[direction.bearing]}
-      </span>
-    )
-  }
+  const away = direction.offBuilding || direction.offFloor
 
   return (
     <svg
       aria-hidden
       viewBox="0 0 24 24"
-      className="w-[min(6.67vw,11.85vh)] h-[min(6.67vw,11.85vh)] flex-shrink-0"
+      className={`${MARK_SIZE} flex-shrink-0`}
       style={{ transform: `rotate(${BEARING_ROTATION[direction.bearing]}deg)` }}
       fill="none"
       stroke="#4ade80"
@@ -136,13 +150,20 @@ function DirectionArrow({ direction }: { direction: Wayfinding }) {
       strokeLinecap="butt"
       strokeLinejoin="miter"
     >
-      {direction.offBuilding ? (
+      {!away && (
+        <>
+          <line x1="2" y1="12" x2="18" y2="12" />
+          <polyline points="11,5 18,12 11,19" />
+        </>
+      )}
+      {away && direction.offFloor && !direction.offBuilding && (
+        <polyline points="8,5 16,12 8,19" />
+      )}
+      {direction.offBuilding && (
         <>
           <polyline points="3,5 11,12 3,19" />
           <polyline points="12,5 20,12 12,19" />
         </>
-      ) : (
-        <polyline points="8,5 16,12 8,19" />
       )}
     </svg>
   )
@@ -256,17 +277,26 @@ function MeetingCard({ meeting, label, pointTheWay }: {
     : ''
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col justify-center px-[4.2vw]">
+    /* py reserves clearance the content may not eat into. Centring alone gave
+       a two-line name 15px above the footer rule and 15px below the clock --
+       "Global Experience Committee" is two lines of the largest type on the
+       board, and the card was very nearly full. Reserving the margin instead
+       forces the Gaps below to give way, so the room and its arrow sit clear of
+       the footer at any name length, and a one-line card is spaced exactly as
+       it was because it never has to shrink at all. */
+    <div className="flex-1 min-h-0 flex flex-col justify-center px-[4.2vw] py-[4vh]">
       <p
-        className={`text-[min(1.88vw,3.33vh)] font-medium uppercase tracking-widest ${
+        className={`flex-shrink-0 text-[min(1.88vw,3.33vh)] font-medium uppercase tracking-widest ${
           cancelled ? 'text-[#f87171]' : 'text-[#93b8d8]'
         }`}
       >
         {label}
       </p>
 
+      <Gap size="3vh" min="1vh" />
+
       <p
-        className={`text-[min(6.67vw,11.85vh)] font-bold leading-[1.05] mt-[3vh] text-balance ${
+        className={`flex-shrink-0 text-[min(6.67vw,11.85vh)] font-bold leading-[1.05] text-balance ${
           cancelled ? 'text-[#93b8d8] line-through decoration-[#f87171] decoration-8' : 'text-[#f0f6ff]'
         }`}
       >
@@ -279,17 +309,24 @@ function MeetingCard({ meeting, label, pointTheWay }: {
       </p>
 
       {meeting.purpose && !cancelled && (
-        <p className="text-[min(2.5vw,4.44vh)] text-[#93b8d8] mt-[2.2vh]">{meeting.purpose}</p>
+        <>
+          <Gap size="2.2vh" min="0.7vh" />
+          <p className="flex-shrink-0 text-[min(2.5vw,4.44vh)] text-[#93b8d8]">{meeting.purpose}</p>
+        </>
       )}
 
-      <p className="text-[min(3.75vw,6.67vh)] font-semibold text-[#f0f6ff] tabular-nums mt-[5.9vh]">
+      <Gap size="5.9vh" min="1.2vh" />
+
+      <p className="flex-shrink-0 text-[min(3.75vw,6.67vh)] font-semibold text-[#f0f6ff] tabular-nums">
         {formatTime(meeting.meetingTime)}
       </p>
 
+      <Gap size="5.2vh" min="1.2vh" />
+
       {virtual ? (
-        <p className="text-[min(3.75vw,6.67vh)] font-semibold text-[#93b8d8] mt-[5.2vh]">Virtual — no room</p>
+        <p className="flex-shrink-0 text-[min(3.75vw,6.67vh)] font-semibold text-[#93b8d8]">Virtual — no room</p>
       ) : (
-        <div className="flex items-center gap-[2.1vw] mt-[5.2vh]">
+        <div className="flex-shrink-0 flex items-center gap-[2.1vw]">
           {direction && <DirectionArrow direction={direction} />}
           <div>
             <p
