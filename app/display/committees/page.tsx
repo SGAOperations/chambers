@@ -113,7 +113,7 @@ function futureDayLabel(date: string, daysAhead: number): string {
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-2xl font-medium text-[#93b8d8] uppercase tracking-widest">{children}</p>
+    <p className="text-3xl font-medium text-[#93b8d8] uppercase tracking-widest">{children}</p>
   )
 }
 
@@ -152,9 +152,9 @@ function MeetingCard({ meeting, label, pointTheWay }: {
     : ''
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col justify-center px-16">
+    <div className="flex-1 min-h-0 flex flex-col justify-center px-20">
       <p
-        className={`text-3xl font-medium uppercase tracking-widest ${
+        className={`text-4xl font-medium uppercase tracking-widest ${
           cancelled ? 'text-[#f87171]' : 'text-[#93b8d8]'
         }`}
       >
@@ -162,45 +162,45 @@ function MeetingCard({ meeting, label, pointTheWay }: {
       </p>
 
       <p
-        className={`text-8xl font-bold mt-6 text-balance ${
+        className={`text-9xl font-bold leading-[1.05] mt-8 text-balance ${
           cancelled ? 'text-[#93b8d8] line-through decoration-[#f87171] decoration-8' : 'text-[#f0f6ff]'
         }`}
       >
         {meeting.bodyName}
         {meeting.isEvent && (
-          <span className="text-3xl font-semibold uppercase tracking-wide align-middle ml-6 px-4 py-1.5 rounded-full bg-[#062f3b] text-[#22d3ee]">
+          <span className="text-4xl font-semibold uppercase tracking-wide align-middle ml-8 px-6 py-2 rounded-full bg-[#062f3b] text-[#22d3ee]">
             Event
           </span>
         )}
       </p>
 
       {meeting.purpose && !cancelled && (
-        <p className="text-4xl text-[#93b8d8] mt-5">{meeting.purpose}</p>
+        <p className="text-5xl text-[#93b8d8] mt-8">{meeting.purpose}</p>
       )}
 
-      <p className="text-6xl font-semibold text-[#f0f6ff] tabular-nums mt-10">
+      <p className="text-7xl font-semibold text-[#f0f6ff] tabular-nums mt-16">
         {formatTime(meeting.meetingTime)}
       </p>
 
       {virtual ? (
-        <p className="text-6xl font-semibold text-[#93b8d8] mt-8">Virtual — no room</p>
+        <p className="text-7xl font-semibold text-[#93b8d8] mt-14">Virtual — no room</p>
       ) : (
-        <div className="flex items-center gap-8 mt-8">
+        <div className="flex items-center gap-10 mt-14">
           {arrow && (
-            <span aria-hidden className="text-8xl font-bold text-[#4ade80] leading-none">
+            <span aria-hidden className="text-9xl font-bold text-[#4ade80] leading-none">
               {arrow}
             </span>
           )}
           <div>
             <p
-              className={`text-7xl font-semibold ${
+              className={`text-8xl font-semibold ${
                 cancelled ? 'text-[#93b8d8] line-through decoration-[#f87171] decoration-8' : 'text-[#f0f6ff]'
               }`}
             >
               {room}
             </p>
             {directionLine && (
-              <p className="text-3xl text-[#93b8d8] mt-3">{directionLine}</p>
+              <p className="text-4xl text-[#93b8d8] mt-4">{directionLine}</p>
             )}
           </div>
         </div>
@@ -218,12 +218,12 @@ function MeetingCard({ meeting, label, pointTheWay }: {
 function CycleDots({ count, index }: { count: number; index: number }) {
   if (count < 2) return null
   return (
-    <div className="flex items-center justify-center gap-3 flex-shrink-0 pb-6" aria-hidden>
+    <div className="flex items-center justify-center gap-4 flex-shrink-0 pb-8" aria-hidden>
       {Array.from({ length: count }, (_, i) => (
         <span
           key={i}
           className={`rounded-full transition-colors ${
-            i === index ? 'w-4 h-4 bg-[#4ade80]' : 'w-3 h-3 bg-white/25'
+            i === index ? 'w-5 h-5 bg-[#4ade80]' : 'w-4 h-4 bg-white/25'
           }`}
         />
       ))}
@@ -396,11 +396,11 @@ function CommitteeDisplayContent() {
     <div className={`h-screen w-screen overflow-hidden flex flex-col bg-[#0a1628] ${spaceGrotesk.className}`}>
       {/* Standing chrome: the clock stays put while the meetings turn over, so a
           reader can tell the board is live rather than frozen on one card. */}
-      <div className="flex items-start justify-between px-16 pt-10 flex-shrink-0">
+      <div className="flex items-start justify-between px-20 pt-12 flex-shrink-0">
         <Eyebrow>Meetings &amp; events</Eyebrow>
         <div className="text-right">
-          <p className="text-5xl font-bold text-[#f0f6ff] tabular-nums leading-none">{formatClock(now)}</p>
-          <p className="text-xl text-[#93b8d8] mt-2">{formatDate(now)}</p>
+          <p className="text-6xl font-bold text-[#f0f6ff] tabular-nums leading-none">{formatClock(now)}</p>
+          <p className="text-2xl text-[#93b8d8] mt-3">{formatDate(now)}</p>
         </div>
       </div>
 
@@ -422,8 +422,8 @@ function CommitteeDisplayContent() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center px-16">
-          <p className="text-7xl font-semibold text-[#93b8d8] text-center">Nothing scheduled</p>
-          <p className="text-3xl text-[#6a96bb] text-center mt-6">Nothing in the next two weeks</p>
+          <p className="text-8xl font-semibold text-[#93b8d8] text-center">Nothing scheduled</p>
+          <p className="text-4xl text-[#6a96bb] text-center mt-8">Nothing in the next two weeks</p>
         </div>
       )}
 
