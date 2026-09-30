@@ -3,7 +3,6 @@ import { randomBytes } from 'crypto'
 import { verifySlackRequest } from '@/lib/slack-verify'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { ephemeral } from '@/lib/slack'
-import { bodyTypeGetsSlackReminders } from '@/lib/body-types'
 
 const adminSupabase = db
 
@@ -195,14 +194,15 @@ function buildTablingModal(bodies: { id: string; name: string }[]) {
 }
 
 /**
- * /chambers-reminders [on|off] -- the committee's own switch for the meeting
- * reminders the bot posts (issue #95).
+ * /chambers-reminders [on|off] -- a body's own switch for the meeting reminders
+ * the bot posts (issue #95).
  *
- * The channel the command was run in is what identifies the committee, so there
- * is no body to pick and no way to reach into another committee's settings: you
- * can only change the reminders for the channel you are standing in. Changing
- * them additionally requires Leadership of that committee, checked against
- * board_memberships rather than anything Slack asserts.
+ * Works for any body with a linked channel, whatever its type. The channel the
+ * command was run in is what identifies the body, so there is no body to pick
+ * and no way to reach into another body's settings: you can only change the
+ * reminders for the channel you are standing in. Changing them additionally
+ * requires Leadership of that body, checked against board_memberships rather
+ * than anything Slack asserts.
  */
 async function handleRemindersCommand(
   chambersUserId: string,
@@ -213,19 +213,13 @@ async function handleRemindersCommand(
 
   const { data: body } = await adminSupabase
     .from('bodies')
-    .select('id, name, body_type, slack_reminders_enabled')
+    .select('id, name, slack_reminders_enabled')
     .eq('slack_channel_id', channelId)
     .maybeSingle()
 
   if (!body) {
     return ephemeral(
       'This channel is not linked to a Chambers body. Ask an administrator to add its channel ID in Management → Bodies.'
-    )
-  }
-
-  if (!bodyTypeGetsSlackReminders(body.body_type)) {
-    return ephemeral(
-      `${body.name} is a ${body.body_type}, and Chambers only posts meeting reminders for committees.`
     )
   }
 

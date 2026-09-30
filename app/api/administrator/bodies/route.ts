@@ -86,9 +86,9 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Invalid body type.' }, { status: 400 })
   }
 
-  // A channel *id* (C0123ABCDEF), not a name. Storing '#committee-chat' would be
-  // accepted silently by Postgres and then never resolve, leaving a committee
-  // whose reminders look configured and never arrive -- so reject it here with
+  // A channel *id* (C0123ABCDEF), not a name. Storing '#some-channel' would be
+  // accepted silently by Postgres and then never resolve, leaving a body whose
+  // reminders look configured and never arrive -- so reject it here with
   // something a person can act on.
   let channelId: string | null | undefined
   if (slack_channel_id !== undefined) {

@@ -11,7 +11,7 @@ TypeScript throughout, on Next.js (App Router) with Tailwind CSS, deployed to Ve
 - **Database:** Neon Postgres. Login and the live role checks hold a `pg` pool (`lib/db/pool.ts`); everything else queries the Neon Data API, which speaks PostgREST (`lib/db/data-api.ts`).
 - **Login:** Better Auth (`lib/better-auth.ts`). A Chambers user and a login are one row in `public.users`. Nobody signs up through it — accounts come from Chambers' own invite and signup-code flows.
 - **Email:** Resend (`lib/resend.ts`). Outside production every recipient is rewritten, so no preview or laptop can mail a real student.
-- **Also:** Upstash Redis for rate limiting, Slack for committee meeting reminders, and a service worker (next-pwa) so the app opens offline.
+- **Also:** Upstash Redis for rate limiting, Slack for meeting reminders, and a service worker (next-pwa) so the app opens offline.
 
 Chambers ran on Supabase until September 2026; `db/neon/README.md` records that move, and `supabase/migrations/` is kept as history.
 

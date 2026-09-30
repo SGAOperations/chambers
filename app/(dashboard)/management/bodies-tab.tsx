@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
-import { BODY_TYPES, bodyTypeGetsSlackReminders, type BodyType } from '@/lib/body-types'
+import { BODY_TYPES, type BodyType } from '@/lib/body-types'
 
 function BodiesTabSkeleton() {
   return (
@@ -230,44 +230,44 @@ export default function BodiesTab() {
                     ))}
                   </select>
 
-                  {/* Slack reminders. Shown only for the types the bot posts for,
-                      rather than sitting inert on every board and working group. */}
-                  {bodyTypeGetsSlackReminders(editValues.body_type) && (
-                    <div className="space-y-2 border border-[#1e5080] rounded-lg p-3">
-                      <div>
-                        <label htmlFor={`slack-${b.id}`} className="block text-xs font-medium text-[#93b8d8] mb-1">
-                          Slack channel ID
-                        </label>
-                        <input
-                          id={`slack-${b.id}`}
-                          type="text"
-                          placeholder="C0123ABCDEF"
-                          value={editValues.slack_channel_id}
-                          onChange={e => setEditValues({ ...editValues, slack_channel_id: e.target.value })}
-                          className={inputCls}
-                        />
-                        <p className="text-xs text-[#6a96bb] mt-1">
-                          In Slack, open the channel, choose View channel details, and copy the ID at the bottom.
-                          Invite the Chambers bot to the channel or it cannot post. Leave blank for no reminders.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={editValues.slack_reminders_enabled}
-                          onChange={e => setEditValues({ ...editValues, slack_reminders_enabled: e.target.checked })}
-                          id={`reminders-${b.id}`}
-                        />
-                        <label htmlFor={`reminders-${b.id}`} className="text-sm text-[#f0f6ff]">
-                          Post meeting reminders the day before
-                        </label>
-                      </div>
-                      <p className="text-xs text-[#6a96bb]">
-                        Leadership of this committee can also turn this off themselves with
-                        {' '}<code className="text-[#93b8d8]">/chambers-reminders off</code> in the channel.
+                  {/* Slack reminders. Offered for every body, whatever its
+                      type: a board or working group that meets weekly wants
+                      these as much as a committee does. A body that wants none
+                      simply has no channel linked. */}
+                  <div className="space-y-2 border border-[#1e5080] rounded-lg p-3">
+                    <div>
+                      <label htmlFor={`slack-${b.id}`} className="block text-xs font-medium text-[#93b8d8] mb-1">
+                        Slack channel ID
+                      </label>
+                      <input
+                        id={`slack-${b.id}`}
+                        type="text"
+                        placeholder="C0123ABCDEF"
+                        value={editValues.slack_channel_id}
+                        onChange={e => setEditValues({ ...editValues, slack_channel_id: e.target.value })}
+                        className={inputCls}
+                      />
+                      <p className="text-xs text-[#6a96bb] mt-1">
+                        In Slack, open the channel, choose View channel details, and copy the ID at the bottom.
+                        Invite the Chambers bot to the channel or it cannot post. Leave blank for no reminders.
                       </p>
                     </div>
-                  )}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editValues.slack_reminders_enabled}
+                        onChange={e => setEditValues({ ...editValues, slack_reminders_enabled: e.target.checked })}
+                        id={`reminders-${b.id}`}
+                      />
+                      <label htmlFor={`reminders-${b.id}`} className="text-sm text-[#f0f6ff]">
+                        Post meeting reminders the day before
+                      </label>
+                    </div>
+                    <p className="text-xs text-[#6a96bb]">
+                      Leadership of this body can also turn this off themselves with
+                      {' '}<code className="text-[#93b8d8]">/chambers-reminders off</code> in the channel.
+                    </p>
+                  </div>
 
                   <div>
                     <label htmlFor={`sga-emails-${b.id}`} className="block text-xs font-medium text-[#93b8d8] mb-1">
@@ -333,9 +333,9 @@ export default function BodiesTab() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {/* Only ever shown for a committee that could actually be
+                    {/* Only ever shown for a body that could actually be
                         posted to, so its absence is not ambiguous. */}
-                    {bodyTypeGetsSlackReminders(b.body_type) && b.slack_channel_id && (
+                    {b.slack_channel_id && (
                       <span className={`text-xs px-2 py-1 rounded-full font-medium ${b.slack_reminders_enabled ? 'bg-[#062f3b] text-[#22d3ee]' : 'bg-[#1e3a5f] text-[#93b8d8]'}`}>
                         {b.slack_reminders_enabled ? 'Slack on' : 'Slack off'}
                       </span>

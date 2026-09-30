@@ -25,14 +25,16 @@ export function isBodyType(v: unknown): v is BodyType {
 }
 
 /**
- * The types the Slack bot posts weekly meeting reminders for.
+ * There is deliberately no body-type gate on the Slack meeting reminders.
  *
- * Only committees today, which is what the issue asks for. Kept as a set rather
- * than an equality check so widening it later -- to working groups, say -- is a
- * one-line change here and not a hunt through the reminder job.
+ * They were committee-only to begin with (issue #95), which meant a board or a
+ * working group that met weekly and had a channel got nothing, and the reason
+ * was invisible: Management hid the channel field for those types, so there was
+ * nothing to look at and nothing to explain why. Any body that meets can be
+ * reminded about its meeting, so the type no longer decides.
+ *
+ * What gates a reminder now is what always did the real work -- a linked
+ * slack_channel_id and slack_reminders_enabled on the body. Both are per body,
+ * so a body that wants no reminders simply has no channel linked, or turns them
+ * off from its own channel.
  */
-export const SLACK_REMINDER_BODY_TYPES: readonly BodyType[] = ['Committee']
-
-export function bodyTypeGetsSlackReminders(bodyType: string | null | undefined): boolean {
-  return !!bodyType && (SLACK_REMINDER_BODY_TYPES as readonly string[]).includes(bodyType)
-}
