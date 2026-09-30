@@ -43,9 +43,21 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-[#f0f6ff] font-medium text-base">v1.16.0</h2>
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               We don&apos;t exactly know yet! If there&apos;s anything you&apos;d like to see, send a Slack DM to the Vice President of Operational Affairs ({vpName}) and the Digital Innovation Manager ({dimName}).
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.2 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Slack meeting reminders are no longer only for committees. Any body can have them &mdash; a board, a team, a working group. Ask an administrator to link your body&apos;s Slack channel in Management and invite the Chambers bot to it, and the bot will post there the day before each meeting, naming the room and the time.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              If you hold Leadership in the body, you can turn the reminders off yourself from inside the channel with /chambers-reminders off, and start them again with /chambers-reminders on. Nothing changes for the committees that already get reminders, and no body starts getting them until its channel is linked.
             </p>
           </section>
         </div>
