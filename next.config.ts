@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+import pkg from "./package.json";
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const withPWA = require('next-pwa')({
   dest: 'public',
@@ -36,6 +38,19 @@ const withPWA = require('next-pwa')({
 });
 
 const nextConfig: NextConfig = {
+  // The version the sidebar prints, taken from package.json at build time.
+  //
+  // It used to be a literal in dashboard-shell.tsx, which meant every release
+  // had to remember two places and did not: the number in the sidebar and the
+  // number in the manifest drifted apart more than once, and a build whose UI
+  // disagrees with its own package.json is one nobody can file a useful bug
+  // against -- "I'm on v2.1.1" stops meaning anything.
+  //
+  // `env` inlines the value at build time, so nothing reads package.json at
+  // runtime and the client bundle does not carry it. Importing package.json
+  // into the shell directly would have worked, but the shell is a client
+  // component, so it would have shipped every dependency name to the browser.
+  env: { NEXT_PUBLIC_APP_VERSION: pkg.version },
   // /administrator became /bookings when its settings half moved to /management
   // (issue #64). Admins have had the old URL bookmarked for a year, and it is
   // also what any link written before the rename points at, so it keeps

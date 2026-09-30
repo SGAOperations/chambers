@@ -52,6 +52,15 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.3</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The version shown under the Chambers name in the sidebar is now read from the build itself, so it always matches what you are actually running. It had been typed in by hand and could sit a release behind, which made telling anyone which version you were on unreliable.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.2 &mdash; released</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               Slack meeting reminders are no longer only for committees. Any body can have them &mdash; a board, a team, a working group. Ask an administrator to link your body&apos;s Slack channel in Management and invite the Chambers bot to it, and the bot will post there the day before each meeting, naming the room and the time.
