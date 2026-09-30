@@ -63,9 +63,10 @@ const BEARING_WORDS: Record<Bearing, string> = {
  * gets to read four things -- who, when, which way, which room -- from across a
  * corridor. Much under this and the screen is unreadable to anyone not standing
  * still; much over and someone waiting for a later meeting to come round gives
- * up. Cut it against how long the full cycle takes on a busy day.
+ * up. The cost is the full rotation: at eight seconds a six-meeting evening
+ * takes about fifty to come all the way round.
  */
-const CYCLE_MS = 5_000
+const CYCLE_MS = 8_000
 
 /**
  * How long a card takes to fade out before the next one fades in (ms).
