@@ -122,18 +122,23 @@ function MeetingCard({ meeting, label, pointTheWay }: {
   const virtual = isVirtual(meeting.status)
 
   const room = meeting.roomName || 'Room to be confirmed'
+  // The arrow and the line under it are one piece of guidance, not two: "to your
+  // left" is as much an instruction to walk as the arrow is, and neither belongs
+  // on a meeting nobody should be setting off for yet. Both appear together or
+  // not at all -- see shouldPointAt, which already excludes cancelled and
+  // virtual. The room name is left standing on its own, since saying where
+  // something is helps a reader whatever the hour.
+  const direction = pointTheWay ? directionTo(meeting.roomName) : null
+  const arrow = direction ? ARROWS[direction.bearing] : null
   // A floor number only means anything in the building the screen is in: 'Egan
   // 306' is not this building's third floor.
-  const floor = isInDisplayBuilding(meeting.roomName) ? floorOf(meeting.roomName) : null
-  // The room and floor are stated whenever they are known, but the arrow is an
-  // instruction to walk and only appears when walking is the right thing to do
-  // -- see shouldPointAt.
-  const direction = cancelled || virtual ? null : directionTo(meeting.roomName)
-  const arrow = pointTheWay && direction ? ARROWS[direction.bearing] : null
-  const directionLine = [
-    direction ? (direction.note ?? BEARING_WORDS[direction.bearing]) : null,
-    floor !== null ? `${ordinalFloor(floor)} floor` : null,
-  ].filter(Boolean).join(' · ')
+  const floor = direction && isInDisplayBuilding(meeting.roomName) ? floorOf(meeting.roomName) : null
+  const directionLine = direction
+    ? [
+        direction.note ?? BEARING_WORDS[direction.bearing],
+        floor !== null ? `${ordinalFloor(floor)} floor` : null,
+      ].filter(Boolean).join(' · ')
+    : ''
 
   return (
     <div className="flex-1 min-h-0 flex flex-col justify-center px-16">
@@ -183,7 +188,7 @@ function MeetingCard({ meeting, label, pointTheWay }: {
             >
               {room}
             </p>
-            {!cancelled && directionLine && (
+            {directionLine && (
               <p className="text-3xl text-[#93b8d8] mt-3">{directionLine}</p>
             )}
           </div>
