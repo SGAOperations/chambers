@@ -43,9 +43,120 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-[#f0f6ff] font-medium text-base">v1.16.0</h2>
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               We don&apos;t exactly know yet! If there&apos;s anything you&apos;d like to see, send a Slack DM to the Vice President of Operational Affairs ({vpName}) and the Digital Innovation Manager ({dimName}).
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.2 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Slack meeting reminders are no longer only for committees. Any body can have them &mdash; a board, a team, a working group. Ask an administrator to link your body&apos;s Slack channel in Management and invite the Chambers bot to it, and the bot will post there the day before each meeting, naming the room and the time.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              If you hold Leadership in the body, you can turn the reminders off yourself from inside the channel with /chambers-reminders off, and start them again with /chambers-reminders on. Nothing changes for the committees that already get reminders, and no body starts getting them until its channel is linked.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.1 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The corridor committee display now scales to whatever screen it lands on, so the same board fills a small monitor and a large one without anything being cut off or stranded in a corner.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.0 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Recurring bookings now arrive in Outlook as one repeating event instead of a separate attachment for each week. A weekly SGA Space series or weekly room booking used to vanish from your calendar after the first week; the whole series now shows.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              There is a new corridor display for committee meetings. It cycles through one meeting at a time, names the room and the time, and points the way when it is time to walk. A cancelled meeting stays on the board through its slot &mdash; with no direction to walk in &mdash; so nobody sets off to a meeting that is not happening. IEMS events are drawn too.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Smaller things: the weekly bookings grid leads with the reservation code, pending actions are measured against Boston&apos;s date rather than the server&apos;s, NUSSO bookings can be seen and audited from Management, editing a room series no longer wipes an override you had made on a past week, and room bookings follow the same choice of email destination that SGA Space bookings already did.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.0.0 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Chambers can now book Northeastern&apos;s own room system directly. The new Browse/Book NUSSO tab searches nuevents for free rooms and reserves one without leaving Chambers, tabling included. A booking made this way is recorded in My Rooms like any other, and cancelling it in Chambers releases the real reservation instead of leaving a room held for a meeting nobody will attend.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Booking through NUSSO makes you responsible for the space, so the Safety &amp; Security terms are quoted where you agree to them, and booking is limited to official SGA meetings. Anyone signed in can browse. Booking is limited to admins and body Leadership, because it acts under SGA&apos;s shared account and puts a real reservation on Northeastern&apos;s calendar.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.17.0 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              SGA Space bookings can now repeat every other week, not only every week.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Tabling requests now ask where you would like to table and how many tables you need, and weekly room requests start on the hour or the half hour.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Event tracking can carry extra forms, each with its own deadline, set per event.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.16.1 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Internal safeguards, with nothing to do differently: no preview or test copy of Chambers can email a real student, and a missing email key outside production no longer breaks the page.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.16.0 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Chambers moved to a new database and a new login system. Your account and your password carried over &mdash; sign in exactly as you did before. Nothing else about the app changed; this release was the groundwork.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.15.2 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              A booking now records when the meeting itself starts, separately from the window the room is held for. A body that books 6:00 to 9:00 to allow for setup can still tell its members to arrive at 6:30, and reminders and cards print that time rather than the moment the room merely unlocks. On My Rooms cards, Start Time gets its own line.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              An admin can now dismiss a cancellation request, and dismissing one leaves the booking as it was instead of stranding it as pending. A whole weekly SGA Space booking can move to a different space.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Long SGA Space booking text wraps instead of running off the card, anyone can open a booking to view it, each audit entry says what changed and where, and the Attendance Manager link is now called Go to SenatePortal.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.15.1 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Room bookings now come with a calendar invite, the way SGA Space bookings already did.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              You can add external attendees to an SGA Space booking, so someone without a Chambers account still gets the invite by email.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              A request now moves through Ops Review and Awaiting CSC, so you can tell whether Operational Affairs still has it or has passed it to CSC Operations. The All spaces calendar has a phone layout.
             </p>
           </section>
         </div>
@@ -130,9 +241,216 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-[#f0f6ff] font-medium text-base">v2.0.0</h2>
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.13.8 &mdash; released</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
-              Operational Affairs is working to standardize account management across SGA custom projects (Chambers, SenatePath, SenatePortal, Aplio, and more). Once centralized accounts have been successfully tested on our products, they&apos;ll be implemented fully as v2.0.0.
+              Room requests now ask how many people you expect, and an admin can deny a revision request rather than only accepting it. The SGA Spaces calendar fills the page instead of sitting in a narrow column.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The richer booking cards and the new update emails also landed here; they are described under v1.14.0.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.13.7 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Being signed out for idling stopped being so aggressive: a session is held for hours rather than tens of minutes. The idle sign-out now works when you have no network, and a dropped connection says so rather than reporting &ldquo;failed to fetch&rdquo;.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.13.6 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The Administrator area was split in two: Bookings, for the day-to-day work, and a separate Management page for the settings that need a higher role. Pending actions and booking rows are titled by what the booking is for, rather than by the body that holds it.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.13.5 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              A single week of a weekly booking can now override its own purpose and visibility, so one week can be private or described differently without touching the series. Weekly events are marked on the week rather than the series.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Signing out signs out the device you are on and leaves your other sessions alone. An error from the server no longer takes the whole page down with it.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.13.4 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              My Rooms is rendered on the server with one unambiguous idea of what &ldquo;today&rdquo; is, so it no longer disagrees with itself depending on where you opened it. The Events tab is ordered by when the event happens rather than when it was created.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Roles are read from your account rather than from your sign-in token, which means a change to your role or standing takes effect immediately instead of waiting for you to sign in again.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.13.3 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Clicking a week of a weekly booking opens that week, and scrolls it into view rather than leaving you to hunt for it.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.13.2 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The Pending Actions badge is coloured by how urgent the oldest item is, with a breakdown on hover, and the thresholds behind it can be edited in Other Settings. Actions that cannot be undone sit idle for a moment before they will take a click.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              A long pass on speed: the dashboard loads from a single call rather than several, the font is served by Chambers instead of fetched from elsewhere, and the functions behind the dashboard are kept warm so the first page of the day is not the slowest.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.13.1 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Date fields were rebuilt so they stop overflowing their box on phones, which had been cutting the year off. Mobile layout was fixed across five more screens, and the weekly bookings view in Administrator is segmented by day of the week.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The room display stops polling while it is in the background, and a request now shows which bodies it was made on behalf of.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.13.0 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              A booking can belong to more than one body. All seven booking forms carry a scope selector, and permission to edit a booking is resolved across every body in that scope rather than just the first.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Members are no longer told about hidden bookings, which had been announcing bookings that were meant to be private.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.12.4 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The My Rooms bookings view was reworked. Email recipients are blind-copied instead of being listed where everyone can read them, the Administrator tab bar scrolls on a phone, and progress through an event checklist survives closing the tab.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.12.3 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Sign-in is restricted to northeastern.edu addresses, and moving between dashboard pages got noticeably quicker.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.12.2 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The Information Manager role was added. Bookings outside the active semester can be edited, admins can look at any date on the SGA Spaces calendar, and a booking no longer reports one status when created and a different one when edited.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.12.1 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Fixes: the SGA Spaces calendar display, a signup passcode that could be sent to a deactivated address, and onboarding failing to record what it had just set.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.12.0 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Chambers arrived in Slack. You can ask for a room or a tabling session with a slash command, and link your Chambers account the first time with a one-time link sent to you in a DM.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.11.2 through v1.11.11 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The SGA Space display arrived. Blackouts stopped misbehaving, a run of time-zone and login bugs was cleared, limit overrides showed up in Administrator again, and members can no longer drag out time slots on the SGA Space calendar they are not booking.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Several of the versions in this range contain nothing but build fixes, so they are collected here rather than listed one by one.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.11.0 and v1.11.1 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              A signup flow, so a new member can get an account without one being made for them, and users became searchable in Administrator.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.10.0 through v1.10.6 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              One-time passcodes arrived, with a flow for resetting them. Emails were restructured, protected against injection, and stopped reaching deactivated accounts.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              A stretch of time-zone and time-display bugs on SGA Spaces was fixed. Couch Corner became Recess Corner, and the Digital Innovation Manager was given access.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.9.0 through v1.9.3 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              SGA Spaces arrived, along with a substantial rework of the pages around it. Password reset was added, IEMS events were drawn for the first time, and loading skeletons replaced blank screens while a page was still fetching.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.7.0 through v1.8.2 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Chambers became installable on your phone as an app. The semester system arrived, so a booking belongs to a term, and cancellation notifications started going out.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v1.0.0 through v1.6.2 &mdash; released</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Where Chambers started. In eleven days it went from an empty project to something SGA could use: room requests linked to bookings, My Rooms, the fulfilment and cancellation flow with admin badges and denial confirmations, revision requests, Senate session types and filtering, alerts and an audit trail, automatic emails, rate limiting, and the first access guards. It was named Chambers on 14 March, the day after the first commit.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Version numbers in this stretch were written by hand while the app itself still reported 0.1.0, so the nineteen of them are collected here as one entry rather than pulled apart into releases that never quite existed.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">Centralized SGA accounts &mdash; planned</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Operational Affairs is working to standardize account management across SGA custom projects (Chambers, SenatePath, SenatePortal, Aplio, and more), so that one account signs you in to all of them. Once centralized accounts have been tested on our products they will be rolled out here; this entry will say which version carries them when that is settled.
             </p>
           </section>
         </div>       
