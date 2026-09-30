@@ -140,6 +140,10 @@ export async function applyReleasedStatus(
     if (error) throw new Error(error.message)
   }
 
+  // `source` marks these as NUSSO's doing (issue #188). It matters more here
+  // than anywhere: this path reached into EMS on SGA's shared account and let a
+  // room go, and without the stamp the entry reads exactly like an admin
+  // clicking Cancel in the Cancellations tab.
   await insertAuditRows(
     db,
     released.map(({ target }) => ({
@@ -150,6 +154,7 @@ export async function applyReleasedStatus(
       target_date: target.date,
       action: 'cancelled' as const,
       changes: null,
+      source: 'nusso' as const,
     }))
   )
 }

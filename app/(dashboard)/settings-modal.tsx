@@ -154,7 +154,9 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
     window.dispatchEvent(new Event('chambers:senate-prefs-updated'))
   }
 
-  // Where SGA Spaces emails go (issue #109). Saved on change like the toggles
+  // Where booking emails go -- SGA Spaces and rooms alike (issues #109, #190).
+  // The column names still say `spaces_`; renaming them would be a migration for
+  // no behavior. Saved on change like the toggles
   // below, but rolled back on failure: the server refuses an inbox the user no
   // longer leads a body for, and a choice that looks saved and is not would send
   // the next invite somewhere the user is not expecting.
@@ -337,20 +339,28 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
           </div>
         )}
 
-        {/* SGA Spaces email destination (issue #109). Leadership only -- they are
-            the only ones who can book SGA Spaces, and the only ones with an SGA
-            inbox to choose. */}
+        {/* Booking email destination (issues #109, #190). Governs SGA Spaces and
+            room bookings alike, so the label no longer names one of them.
+
+            Still Leadership only, and deliberately: the choice is between a
+            personal address and a shared SGA inbox, and an inbox is only ever
+            offered off a Leadership membership in a body that has one
+            (loadSgaEmailOptions). Showing this to an ordinary member would be a
+            control whose only two interesting options are permanently disabled.
+            Room booking emails do reach every member, but for all of them the
+            destination is their personal address exactly as before. */}
         {!loading && isLeadership && settings && (
           <div className="space-y-3">
             <div>
-              <p className="text-xs font-medium text-[#93b8d8]">Send SGA Spaces Confirmations To</p>
+              <p className="text-xs font-medium text-[#93b8d8]">Send Booking Confirmations To</p>
               <p className="text-xs text-[#6a96bb] mt-1">
-                Applies to confirmation and cancellation emails, including their calendar invites.
+                Applies to room and SGA Spaces confirmation, update and cancellation emails,
+                including their calendar invites.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2">
               <select
-                aria-label="SGA Spaces email destination"
+                aria-label="Booking email destination"
                 value={spacesDestination}
                 onChange={e => {
                   const destination = e.target.value as SpacesEmailDestination
@@ -380,11 +390,11 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
             </div>
             {sgaOptions.length === 0 ? (
               <p className="text-xs text-[#6a96bb]">
-                None of the bodies you lead has an SGA email, so confirmations go to {settings.personal_email}.
+                None of the bodies you lead has an SGA email, so booking emails go to {settings.personal_email}.
               </p>
             ) : spacesChoiceLapsed ? (
               <p className="text-xs text-[#fbbf24]">
-                The SGA email you chose is no longer available to you, so confirmations go to {settings.personal_email}.
+                The SGA email you chose is no longer available to you, so booking emails go to {settings.personal_email}.
               </p>
             ) : spacesDestination === 'personal' ? (
               <p className="text-xs text-[#6a96bb]">Sent to {settings.personal_email}.</p>

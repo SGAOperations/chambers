@@ -1,7 +1,7 @@
 import { db } from './db/data-api'
 import { appZoneParts } from './meeting-reminders'
 import { resolveBookingRecipients, type Recipient, type ScopedRow } from './booking-scope'
-import { occurrenceUid, sessionUid, splitByAudience, type RoomSession } from './room-calendar'
+import { calendarRecipientsFor, calendarStateOf, occurrenceUid, sessionUid, splitByAudience, type RoomSeries, type RoomSession } from './room-calendar'
 import { sendBookingCancelledEmail } from './emails/booking-cancelled'
 
 /**
@@ -77,6 +77,36 @@ export function weeklyRoomSessions(
   })
 }
 
+/**
+ * The weekly pattern a series' invite is sent as, so its weeks reach a calendar
+ * as one recurring event rather than one event per week (issue #184).
+ *
+ * `sessions` is the series in full, past weeks included: meetingDates spans the
+ * whole run, and a past week left out of it would be EXDATEd off calendars that
+ * already hold it. A week only drops out for having stopped being a meeting
+ * ('off'); Pending Cancellation stays, since that request has not been decided.
+ */
+export function weeklyRoomSeries(
+  weeklyBookingId: string,
+  series: WeeklyDefaults & { start_date: string; end_date: string },
+  sessions: RoomSession[],
+  bodyName: string
+): RoomSeries {
+  return {
+    id: weeklyBookingId,
+    startDate: series.start_date,
+    endDate: series.end_date,
+    startTime: series.start_time,
+    endTime: series.end_time,
+    summary: summaryOf(series.purpose, bodyName),
+    location: locationOf(series.status, series.room_name),
+    status: series.status,
+    meetingDates: sessions
+      .filter(s => calendarStateOf(s.status) !== 'off')
+      .map(s => ({ date: s.date, senateType: s.senateType, session: s })),
+  }
+}
+
 export interface OneTimeRow {
   id: string
   booking_date: string
@@ -107,6 +137,9 @@ export function oneTimeRoomSessions(
  * Sends one email per audience, so a Senate member who follows only Full Body
  * gets only those sessions on their calendar. For every other body this is a
  * single email, since everyone wants every session.
+ *
+ * A recipient can have more than one address -- personal and a shared SGA inbox
+ * (issue #190) -- so calendarRecipientsFor flattens and deduplicates them first.
  */
 export async function sendPerAudience(
   recipients: Recipient[],
@@ -114,11 +147,7 @@ export async function sendPerAudience(
   ownerBodyName: string | null | undefined,
   send: (audience: { recipients: string[]; plan: { request: RoomSession[]; cancel: RoomSession[] } }) => Promise<void>
 ): Promise<void> {
-  const audiences = splitByAudience(
-    recipients.map(r => ({ email: r.email, senatePreferences: r.senatePreferences })),
-    plan,
-    ownerBodyName
-  )
+  const audiences = splitByAudience(calendarRecipientsFor(recipients), plan, ownerBodyName)
   for (const audience of audiences) await send(audience)
 }
 
@@ -161,15 +190,31 @@ export async function notifyCancelledReservations(rows: CancelledReservation[]):
 
   // Session types decide who each cancelled week is sent to, and they live on
   // the occurrence rather than on the line the caller holds.
+  //
+  // The series comes back with them because a week of a series is an occurrence
+  // of one recurring event rather than an event of its own (issue #184): taking
+  // it off a calendar means naming the series and the slot, which is the
+  // series' id and its pattern start time.
   const occurrenceIds = roomRows.filter(r => r.source === 'occurrence').map(r => r.id)
   const senateTypes = new Map<string, string | null>()
+  const seriesRefs = new Map<string, RoomSession['seriesRef']>()
   if (occurrenceIds.length) {
     const { data } = await adminSupabase
       .from('weekly_room_occurrences')
-      .select('id, senate_type')
+      .select('id, senate_type, weekly_booking_id, weekly_room_bookings(start_time)')
       .in('id', occurrenceIds)
-    for (const o of (data ?? []) as { id: string; senate_type: string | null }[]) {
+    type Row = {
+      id: string
+      senate_type: string | null
+      weekly_booking_id: string | null
+      weekly_room_bookings: { start_time: string } | { start_time: string }[] | null
+    }
+    for (const o of (data ?? []) as Row[]) {
       senateTypes.set(o.id, o.senate_type)
+      const series = Array.isArray(o.weekly_room_bookings) ? o.weekly_room_bookings[0] : o.weekly_room_bookings
+      if (o.weekly_booking_id && series) {
+        seriesRefs.set(o.id, { id: o.weekly_booking_id, startTime: series.start_time })
+      }
     }
   }
 
@@ -206,6 +251,7 @@ export async function notifyCancelledReservations(rows: CancelledReservation[]):
       location: locationOf(r.resultingStatus, r.roomOrTable),
       status: r.resultingStatus,
       senateType: r.source === 'occurrence' ? senateTypes.get(r.id) ?? null : null,
+      seriesRef: r.source === 'occurrence' ? seriesRefs.get(r.id) : undefined,
     }))
 
     // Grouped over every session first, so each audience's email lists the

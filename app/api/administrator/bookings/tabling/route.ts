@@ -16,6 +16,7 @@ import {
   type ScopedRow,
 } from '@/lib/booking-scope'
 import { OPEN_REQUEST_STATUSES } from '@/lib/request-status'
+import { dedupeEmails } from '@/lib/spaces-email'
 
 import { diffFields, insertAuditRows, pairByDate, type AuditField, type AuditRow } from '@/lib/audit'
 
@@ -149,7 +150,11 @@ export async function POST(request: Request) {
             meetingTime: resolveMeetingTime(r.meeting_time, r.start_time),
             roomOrTable: r.location,
           })),
-          recipients: recipients.map(r => r.email),
+          // Flattened and deduplicated because one recipient can have two
+          // addresses, and one shared SGA inbox can serve several of them
+          // (issue #190). Tabling sends no calendar invite, so there is nothing
+          // to split by session type -- one email to every address.
+          recipients: dedupeEmails(recipients.flatMap(r => r.addresses)),
         })
       } catch (e) {
         console.error('Booking created email failed:', e)
@@ -356,7 +361,8 @@ export async function PATCH(request: Request) {
   waitUntil(
     (async () => {
       try {
-        const emails = recipients.map(r => r.email)
+        // See the created path above: one recipient can have two addresses.
+        const emails = dedupeEmails(recipients.flatMap(r => r.addresses))
         const prevFirst = (prevSessions ?? [])[0]
         const changes = collectChanges(
           changed('Purpose', prevBooking?.purpose, purpose),

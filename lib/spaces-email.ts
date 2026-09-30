@@ -1,12 +1,20 @@
 import type { Db } from './db/data-api'
 
 /**
- * Where SGA Spaces confirmation and cancellation emails go (issue #109).
+ * Where booking confirmation and cancellation emails go (issues #109, #190).
  *
  * Leadership may send them to their personal email, to one of the shared SGA
  * inboxes of a body they lead (bodies.sga_emails), or to both. Everyone else --
  * and anyone whose chosen inbox is no longer theirs to use -- gets their
- * personal email, which is what every SGA Spaces email did before this.
+ * personal email, which is what every one of these emails did before this.
+ *
+ * #109 built this for SGA Spaces, and the names here and the `spaces_` columns
+ * behind them come from that. #190 pointed the same choice at room bookings, so
+ * one setting now decides where every booking email lands rather than SGA Spaces
+ * obeying it and My Rooms ignoring it. The room side resolves through
+ * resolveBookingRecipients in lib/booking-scope.ts, which reuses
+ * spacesAddressesFor and loadSgaEmailOptions below; the rule itself lives here
+ * once so the two paths cannot disagree about where someone's mail goes.
  *
  * What someone may choose is always recomputed from their current Leadership
  * memberships, both when Settings saves it and again when an email is sent.
@@ -156,9 +164,9 @@ interface DestinationUser {
 }
 
 /**
- * The addresses one person's SGA Spaces emails go to. Pure, so the fallback rule
- * reads in one place: a choice that is not currently allowed is the same as
- * having chosen personal.
+ * The addresses one person's booking emails go to -- SGA Spaces and rooms alike
+ * (issue #190). Pure, so the fallback rule reads in one place: a choice that is
+ * not currently allowed is the same as having chosen personal.
  */
 export function spacesAddressesFor(
   user: DestinationUser,

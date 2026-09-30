@@ -1,6 +1,6 @@
 import { emailFrom, resend } from '@/lib/resend'
 import { sanitize, buildEmailHtml } from './utils'
-import { buildSpaceIcs, formatSpaceDateTime as formatDateTime, icsSequenceNow } from './space-ics'
+import { buildSeriesOccurrenceIcs, buildSpaceIcs, formatSpaceDateTime as formatDateTime, icsSequenceNow } from './space-ics'
 
 /** What a booking says, before or after an edit. */
 export interface SpaceBookingDetails {
@@ -18,19 +18,26 @@ interface SpaceBookingUpdatedParams {
   recipients: string[]
   /** Said instead of the default intro -- e.g. to someone just added to the booking. */
   intro?: string
+  /**
+   * Set when this row is one week of a series (issue #184). Its calendar is
+   * the series' master event now, not one of its own, so the invite has to
+   * override that one occurrence rather than stand alone.
+   */
+  series?: { seriesId: string; recurrenceId: string }
 }
 
 /**
  * An edited SGA Space booking, with an invite that moves the event on every
  * calendar it is already on.
  *
- * The invite keeps the booking's UID and carries a higher SEQUENCE, which is
- * what makes a calendar replace the event rather than add a second one. That
- * holds for one week of a series too: each week has the UID its booking row
- * gives it, so only that week moves.
+ * A one-off booking's invite keeps its own UID and carries a higher SEQUENCE,
+ * which is what makes a calendar replace the event rather than add a second
+ * one. One week of a series moves the same way, but as a RECURRENCE-ID
+ * override under the series' UID (issue #184) -- the master event, not this
+ * row, is what put it on a calendar in the first place.
  */
 export async function sendSpaceBookingUpdatedEmail(params: SpaceBookingUpdatedParams) {
-  const { bookingId, booking, previous, recipients, intro } = params
+  const { bookingId, booking, previous, recipients, intro, series } = params
   if (!recipients.length) return
 
   const opening = intro ?? 'Your SGA Space booking has been updated.'
@@ -62,7 +69,16 @@ If you have questions, please reach out to sgaOperations@northeastern.edu.`,
     `),
     attachments: [{
       filename: 'booking.ics',
-      content: buildSpaceIcs('REQUEST', [{ bookingId, ...booking }], icsSequenceNow()),
+      content: series
+        ? buildSeriesOccurrenceIcs('REQUEST', {
+            seriesId: series.seriesId,
+            recurrenceId: series.recurrenceId,
+            title: booking.title,
+            spaceName: booking.spaceName,
+            startTime: booking.startTime,
+            endTime: booking.endTime,
+          }, icsSequenceNow())
+        : buildSpaceIcs('REQUEST', [{ bookingId, ...booking }], icsSequenceNow()),
       contentType: 'text/calendar; method=REQUEST',
     }],
   })

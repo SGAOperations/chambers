@@ -87,6 +87,8 @@ interface WeekRow {
   external_attendees: string[] | null
   /** Usually the series' space; a week can be moved to another on its own. */
   space_id: string
+  /** The instant the pattern generated for this row, as of the last series sync. */
+  recurrence_id: string
 }
 
 async function loadSeries(id: string): Promise<SeriesRow | null> {
@@ -102,11 +104,29 @@ async function loadSeries(id: string): Promise<SeriesRow | null> {
 async function loadUpcoming(seriesId: string): Promise<WeekRow[]> {
   const { data } = await adminSupabase
     .from('space_bookings')
-    .select('id, start_time, end_time, attendee_ids, external_attendees, space_id')
+    .select('id, start_time, end_time, attendee_ids, external_attendees, space_id, recurrence_id')
     .eq('series_id', seriesId)
     .gte('start_time', bostonWallClockNow().toISOString())
     .order('start_time')
   return (data as WeekRow[] | null) ?? []
+}
+
+/**
+ * Every date the series pattern has ever generated a row for, past or
+ * upcoming -- what buildSpaceSeriesIcs needs to tell a gap (never booked, so
+ * excluded with EXDATE) from a date the series simply hasn't reached yet.
+ */
+async function loadFilledDates(seriesId: string): Promise<Set<string>> {
+  const { data } = await adminSupabase
+    .from('space_bookings')
+    .select('recurrence_id')
+    .eq('series_id', seriesId)
+  return new Set(
+    ((data as { recurrence_id: string | null }[] | null) ?? [])
+      .map(r => r.recurrence_id)
+      .filter((v): v is string => !!v)
+      .map(v => v.slice(0, 10))
+  )
 }
 
 /** Only the creator or an administrator may change a series, as with a single booking. */
@@ -114,8 +134,8 @@ function mayManage(user: AuthedUser, series: SeriesRow): boolean {
   return series.creator_id === user.id || hasLiveAdmin(user)
 }
 
-function toWeek(r: { id: string; start_time: string; end_time: string }): SeriesWeek {
-  return { bookingId: r.id, startTime: r.start_time, endTime: r.end_time }
+function toWeek(r: { id: string; start_time: string; end_time: string; recurrence_id: string }): SeriesWeek {
+  return { bookingId: r.id, startTime: r.start_time, endTime: r.end_time, recurrenceId: r.recurrence_id }
 }
 
 /**
@@ -211,7 +231,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Bookings may not start or end between 12:00 AM and 7:00 AM.' }, { status: 400 })
   }
 
-  const upcoming = await loadUpcoming(id)
+  const [upcoming, filledDates] = await Promise.all([loadUpcoming(id), loadFilledDates(id)])
   if (upcoming.length === 0) {
     return NextResponse.json({
       error: `This ${SERIES_CADENCE[cadence].adjective} booking has no upcoming weeks left to change.`,
@@ -283,18 +303,27 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // whether the series is moving or the week was moved on its own, was checked
   // as claiming all of its time here. The rest keep their time and space, as
   // the email says.
+  //
+  // recurrence_id always advances to the new pattern's slot for that date, even
+  // for a week that keeps its own time: it names which generated occurrence a
+  // week's invite overrides (issue #184), and this sync is what re-anchors the
+  // pattern going forward.
   const updates = await Promise.all(kept.map(r => {
     const planned = okByDate.get(r.start_time.slice(0, 10))
+    const recurrenceId = planned
+      ? planned.interval.start
+      : intervalFor(r.start_time.slice(0, 10), start_time, end_time).start
     return adminSupabase
       .from('space_bookings')
       .update({
         title: cleanTitle,
         attendee_ids: attendees,
         external_attendees: externals,
+        recurrence_id: recurrenceId,
         ...(planned ? { start_time: planned.interval.start, end_time: planned.interval.end, space_id: spaceId } : {}),
       })
       .eq('id', r.id)
-      .select('id, start_time, end_time, space_id')
+      .select('id, start_time, end_time, space_id, recurrence_id')
       .single()
   }))
   const updateError = updates.find(u => u.error)?.error
@@ -314,8 +343,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         attendee_ids: attendees,
         external_attendees: externals,
         series_id: id,
+        recurrence_id: w.interval.start,
       })))
-      .select('id, start_time, end_time, attendee_ids, external_attendees, space_id')
+      .select('id, start_time, end_time, attendee_ids, external_attendees, space_id, recurrence_id')
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     inserted = (data as WeekRow[] | null) ?? []
   }
@@ -332,14 +362,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (seriesError) return NextResponse.json({ error: seriesError.message }, { status: 500 })
 
   const finalRows = [
-    ...updates.map(u => u.data as { id: string; start_time: string; end_time: string; space_id: string }),
+    ...updates.map(u => u.data as { id: string; start_time: string; end_time: string; space_id: string; recurrence_id: string }),
     ...inserted,
   ].sort((a, b) => a.start_time.localeCompare(b.start_time))
+
+  // Every pattern slot from the series' fixed start through its (possibly new)
+  // end date, minus whatever already has a row (from before this edit, per
+  // filledDates) or is about to (toInsert) -- what's left is a gap the master
+  // needs an EXDATE for. A date beyond the new `until` drops out of the count
+  // entirely and needs no EXDATE of its own.
+  const insertedDates = new Set(toInsert.map(w => w.date))
+  const count = seriesDates(series.starts_on, until, cadence).length
+  const gaps = seriesDates(series.starts_on, until, cadence)
+    .filter(d => !filledDates.has(d) && !insertedDates.has(d))
+    .map(d => intervalFor(d, start_time, end_time).start)
 
   waitUntil(
     (async () => {
       try {
-        const withSpace = (r: { id: string; start_time: string; end_time: string; space_id: string }) =>
+        const withSpace = (r: { id: string; start_time: string; end_time: string; space_id: string; recurrence_id: string }) =>
           ({ ...toWeek(r), spaceId: r.space_id })
         const [finalWeeks, removedWeeks] = await Promise.all([
           nameOtherSpaces(finalRows.map(withSpace), spaceId),
@@ -363,9 +404,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const recipients = dedupeEmails(currentIds.flatMap(u => addresses.get(u) ?? []))
 
         await sendSpaceSeriesUpdatedEmail({
+          seriesId: id,
           title: cleanTitle,
           spaceName,
           frequency: cadence,
+          patternStart: sample.start,
+          patternEnd: sample.end,
+          count,
+          gaps,
           weeks: finalWeeks,
           removed: removedWeeks,
           unchanged,
@@ -381,6 +427,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           .filter(e => !inCurrent.has(e.toLowerCase()))
         if (dropped.length > 0) {
           await sendSpaceSeriesCancelledEmail({
+            seriesId: id,
             title: cleanTitle,
             spaceName,
             frequency: cadence,
@@ -450,6 +497,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
           const { to, bcc } = cancellationAddressing(addresses, series.creator_id, attendees)
 
           await sendSpaceSeriesCancelledEmail({
+            seriesId: id,
             title: series.title,
             spaceName: space?.name ?? 'SGA Space',
             frequency: cadenceOf(series),
