@@ -18,13 +18,16 @@ import {
 /**
  * The committee wayfinding display (issue #187).
  *
- * Built like the SGA Spaces kiosk in app/display/[spaceId]: a client component
- * behind ?key=, polling every 50s but only while the tab is actually on screen,
- * and sized for a monitor read from across a corridor rather than a desk.
+ * Shaped like an airport board rather than the SGA Spaces kiosk: one meeting
+ * fills the screen at a time and the day cycles through it, so every meeting
+ * gets the whole display instead of a column of it. Dots say how many are in the
+ * rotation, because a reader who sees one card must not conclude it is the only
+ * one. From the kiosk it keeps only the plumbing -- a client component behind
+ * ?key=, polling every 50s and only while the tab is actually on screen.
  *
- * ?floor= is what makes the arrows mean anything -- it says which floor the
- * screen itself is hanging on, so one page serves every screen. Without it the
- * display still names the room and the floor, it just does not point.
+ * ?key= is the only parameter. The arrows come from a bearing table in
+ * lib/committee-display.ts, given for this one screen rather than derived, since
+ * no room number can say which way to turn on the floor you are already on.
  *
  * Everything here is read while walking past, which is why there is no smallest
  * tier of type below ~20px except the footer chrome, why nothing is revealed by
@@ -53,14 +56,15 @@ const BEARING_WORDS: Record<Bearing, string> = {
 }
 
 /**
- * How many of the day's remaining meetings the right-hand column lists.
+ * How long each meeting holds the screen before the next one (ms).
  *
- * At this type size the column holds about this many on a 1080p screen, and a
- * row half off the bottom edge is worse than a count saying it is there --
- * `overflow-hidden` alone would clip silently, with nothing to tell a reader
- * that the list they are looking at is not the whole day.
+ * The board shows one meeting at a time, so this is the whole budget a passer-by
+ * gets to read four things -- who, when, which way, which room -- from across a
+ * corridor. Much under this and the screen is unreadable to anyone not standing
+ * still; much over and someone waiting for a later meeting to come round gives
+ * up. Cut it against how long the full cycle takes on a busy day.
  */
-const REST_LIMIT = 4
+const CYCLE_MS = 5_000
 
 /** How long stale data may sit on screen before the footer admits it (ms). */
 const STALE_AFTER_MS = 5 * 60_000
@@ -87,84 +91,106 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** The room line, plus which way to walk when the screen knows the way. */
-function Wayfinding({ meeting, large }: {
-  meeting: CommitteeMeeting
-  large?: boolean
-}) {
-  if (isVirtual(meeting.status)) {
-    return <p className={`${large ? 'text-5xl' : 'text-2xl'} font-semibold text-[#93b8d8]`}>Virtual — no room</p>
-  }
+/**
+ * One meeting, filling the screen.
+ *
+ * There is only ever one on screen at a time, so everything here is sized for
+ * the whole board rather than a column of it -- read at a walking pace from the
+ * far end of a corridor.
+ */
+function MeetingCard({ meeting, label }: { meeting: CommitteeMeeting; label: string }) {
+  const cancelled = isCancelled(meeting.status)
+  const virtual = isVirtual(meeting.status)
 
   const room = meeting.roomName || 'Room to be confirmed'
   // A floor number only means anything in the building the screen is in: 'Egan
   // 306' is not this building's third floor.
   const floor = isInDisplayBuilding(meeting.roomName) ? floorOf(meeting.roomName) : null
-  const cancelled = isCancelled(meeting.status)
   // No arrow for a cancelled meeting: an arrow is an instruction to walk, and
   // there is nothing at the other end of it.
-  const direction = cancelled ? null : directionTo(meeting.roomName)
+  const direction = cancelled || virtual ? null : directionTo(meeting.roomName)
   const arrow = direction ? ARROWS[direction.bearing] : null
+  const directionLine = [
+    direction ? (direction.note ?? BEARING_WORDS[direction.bearing]) : null,
+    floor !== null ? `${ordinalFloor(floor)} floor` : null,
+  ].filter(Boolean).join(' · ')
 
   return (
-    <div className="flex items-baseline gap-4">
-      {arrow && (
-        <span
-          aria-hidden
-          className={`${large ? 'text-6xl' : 'text-3xl'} font-bold text-[#4ade80] leading-none`}
-        >
-          {arrow}
-        </span>
-      )}
-      <div>
-        <p
-          className={`${large ? 'text-5xl' : 'text-2xl'} font-semibold ${
-            cancelled ? 'text-[#93b8d8] line-through decoration-[#f87171] decoration-4' : 'text-[#f0f6ff]'
-          }`}
-        >
-          {room}
-        </p>
-        {!cancelled && (direction || floor !== null) && (
-          <p className={`${large ? 'text-2xl' : 'text-xl'} text-[#93b8d8] mt-1`}>
-            {[
-              direction ? (direction.note ?? BEARING_WORDS[direction.bearing]) : null,
-              floor !== null ? `${ordinalFloor(floor)} floor` : null,
-            ].filter(Boolean).join(' · ')}
-          </p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function MeetingHeading({ meeting, large }: { meeting: CommitteeMeeting; large?: boolean }) {
-  const cancelled = isCancelled(meeting.status)
-  return (
-    <div>
+    <div className="flex-1 min-h-0 flex flex-col justify-center px-16">
       <p
-        className={`${large ? 'text-6xl' : 'text-3xl'} font-bold ${
-          cancelled ? 'text-[#93b8d8] line-through decoration-[#f87171] decoration-4' : 'text-[#f0f6ff]'
+        className={`text-3xl font-medium uppercase tracking-widest ${
+          cancelled ? 'text-[#f87171]' : 'text-[#93b8d8]'
+        }`}
+      >
+        {label}
+      </p>
+
+      <p
+        className={`text-8xl font-bold mt-6 text-balance ${
+          cancelled ? 'text-[#93b8d8] line-through decoration-[#f87171] decoration-8' : 'text-[#f0f6ff]'
         }`}
       >
         {meeting.bodyName}
         {meeting.isEvent && (
-          <span
-            className={`${large ? 'text-2xl' : 'text-lg'} font-semibold uppercase tracking-wide align-middle ml-4 px-3 py-1 rounded-full bg-[#062f3b] text-[#22d3ee]`}
-          >
+          <span className="text-3xl font-semibold uppercase tracking-wide align-middle ml-6 px-4 py-1.5 rounded-full bg-[#062f3b] text-[#22d3ee]">
             Event
           </span>
         )}
       </p>
-      {/* Immediately under the name, at the name's own weight -- not a footnote
-          below the room, where the room is the larger thing on the line. */}
-      {cancelled && (
-        <p className={`${large ? 'text-5xl' : 'text-3xl'} font-bold text-[#f87171] uppercase tracking-wide mt-2`}>
-          Cancelled
-        </p>
-      )}
+
       {meeting.purpose && !cancelled && (
-        <p className={`${large ? 'text-3xl' : 'text-2xl'} text-[#93b8d8] mt-2`}>{meeting.purpose}</p>
+        <p className="text-4xl text-[#93b8d8] mt-5">{meeting.purpose}</p>
       )}
+
+      <p className="text-6xl font-semibold text-[#f0f6ff] tabular-nums mt-10">
+        {formatTime(meeting.meetingTime)}
+      </p>
+
+      {virtual ? (
+        <p className="text-6xl font-semibold text-[#93b8d8] mt-8">Virtual — no room</p>
+      ) : (
+        <div className="flex items-center gap-8 mt-8">
+          {arrow && (
+            <span aria-hidden className="text-8xl font-bold text-[#4ade80] leading-none">
+              {arrow}
+            </span>
+          )}
+          <div>
+            <p
+              className={`text-7xl font-semibold ${
+                cancelled ? 'text-[#93b8d8] line-through decoration-[#f87171] decoration-8' : 'text-[#f0f6ff]'
+              }`}
+            >
+              {room}
+            </p>
+            {!cancelled && directionLine && (
+              <p className="text-3xl text-[#93b8d8] mt-3">{directionLine}</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Which of the day's meetings is on screen, and how many there are.
+ *
+ * A passer-by needs to know the board is a rotation rather than the whole story,
+ * or they will read one meeting and walk away believing it is the only one.
+ */
+function CycleDots({ count, index }: { count: number; index: number }) {
+  if (count < 2) return null
+  return (
+    <div className="flex items-center justify-center gap-3 flex-shrink-0 pb-6" aria-hidden>
+      {Array.from({ length: count }, (_, i) => (
+        <span
+          key={i}
+          className={`rounded-full transition-colors ${
+            i === index ? 'w-4 h-4 bg-[#4ade80]' : 'w-3 h-3 bg-white/25'
+          }`}
+        />
+      ))}
     </div>
   )
 }
@@ -251,6 +277,27 @@ function CommitteeDisplayContent() {
   const nowHm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const { ongoing, upcoming } = useMemo(() => splitByTime(meetings, nowHm), [meetings, nowHm])
 
+  // What is happening now comes round first, then the rest of the day in start
+  // order. One flat rotation rather than a board: there is no second column to
+  // put anything in.
+  const order = useMemo(() => [...ongoing, ...upcoming], [ongoing, upcoming])
+  const ongoingIds = useMemo(() => new Set(ongoing.map(m => m.id)), [ongoing])
+
+  const [cardIndex, setCardIndex] = useState(0)
+
+  // Advance on a timer, not on the clock tick, so a meeting gets its full turn.
+  // Paused while backgrounded and skipped entirely for a single meeting, which
+  // would otherwise "cycle" from itself to itself.
+  useEffect(() => {
+    if (order.length < 2) return
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setCardIndex(i => (i + 1) % order.length)
+      }
+    }, CYCLE_MS)
+    return () => clearInterval(interval)
+  }, [order.length])
+
   if (accessDenied) {
     return <Shell><p className="text-[#f87171] text-4xl font-semibold">Access denied</p></Shell>
   }
@@ -274,88 +321,42 @@ function CommitteeDisplayContent() {
     )
   }
 
-  // The one meeting the left half is given over to, and everything else in
-  // start order behind it.
-  const featured = ongoing[0] ?? upcoming[0] ?? null
-  const rest = featured ? [...ongoing, ...upcoming].filter(m => m.id !== featured.id) : []
-  const shown = rest.slice(0, REST_LIMIT)
-  const hidden = rest.length - shown.length
-
   const stale = lastLoaded !== null && now.getTime() - lastLoaded > STALE_AFTER_MS
 
-  const header = (
-    <div className="flex-shrink-0">
-      <Eyebrow>Meetings &amp; events</Eyebrow>
-      <p className="text-7xl font-bold text-[#f0f6ff] tabular-nums mt-4">{formatClock(now)}</p>
-      <p className="text-2xl text-[#93b8d8] mt-2">{formatDate(now)}</p>
-    </div>
-  )
+  // The rotation can shrink under the index when a meeting ends, so wrap rather
+  // than trusting the timer's own count.
+  const current = order.length ? order[cardIndex % order.length] : null
+  const label = current
+    ? isCancelled(current.status)
+      ? 'Cancelled'
+      : ongoingIds.has(current.id)
+        ? 'Meeting now'
+        : 'Up next'
+    : ''
 
   return (
     <div className={`h-screen w-screen overflow-hidden flex flex-col bg-[#0a1628] ${spaceGrotesk.className}`}>
-      {featured ? (
-        <div className="flex flex-row flex-1 min-h-0">
-          {/* Left: the meeting someone in this corridor is most likely looking for */}
-          <div className="w-1/2 flex flex-col px-12 py-10">
-            {header}
-            <div className="flex-1 mt-10 min-h-0">
-              <Eyebrow>{ongoing.length ? 'Meeting now' : 'Up next'}</Eyebrow>
-              <div className="mt-3">
-                <MeetingHeading meeting={featured} large />
-              </div>
-              <p className="text-4xl text-[#93b8d8] mt-6 tabular-nums">
-                {formatTime(featured.meetingTime)}
-              </p>
-              <div className="mt-8">
-                <Wayfinding meeting={featured} large />
-              </div>
-            </div>
-          </div>
-
-          {/* Right: everything else still to come */}
-          <div className="w-1/2 flex flex-col px-12 py-10 border-l border-white/10">
-            <div className="flex-shrink-0">
-              <Eyebrow>Also today</Eyebrow>
-            </div>
-            <div className="flex-1 mt-6 min-h-0 overflow-hidden">
-              {shown.length === 0 && (
-                <p className="text-3xl text-[#93b8d8]">Nothing else scheduled</p>
-              )}
-              {shown.map(m => (
-                <div key={m.id} className="mb-7 pb-7 border-b border-white/10 last:border-b-0">
-                  <div className="flex items-baseline justify-between gap-6">
-                    <MeetingHeading meeting={m} />
-                    <p className="text-3xl text-[#93b8d8] tabular-nums whitespace-nowrap">
-                      {formatTime(m.meetingTime)}
-                    </p>
-                  </div>
-                  <div className="mt-3">
-                    <Wayfinding meeting={m} />
-                  </div>
-                </div>
-              ))}
-              {hidden > 0 && (
-                <p className="text-2xl text-[#93b8d8] mt-2">
-                  + {hidden} more {hidden === 1 ? 'meeting' : 'meetings'} later today
-                </p>
-              )}
-            </div>
-          </div>
+      {/* Standing chrome: the clock stays put while the meetings turn over, so a
+          reader can tell the board is live rather than frozen on one card. */}
+      <div className="flex items-start justify-between px-16 pt-10 flex-shrink-0">
+        <Eyebrow>Meetings &amp; events</Eyebrow>
+        <div className="text-right">
+          <p className="text-5xl font-bold text-[#f0f6ff] tabular-nums leading-none">{formatClock(now)}</p>
+          <p className="text-xl text-[#93b8d8] mt-2">{formatDate(now)}</p>
         </div>
+      </div>
+
+      {current ? (
+        <MeetingCard key={current.id} meeting={current} label={label} />
       ) : (
-        /* Nothing left to point at. One message across the whole screen rather
-           than an empty column beside an empty column. */
-        <div className="flex-1 min-h-0 flex flex-col px-12 py-10">
-          {header}
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-6xl font-semibold text-[#93b8d8] text-center">
-              Nothing left today
-            </p>
-          </div>
+        <div className="flex-1 min-h-0 flex items-center justify-center px-16">
+          <p className="text-7xl font-semibold text-[#93b8d8] text-center">Nothing left today</p>
         </div>
       )}
 
-      <div className="h-8 flex items-center justify-between px-12 border-t border-white/10 flex-shrink-0">
+      <CycleDots count={order.length} index={order.length ? cardIndex % order.length : 0} />
+
+      <div className="h-8 flex items-center justify-between px-16 border-t border-white/10 flex-shrink-0">
         <span className="text-xs text-[#6a96bb]">Chambers · Northeastern SGA</span>
         {stale ? (
           <span className="text-xs text-[#f87171]">Not updating — last checked {formatClock(new Date(lastLoaded!))}</span>
