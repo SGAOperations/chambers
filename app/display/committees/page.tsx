@@ -67,6 +67,16 @@ const BEARING_WORDS: Record<Bearing, string> = {
  */
 const CYCLE_MS = 5_000
 
+/**
+ * How long a card takes to fade out before the next one fades in (ms).
+ *
+ * Cuts read as a glitch on a screen nobody is looking directly at -- a fade is
+ * what tells a passer-by at the edge of their vision that the board changed
+ * rather than broke. It is spent twice per turn, out and back in, so it comes
+ * out of CYCLE_MS and cannot be long.
+ */
+const FADE_MS = 400
+
 /** How long stale data may sit on screen before the footer admits it (ms). */
 const STALE_AFTER_MS = 5 * 60_000
 
@@ -313,18 +323,30 @@ function CommitteeDisplayContent() {
   const ongoingIds = useMemo(() => new Set(board?.ongoing.map(m => m.id) ?? []), [board])
 
   const [cardIndex, setCardIndex] = useState(0)
+  const [visible, setVisible] = useState(true)
 
   // Advance on a timer, not on the clock tick, so a meeting gets its full turn.
   // Paused while backgrounded and skipped entirely for a single meeting, which
   // would otherwise "cycle" from itself to itself.
+  //
+  // Fade out, swap, fade back in -- the card is only exchanged while it is
+  // already invisible, so the text never changes in front of anyone. That is
+  // also why the index moves inside the timeout rather than beside it.
   useEffect(() => {
     if (order.length < 2) return
+    let swap: ReturnType<typeof setTimeout> | undefined
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState !== 'visible') return
+      setVisible(false)
+      swap = setTimeout(() => {
         setCardIndex(i => (i + 1) % order.length)
-      }
+        setVisible(true)
+      }, FADE_MS)
     }, CYCLE_MS)
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      clearTimeout(swap)
+    }
   }, [order.length])
 
   if (accessDenied) {
@@ -382,12 +404,21 @@ function CommitteeDisplayContent() {
       </div>
 
       {current ? (
-        <MeetingCard
-          key={current.id}
-          meeting={current}
-          label={label}
-          pointTheWay={shouldPointAt(current, board!.daysAhead, nowHm)}
-        />
+        /* No key on the card: remounting it would snap straight to the new text
+           at full opacity, which is the cut this wrapper exists to prevent. The
+           swap happens inside, while opacity is already 0. */
+        <div
+          className={`flex-1 min-h-0 flex flex-col transition-opacity ease-in-out ${
+            visible ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{ transitionDuration: `${FADE_MS}ms` }}
+        >
+          <MeetingCard
+            meeting={current}
+            label={label}
+            pointTheWay={shouldPointAt(current, board!.daysAhead, nowHm)}
+          />
+        </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col items-center justify-center px-16">
           <p className="text-7xl font-semibold text-[#93b8d8] text-center">Nothing scheduled</p>
