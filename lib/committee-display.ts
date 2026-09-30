@@ -142,6 +142,7 @@ const ROOM_BEARINGS: Record<number, Wayfinding> = {
   334: { bearing: 'left' },
   335: { bearing: 'left' },
   336: { bearing: 'left' },
+  340: { bearing: 'left' },
   342: { bearing: 'left' },
   344: { bearing: 'left' },
   346: { bearing: 'left' },
