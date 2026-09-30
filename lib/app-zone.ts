@@ -23,3 +23,28 @@
  * wrong; a space booking is nothing but one.
  */
 export const APP_TIME_ZONE = 'America/New_York'
+
+/**
+ * Today's date in APP_TIME_ZONE, as 'YYYY-MM-DD'.
+ *
+ * Deliberately not `new Date()` + getFullYear()/getMonth()/getDate(), which read
+ * the *runtime's* timezone: UTC inside a Vercel function, the viewer's zone in
+ * the browser. Those disagree for the last few hours of every Eastern day -- at
+ * 9pm EDT the server's clock has already rolled to tomorrow -- so a list filtered
+ * on the server would not match the one React computed while hydrating, and the
+ * server HTML would be thrown away and redrawn.
+ *
+ * Reading the UTC fields of `new Date()` has the same defect for the same
+ * reason, and is how issue #177 got a whole day's worth of severity four hours
+ * early every evening.
+ *
+ * 'en-CA' is the shortest route to ISO-ordered output from Intl.
+ */
+export function todayInAppZone(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now)
+}
