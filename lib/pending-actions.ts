@@ -256,6 +256,13 @@ export interface BookingChildDates {
 interface EventTrackingRow {
   event_management_form: boolean
   engage_form: boolean
+  /**
+   * Marked not required by an admin (#208). Read alongside the tick rather than
+   * instead of it: either one means the form is not outstanding, so neither
+   * raises an action. See db/neon/0012_event_form_waivers.sql.
+   */
+  event_management_form_waived?: boolean | null
+  engage_form_waived?: boolean | null
   occurrence_date?: string | null
 }
 
@@ -360,7 +367,8 @@ export async function fetchPendingActions(
       .from('bookings')
       .select(
         `id, ${BOOKING_CHILD_SELECT}, ` +
-          'event_tracking(event_management_form, engage_form, occurrence_date), ' +
+          'event_tracking(event_management_form, engage_form, ' +
+          'event_management_form_waived, engage_form_waived, occurrence_date), ' +
           'event_tracking_items(id, label, due_days, completed, occurrence_date)'
       )
       .eq('is_event', true),
@@ -492,7 +500,10 @@ export async function fetchPendingActions(
     const tracking = rows.find(t => (t.occurrence_date ?? null) === null) ?? null
     const title = titleOf(b.purpose, b.bodies ?? null)
 
-    if (!tracking?.event_management_form) {
+    // A form an admin has marked not required raises nothing, the same as a
+    // ticked one (#208). The two are separate facts -- see the EventTrackingRow
+    // comment -- and this is the one place that does not care which it was.
+    if (!tracking?.event_management_form && !tracking?.event_management_form_waived) {
       actions.push({
         id: `event-form:${b.id}:mgmt`,
         kind: 'event-form',
@@ -503,7 +514,7 @@ export async function fetchPendingActions(
         referenceDate: eventDate,
       })
     }
-    if (!tracking?.engage_form) {
+    if (!tracking?.engage_form && !tracking?.engage_form_waived) {
       actions.push({
         id: `event-form:${b.id}:engage`,
         kind: 'event-form',

@@ -52,6 +52,18 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.5</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              An event form that was never required can now be marked as such. The Event Management Form is not asked for when the event is in a normal Curry space, and until now there was nothing to do about it: the form sat on the Administrator&apos;s pending actions until the event passed, turning red on the way, and the only way to clear it was to tick a form nobody had filled in.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Administrators now get a &ldquo;Not required&rdquo; option beside the Event Management Form and the Engage Form on each event in the Events tab. A form marked that way stops being a pending action, reads as not required rather than as done, and can be put back if it turns out to be needed after all. Ticking forms off works exactly as before, and anyone who can open the Events tab can still do that.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.4</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               On the corridor display, a meeting whose body name runs to two lines no longer pushes the room and its arrow down onto the footer. The spacing closes up instead, so the room is clear of the bottom of the screen whatever the body is called.
