@@ -19,6 +19,9 @@ const adminSupabase = db
 interface TrackingRow {
   event_management_form: boolean
   engage_form: boolean
+  /** Marked not required by an admin (#208), independent of the tick above. */
+  event_management_form_waived: boolean | null
+  engage_form_waived: boolean | null
   occurrence_date: string | null
 }
 
@@ -53,6 +56,11 @@ interface EventForm {
   due_days: number
   /** due_days resolved against the event date; null if the event has no date. */
   due_date: string | null
+  /**
+   * Marked not required for this event by an admin (#208). Only a standard form
+   * can be: an extra form that does not apply is taken off the list instead.
+   */
+  waived: boolean
 }
 
 /** A flagged weekly occurrence with the series and booking it belongs to. */
@@ -112,7 +120,7 @@ export async function GET() {
           tabling_bookings(
             tabling_sessions(location, session_date, start_time, end_time)
           ),
-          event_tracking(event_management_form, engage_form, occurrence_date),
+          event_tracking(event_management_form, engage_form, event_management_form_waived, engage_form_waived, occurrence_date),
           event_tracking_items(id, label, due_days, completed, occurrence_date, created_at)
         `)
         .eq('is_event', true)
@@ -133,7 +141,7 @@ export async function GET() {
               id, purpose, type, created_at, semester_id,
               bodies(name),
               users!bookings_created_by_fkey(full_name),
-              event_tracking(event_management_form, engage_form, occurrence_date),
+              event_tracking(event_management_form, engage_form, event_management_form_waived, engage_form_waived, occurrence_date),
               event_tracking_items(id, label, due_days, completed, occurrence_date, created_at)
             )
           )
@@ -186,7 +194,8 @@ export async function GET() {
       key: 'event_management_form' | 'engage_form',
       label: string,
       dueDays: number,
-      checked: boolean
+      checked: boolean,
+      waived: boolean
     ): EventForm => ({
       key,
       kind: 'standard',
@@ -194,6 +203,7 @@ export async function GET() {
       checked,
       due_days: dueDays,
       due_date: dueDate(dueDays),
+      waived,
     })
 
     return [
@@ -201,9 +211,16 @@ export async function GET() {
         'event_management_form',
         'Event Management Form',
         s.eventMgmt[1],
-        tracking?.event_management_form ?? false
+        tracking?.event_management_form ?? false,
+        tracking?.event_management_form_waived ?? false
       ),
-      standard('engage_form', 'Engage Form', s.eventEngage[1], tracking?.engage_form ?? false),
+      standard(
+        'engage_form',
+        'Engage Form',
+        s.eventEngage[1],
+        tracking?.engage_form ?? false,
+        tracking?.engage_form_waived ?? false
+      ),
       ...items.map<EventForm>(i => ({
         key: `item:${i.id}`,
         kind: 'custom',
@@ -211,6 +228,7 @@ export async function GET() {
         checked: i.completed,
         due_days: i.due_days,
         due_date: dueDate(i.due_days),
+        waived: false,
       })),
     ]
   }

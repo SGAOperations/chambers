@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import EventsGuard from '../eventsguard'
 import { Skeleton } from '@/app/_components/skeleton'
+import { useCounts } from '../counts-context'
+import { useIdentity } from '../identity-context'
 import { usePendingActionsWatch } from '../pending-actions-watch'
 import { MAX_FORM_LABEL, MAX_DUE_DAYS } from '@/lib/event-forms'
 
@@ -19,6 +21,12 @@ interface EventForm {
   checked: boolean
   due_days: number
   due_date: string | null
+  /**
+   * An admin has marked this form as not required for this event (#208), so it
+   * is neither outstanding nor claimed to be done. Only ever true of a standard
+   * form; an extra form that does not apply is removed instead.
+   */
+  waived: boolean
 }
 
 /** A saved form from the catalog an admin curates in Administrator > Advanced. */
@@ -251,12 +259,18 @@ function FormEditor({
  * The two standard forms are deliberately not editable here. They are the same
  * form on every event, due on the schedule set once in Administrator > Advanced,
  * and an event that needs something else adds it rather than redefining them.
+ * What an admin can do to one is say it was never required (#208) -- the Event
+ * Management Form is not asked for in a normal Curry space -- which is not the
+ * same claim as ticking it, and is the only way such a form stops being an
+ * outstanding pending action.
  */
 function ChecklistRow({
   form,
   danger,
   editing,
+  canWaive,
   onToggle,
+  onWaive,
   onEdit,
   onCancelEdit,
   onSave,
@@ -266,32 +280,57 @@ function ChecklistRow({
   form: EventForm
   danger: boolean
   editing: boolean
+  /** Whether this viewer may waive a standard form: admins, not IEMS. */
+  canWaive: boolean
   onToggle: (checked: boolean) => void
+  onWaive: (waived: boolean) => void
   onEdit: () => void
   onCancelEdit: () => void
   onSave: (draft: FormDraft) => Promise<void>
   onRemove: () => void
   eventDate: string | null
 }) {
+  // A waived form is struck out like a completed one, but muted rather than
+  // green: it is settled, not done, and the two should not read alike.
+  const labelCls = form.waived
+    ? 'text-[#6a96bb] line-through'
+    : form.checked
+      ? 'text-[#4ade80] line-through'
+      : danger
+        ? 'pa-text-danger'
+        : 'text-[#f0f6ff] group-hover:text-white'
+
   return (
     <div className="space-y-2">
       <div className="flex items-start gap-3">
-        <label className="flex items-start gap-3 cursor-pointer select-none group min-w-0">
+        <label className={`flex items-start gap-3 select-none group min-w-0 ${form.waived ? '' : 'cursor-pointer'}`}>
           <input
             type="checkbox"
             checked={form.checked}
+            // Nothing to tick on a form nobody has to submit. Left visible and
+            // disabled rather than swapped out, so the line keeps its shape.
+            disabled={form.waived}
             onChange={e => onToggle(e.target.checked)}
-            className="w-4 h-4 mt-0.5 rounded border border-[#1e5080] bg-[#0f2a4a] accent-[#c8102e] cursor-pointer"
+            className={`w-4 h-4 mt-0.5 rounded border border-[#1e5080] bg-[#0f2a4a] accent-[#c8102e] ${form.waived ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
           />
           <span className="flex flex-col min-w-0">
-            <span className={`text-sm transition-colors ${form.checked ? 'text-[#4ade80] line-through' : danger ? 'pa-text-danger' : 'text-[#f0f6ff] group-hover:text-white'}`}>
-              {form.label}
-            </span>
-            {!form.checked && form.due_date && (
-              <span className="text-xs text-[#6a96bb]">Due {formatDate(form.due_date)}</span>
+            <span className={`text-sm transition-colors ${labelCls}`}>{form.label}</span>
+            {form.waived ? (
+              <span className="text-xs text-[#6a96bb]">Not required for this event</span>
+            ) : (
+              !form.checked &&
+              form.due_date && <span className="text-xs text-[#6a96bb]">Due {formatDate(form.due_date)}</span>
             )}
           </span>
         </label>
+
+        {form.kind === 'standard' && canWaive && (
+          <div className="flex items-center gap-2 ml-auto shrink-0">
+            <button type="button" onClick={() => onWaive(!form.waived)} className={linkBtnCls}>
+              {form.waived ? 'Mark required' : 'Not required'}
+            </button>
+          </div>
+        )}
 
         {form.kind === 'custom' && !editing && (
           <div className="flex items-center gap-2 ml-auto shrink-0">
@@ -380,6 +419,13 @@ export default function EventsPage() {
   const [bookings, setBookings] = useState<EventBooking[]>([])
   const [templates, setTemplates] = useState<FormTemplate[]>([])
   const [loading, setLoading] = useState(true)
+  // The tab is open to admins and IEMS; waiving a standard form is admins only,
+  // and the route behind it enforces that independently.
+  const { isAdmin } = useIdentity()
+  // Settling a form here is what clears its pending action, so the sidebar's
+  // count is refetched rather than left until the next dashboard poll -- the
+  // same thing the Requests and Cancellations tabs do after acting on a row.
+  const { refreshCounts } = useCounts()
   const { isDanger, isActionDanger, registerOrigin } = usePendingActionsWatch()
   /** `<rowId>::<formKey>` for the line being edited, or `<rowId>::new`. */
   const [editing, setEditing] = useState<string | null>(null)
@@ -467,7 +513,40 @@ export default function EventsPage() {
     if (!res.ok) {
       patchForm(row.id, form.key, { checked: !checked })
       setError(row.id, await messageOf(res, 'That change could not be saved.'))
+      return
     }
+
+    refreshCounts()
+  }
+
+  /**
+   * Marks a standard form as not required for this event, or puts it back
+   * (#208). Same endpoint and same target as ticking one -- only the column
+   * differs -- so a waiver on an event with no checklist row yet creates it
+   * exactly as a first tick does.
+   */
+  const waiveForm = async (row: EventBooking, form: EventForm, waived: boolean) => {
+    clearError(row.id)
+    patchForm(row.id, form.key, { waived })
+
+    const res = await fetch('/api/events/checklist', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        booking_id: row.booking_id ?? row.id,
+        occurrence_date: row.occurrence_date,
+        step: form.key,
+        waived,
+      }),
+    })
+
+    if (!res.ok) {
+      patchForm(row.id, form.key, { waived: !waived })
+      setError(row.id, await messageOf(res, 'That change could not be saved.'))
+      return
+    }
+
+    refreshCounts()
   }
 
   /**
@@ -533,6 +612,7 @@ export default function EventsPage() {
         checked: item.completed,
         due_days: item.due_days,
         due_date: dueDateFor(row.event_date, item.due_days),
+        waived: false,
       },
     ])
     setEditing(null)
@@ -631,7 +711,9 @@ export default function EventsPage() {
                       eventDate={b.event_date}
                       danger={isActionDanger(actionIdFor(b.id, form.key))}
                       editing={editing === `${b.id}::${form.key}`}
+                      canWaive={isAdmin}
                       onToggle={checked => toggleForm(b, form, checked)}
+                      onWaive={waived => waiveForm(b, form, waived)}
                       onEdit={() => setEditing(`${b.id}::${form.key}`)}
                       onCancelEdit={() => setEditing(null)}
                       onSave={draft => saveForm(b, form, draft)}
