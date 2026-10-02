@@ -2,7 +2,7 @@ import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
-import { isManagementRole } from '@/lib/admin-roles'
+import { canWriteAdmin, isManagementRole } from '@/lib/admin-roles'
 import {
   invalidFormLabel,
   invalidDueDays,
@@ -29,9 +29,12 @@ const adminSupabase = db
 async function authorize({ write }: { write: boolean }) {
   const user = await getAuthedUserWithLiveRoles(db)
 
-  const allowed = write
-    ? !!user?.app_metadata?.is_admin
-    : !!(user?.app_metadata?.is_admin || user?.app_metadata?.iems_role)
+  // A view-only admin is not an admin for this (#217) -- these templates are
+  // the Events tab's, and that tab is not theirs. IEMS still reads them.
+  const writingAdmin =
+    !!user?.app_metadata?.is_admin && canWriteAdmin(user?.app_metadata?.admin_role)
+
+  const allowed = write ? writingAdmin : !!(writingAdmin || user?.app_metadata?.iems_role)
 
   if (!user || !allowed) {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }

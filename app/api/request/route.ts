@@ -2,6 +2,7 @@ import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { canWriteAdmin } from '@/lib/admin-roles'
 import { DIVISIONS, loadScopeContext, validateScopeSelection } from '@/lib/booking-scope'
 import { OPS_REVIEW } from '@/lib/request-status'
 import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-times'
@@ -23,7 +24,10 @@ export async function GET() {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const isAdmin = !!user.app_metadata?.is_admin
+  // A view-only admin gets no admin elevation here (#217): that tier reads the
+  // Bookings tab and is an ordinary user everywhere else.
+  const isAdmin =
+    !!user.app_metadata?.is_admin && canWriteAdmin(user.app_metadata?.admin_role)
 
   // The settings row is independent of the bodies lookup, so fetch both at once
   // rather than gating the bodies query behind it.

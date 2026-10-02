@@ -2,6 +2,7 @@ import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { canWriteAdmin } from '@/lib/admin-roles'
 
 const adminSupabase = db
 
@@ -9,7 +10,11 @@ export async function PATCH(request: Request) {
   const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
-  if (!user || (!user.app_metadata?.is_admin && !user.app_metadata?.iems_role)) {
+  // An admin who may act on the checklist, as opposed to a view-only one, who
+  // has no business on Events at all (#217).
+  const actingAdmin =
+    !!user?.app_metadata?.is_admin && canWriteAdmin(user?.app_metadata?.admin_role)
+  if (!user || (!actingAdmin && !user.app_metadata?.iems_role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -42,7 +47,7 @@ export async function PATCH(request: Request) {
   // Deciding a form was never required is a judgement about what the division
   // asks of an event, which is why it is a narrower gate than the rest of this
   // route: IEMS work the checklist, admins decide what is on it.
-  if (waived !== undefined && !user.app_metadata?.is_admin) {
+  if (waived !== undefined && !actingAdmin) {
     return NextResponse.json(
       { error: 'Only administrators can mark a form as not required.' },
       { status: 403 }

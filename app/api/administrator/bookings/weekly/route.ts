@@ -11,6 +11,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { planInvites } from '@/lib/room-calendar'
 import { appToday, sendPerAudience, weeklyRoomSeries, weeklyRoomSessions, type OccurrenceRow } from '@/lib/room-invites'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { canWriteAdmin } from '@/lib/admin-roles'
 import { waitUntil } from '@vercel/functions'
 
 import {
@@ -82,6 +83,11 @@ export async function POST(request: Request) {
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Closed to a view-only admin, who may read Bookings and nothing else (#217).
+  if (!canWriteAdmin(user.app_metadata?.admin_role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const rateLimitRes = await checkRateLimit(user.id)
@@ -241,6 +247,11 @@ export async function PATCH(request: Request) {
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Closed to a view-only admin, who may read Bookings and nothing else (#217).
+  if (!canWriteAdmin(user.app_metadata?.admin_role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const rateLimitRes = await checkRateLimit(user.id)

@@ -52,6 +52,18 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.7</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              There is a new administrator role for the Student Body President, and it is the first one that only reads. It opens the Bookings tab and nothing else &mdash; no Requests, no Cancellations, no SGA Spaces, no Management, no Events &mdash; and on that tab there is nothing to click: no new booking, no edit, no cancel, no marking an event or hiding a row. The office can see what the organisation has booked without being handed the booking work along with it.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The Digital Innovation Project Member role has been removed. Anyone who held it is no longer an administrator; Comptroller is the equivalent role for someone who should keep doing the booking work.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.6</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               Slack reminders now reach everyone a booking is for. A divisional booking &mdash; one made for a whole division rather than a single body &mdash; used to remind only the committee that happened to file it, and announced that committee as the one meeting. It now posts in every channel across the division, names the division, and says underneath which body booked it and who it is open to. A booking that belongs to one body reads exactly as it always did, and a channel that has switched reminders off still gets nothing.

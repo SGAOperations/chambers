@@ -13,7 +13,7 @@ import type { OriginTab } from '@/lib/pending-actions'
 import { IdentityContext } from './identity-context'
 import type { ShellIdentity } from '@/lib/shell-identity'
 import type { AlertRow } from '@/lib/dashboard-data'
-import { isManagementRole } from '@/lib/admin-roles'
+import { canWriteAdmin, isManagementRole } from '@/lib/admin-roles'
 
 function getGreeting() {
   const hour = new Date().getHours()
@@ -447,8 +447,15 @@ export default function DashboardShell({
             {navLink('/my-rooms', 'My Rooms')}
             {navLink('/sga-spaces', 'SGA Spaces')}
             {navLink('/nusso', 'Browse/Book NUSSO')}
-            {(isLeadership || isAdmin) && navLink('/request', 'Request a Booking')}
-            {(isAdmin || isIEMS) && navLink('/events', 'Events')}
+            {/*
+              Bookings is the one admin link a view-only admin gets (issue
+              #217), so the other two drop the "is an admin" half of their
+              condition for that role. Request a Booking still shows if they are
+              Leadership, and Events if they are IEMS -- those are their own
+              grants and have nothing to do with the admin tier.
+            */}
+            {(isLeadership || (isAdmin && canWriteAdmin(adminRole))) && navLink('/request', 'Request a Booking')}
+            {(isIEMS || (isAdmin && canWriteAdmin(adminRole))) && navLink('/events', 'Events')}
             {isAdmin && navLink('/bookings', 'Bookings')}
             {isAdmin && isManagementRole(adminRole) && navLink('/management', 'Management')}
           </div>

@@ -18,6 +18,7 @@ import {
 } from '@/lib/request-status'
 import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-times'
 import { MAX_LOCATION, MAX_TABLES, TABLES_ERROR, invalidTableCount } from '@/lib/tabling-request'
+import { canWriteAdmin } from '@/lib/admin-roles'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
 
@@ -198,7 +199,7 @@ function getMinDate(days: number): string {
 
 export default function RequestPage() {
   const router = useRouter()
-  const { isAdmin } = useIdentity()
+  const { isAdmin, adminRole } = useIdentity()
   const [type, setType] = useState<RequestType>('One-Time Room')
   const [bodies, setBodies] = useState<Body[]>([])
   // The multi-body pool is every active body; leadership may request any combination.
@@ -249,7 +250,7 @@ export default function RequestPage() {
       setMinDaysRoom(data.minDaysRoom ?? 0)
       setMinDaysTabling(data.minDaysTabling ?? 0)
       const resolved = data.bodies || []
-      if (resolved.length === 0 && !isAdmin) {
+      if (resolved.length === 0 && !(isAdmin && canWriteAdmin(adminRole))) {
         router.replace('/dashboard')
         return
       }

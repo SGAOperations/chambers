@@ -6,6 +6,7 @@ import SpaceBookingModal from './space-booking-modal'
 import SpaceBookingDetails from './space-booking-details'
 import { Skeleton } from '@/app/_components/skeleton'
 import { useIdentity } from '../identity-context'
+import { canWriteAdmin } from '@/lib/admin-roles'
 
 interface Space {
   id: string
@@ -170,14 +171,16 @@ export default function SGASpacesPage() {
   const [minHoursAdvance, setMinHoursAdvance] = useState<number>(24)
   const [semesterEndDate, setSemesterEndDate] = useState<string | null>(null)
   // From the shell, which resolved them from the users row on the server.
-  const { userId: currentUserId, isAdmin, isLeadership } = useIdentity()
+  const { userId: currentUserId, isAdmin, isLeadership, adminRole } = useIdentity()
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null)
   const [editBooking, setEditBooking] = useState<EditBooking | null>(null)
   // Someone else's booking, opened read-only (issue #142).
   const [viewBooking, setViewBooking] = useState<Booking | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
 
-  const canBook = isAdmin || isLeadership
+  // A view-only admin books nothing (#217) -- being an admin stops being the
+  // thing that grants it, though Leadership still does.
+  const canBook = (isAdmin && canWriteAdmin(adminRole)) || isLeadership
 
   const isTodayWeek = (() => {
     const now = new Date()
