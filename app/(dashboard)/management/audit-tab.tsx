@@ -23,7 +23,12 @@ interface AuditLogEntry {
   /** Null on entries from before issue #120, which recorded a status and nothing else. */
   target: 'booking' | 'series' | 'occurrence' | 'session' | null
   target_date: string | null
-  action: 'created' | 'updated' | 'added' | 'removed' | 'cancelled' | 'dismissed' | null
+  /**
+   * 'requested' is a cancellation request being filed, which is what moves a
+   * booking to Pending Cancellation (issue #211); 'dismissed' is that request
+   * closed without acting on it, and 'cancelled' is it carried out.
+   */
+  action: 'created' | 'updated' | 'added' | 'removed' | 'cancelled' | 'dismissed' | 'requested' | null
   changes: AuditChange[] | null
   /**
    * The author's role as it was when the entry was written. Null on entries from
@@ -89,6 +94,7 @@ const ACTION_LABELS: Record<NonNullable<AuditLogEntry['action']>, string> = {
   removed: 'Removed',
   cancelled: 'Cancelled',
   dismissed: 'Cancellation dismissed',
+  requested: 'Cancellation requested',
 }
 
 function formatDate(date: string) {

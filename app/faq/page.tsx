@@ -52,6 +52,21 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.6</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Slack reminders now reach everyone a booking is for. A divisional booking &mdash; one made for a whole division rather than a single body &mdash; used to remind only the committee that happened to file it, and announced that committee as the one meeting. It now posts in every channel across the division, names the division, and says underneath which body booked it and who it is open to. A booking that belongs to one body reads exactly as it always did, and a channel that has switched reminders off still gets nothing.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The audit log has started recording cancellation requests. Asking for a cancellation moves a booking to Pending Cancellation, but the log only ever picked the story up at the far end, when an administrator marked the request done or dismissed it &mdash; so a booking sitting at Pending Cancellation had nothing on it saying who put it there or when. Every request now writes its own entry, naming the week, session or series it covers and the status it moved from.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Cancellation requests also show the time they came in, not just the date. How much notice CSC was given is often what decides whether a room can still be released, and a date on its own could not answer that for a request made the day before.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.1.5</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               An event form that was never required can now be marked as such. The Event Management Form is not asked for when the event is in a normal Curry space, and until now there was nothing to do about it: the form sat on the Administrator&apos;s pending actions until the event passed, turning red on the way, and the only way to clear it was to tick a form nobody had filled in.

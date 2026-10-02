@@ -3,8 +3,24 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { requireBookingManager } from '@/lib/booking-scope'
+import { cancellationRequestTarget, insertAuditRows } from '@/lib/audit'
 
 const adminSupabase = db
+
+/**
+ * The one status a set of rows all hold, or null where they disagree.
+ *
+ * A series-scoped request moves every session on the booking at once, and those
+ * can legitimately start out differently -- one week Reserved, another already
+ * Waitlisted. There is no honest single "from" for that, so the audit entry
+ * records only where they landed rather than inventing a value that was true of
+ * some of them. A blank is treated as no answer for the same reason.
+ */
+function sharedStatus(rows: { status: string | null }[] | null | undefined): string | null {
+  const values = new Set((rows ?? []).map(r => r.status ?? ''))
+  if (values.size !== 1) return null
+  return [...values][0] || null
+}
 
 export async function POST(request: Request) {
   const supabase = db
@@ -35,19 +51,56 @@ export async function POST(request: Request) {
   // it, marking the request Done finds nothing to do, and Auto-Cancel cannot
   // tell which request asked for what.
   let occurrenceDate: string | null = null
+
+  // What the reservations this request covers say right now, read before they
+  // are moved, so the audit entry below can say what the request changed rather
+  // than only where it left things (issue #211). Null where there is no single
+  // answer, which is not an error -- see sharedStatus().
+  let previousStatus: string | null = null
+
   if (scope === 'occurrence' && occurrence_id) {
     if (bookingType === 'One-Time Room') {
       const { data } = await adminSupabase
-        .from('one_time_room_bookings').select('booking_date').eq('id', occurrence_id).maybeSingle()
+        .from('one_time_room_bookings').select('booking_date, status').eq('id', occurrence_id).maybeSingle()
       occurrenceDate = data?.booking_date ?? null
+      previousStatus = data?.status ?? null
     } else if (bookingType === 'Tabling') {
       const { data } = await adminSupabase
-        .from('tabling_sessions').select('session_date').eq('id', occurrence_id).maybeSingle()
+        .from('tabling_sessions').select('session_date, status').eq('id', occurrence_id).maybeSingle()
       occurrenceDate = data?.session_date ?? null
+      previousStatus = data?.status ?? null
     } else {
       const { data } = await adminSupabase
-        .from('weekly_room_occurrences').select('occurrence_date').eq('id', occurrence_id).maybeSingle()
+        .from('weekly_room_occurrences').select('occurrence_date, status').eq('id', occurrence_id).maybeSingle()
       occurrenceDate = data?.occurrence_date ?? null
+      // An occurrence's status is an override where null means "the series'",
+      // and most carry null (lib/pending-cancellations.ts resolveOccurrence), so
+      // reading the column alone would report no prior status on the common case.
+      previousStatus = data?.status ?? null
+      if (previousStatus === null) {
+        const { data: series } = await adminSupabase
+          .from('weekly_room_bookings').select('status').eq('booking_id', booking_id).maybeSingle()
+        previousStatus = series?.status ?? null
+      }
+    }
+  } else {
+    // Series scope, read from whichever rows the updates below actually touch.
+    if (bookingType === 'One-Time Room') {
+      const { data } = await adminSupabase
+        .from('one_time_room_bookings').select('status').eq('booking_id', booking_id)
+      previousStatus = sharedStatus(data)
+    } else if (bookingType === 'Weekly Room') {
+      const { data } = await adminSupabase
+        .from('weekly_room_bookings').select('status').eq('booking_id', booking_id).maybeSingle()
+      previousStatus = data?.status ?? null
+    } else if (bookingType === 'Tabling') {
+      const { data: tb } = await adminSupabase
+        .from('tabling_bookings').select('id').eq('booking_id', booking_id).maybeSingle()
+      if (tb) {
+        const { data } = await adminSupabase
+          .from('tabling_sessions').select('status').eq('tabling_booking_id', tb.id)
+        previousStatus = sharedStatus(data)
+      }
     }
   }
 
@@ -115,6 +168,33 @@ export async function POST(request: Request) {
       }
     }
   }
+
+  // Filing a request *is* a change to the booking -- one week, one session or
+  // the whole run is Pending Cancellation from here on -- and until issue #211
+  // the Audit tab heard about it only at the far end, when an admin marked the
+  // request Done ('cancelled') or closed it ('dismissed'). A booking sitting at
+  // Pending Cancellation therefore had no entry saying who put it there or when,
+  // which is the one status change on a booking that someone other than an admin
+  // can make.
+  //
+  // Written after the statuses have actually moved, so the entry is never a
+  // claim about a change that did not happen, and best effort like every other
+  // audit write (lib/audit.ts): the request is already filed, and failing the
+  // response over the log would only invite a second, duplicate request.
+  await insertAuditRows(adminSupabase, [{
+    booking_id,
+    admin_id: user.id,
+    new_status: 'Pending Cancellation',
+    target: cancellationRequestTarget(bookingType, scope),
+    target_date: scope === 'occurrence' ? occurrenceDate : null,
+    action: 'requested',
+    // Omitted where the rows disagreed, and where they were already pending --
+    // a second request over an unresolved one moves nothing, and "Pending
+    // Cancellation -> Pending Cancellation" would read as though it had.
+    changes: previousStatus && previousStatus !== 'Pending Cancellation'
+      ? [{ label: 'Status', from: previousStatus, to: 'Pending Cancellation' }]
+      : null,
+  }])
 
   return NextResponse.json({ success: true })
 }

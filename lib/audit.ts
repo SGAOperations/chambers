@@ -20,8 +20,16 @@ import { changed, collectChanges, type BookingChange } from '@/lib/emails/change
 /** What an entry is about. */
 export type AuditTarget = 'booking' | 'series' | 'occurrence' | 'session'
 
-/** What happened to it. */
-export type AuditAction = 'created' | 'updated' | 'added' | 'removed' | 'cancelled' | 'dismissed'
+/**
+ * What happened to it.
+ *
+ * The three cancellation words are one story told in order: 'requested' is a
+ * cancellation request being filed, which is what puts the target at Pending
+ * Cancellation; 'dismissed' is that request closed without acting on it;
+ * 'cancelled' is it carried out. See db/neon/0013_audit_log_requested_action.sql.
+ */
+export type AuditAction =
+  | 'created' | 'updated' | 'added' | 'removed' | 'cancelled' | 'dismissed' | 'requested'
 
 /**
  * Where an action came from, when it came from somewhere other than an admin
@@ -64,6 +72,25 @@ export interface AuditRow {
    * writers, and stored as null then.
    */
   source?: AuditSource | null
+}
+
+/**
+ * What an entry about a cancellation request is about, in the Audit tab's terms.
+ *
+ * A request covers either one dated reservation or the booking as a whole, and
+ * weekly bookings have their own two words for those. Shared so the entry for a
+ * request being filed and the entry for the same request being dismissed name
+ * the same thing -- they are two halves of one story, and a reader comparing
+ * them should not have to work out whether "Booking" and "Whole series" mean the
+ * same run of dates.
+ */
+export function cancellationRequestTarget(
+  bookingType: string | null | undefined,
+  scope: string | null | undefined,
+): AuditTarget {
+  const weekly = bookingType === 'Weekly Room'
+  if (scope === 'occurrence') return weekly ? 'occurrence' : 'session'
+  return weekly ? 'series' : 'booking'
 }
 
 /**
