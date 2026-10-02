@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import AdminGuard from '../adminguard'
+import { useIdentity } from '../identity-context'
+import { isViewOnlyRole } from '@/lib/admin-roles'
 import { useCounts, paBadgeClass, severityOf } from '../counts-context'
 import { usePendingActionsWatch } from '../pending-actions-watch'
 import RequestsTab from './requests-tab'
@@ -27,6 +29,19 @@ export default function BookingsPage() {
   // endpoint on every Administrator page load.
   const { counts, refreshCounts } = useCounts()
   const { registerTabBadge, tabBadgeIsIdle } = usePendingActionsWatch()
+  const { adminRole } = useIdentity()
+
+  // A view-only admin gets Bookings and only Bookings (issue #217). The other
+  // three are all somebody deciding something -- triaging a request, answering a
+  // cancellation, handing out an SGA space -- and the office this tier exists
+  // for is reading, not deciding.
+  //
+  // activeTab cannot be anything else for them: it starts on 'Bookings' and the
+  // only thing that moves it is a button below, which they are not rendered.
+  const viewOnly = isViewOnlyRole(adminRole)
+  const tabs: Tab[] = viewOnly
+    ? ['Bookings']
+    : ['Bookings', 'SGA Spaces', 'Cancellations', 'Requests']
 
   // Actions whose origin is this tab, so the badge count + colour match the
   // sidebar total and its hover breakdown (issue #38).
@@ -42,7 +57,7 @@ export default function BookingsPage() {
         <h1 className="text-2xl font-bold text-[#f0f6ff]">Bookings</h1>
 
         <div className="flex gap-1 border-b border-[#1e5080] overflow-x-auto overflow-y-hidden">
-          {(['Bookings', 'SGA Spaces', 'Cancellations', 'Requests'] as Tab[]).map(tab => (
+          {tabs.map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}

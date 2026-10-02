@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
 import { sendSpaceBookingConfirmedEmail } from '@/lib/emails/space-booking-confirmed'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { canWriteAdmin } from '@/lib/admin-roles'
 import {
   EXTERNAL_ATTENDEES_ERROR,
   attendeeKeys,
@@ -89,7 +90,10 @@ export async function GET(request: Request) {
   }
 
   // Admins see all creator names; regular users only see their own
-  const isAdmin = !!user.app_metadata?.is_admin
+  // A view-only admin gets no admin elevation here (#217): that tier reads the
+  // Bookings tab and is an ordinary user everywhere else.
+  const isAdmin =
+    !!user.app_metadata?.is_admin && canWriteAdmin(user.app_metadata?.admin_role)
   const sanitized = (bookings ?? []).map((b: { id: string; creator_id: string; series_id: string | null; [key: string]: unknown }) => ({
     ...b,
     creator_name: (isAdmin || b.creator_id === user.id) ? (creatorMap[b.creator_id] ?? null) : null,
@@ -108,7 +112,10 @@ export async function POST(request: Request) {
   if (rateLimitRes) return rateLimitRes
 
   // Only admins and Leadership members may create space bookings
-  const isAdmin = !!user.app_metadata?.is_admin
+  // A view-only admin gets no admin elevation here (#217): that tier reads the
+  // Bookings tab and is an ordinary user everywhere else.
+  const isAdmin =
+    !!user.app_metadata?.is_admin && canWriteAdmin(user.app_metadata?.admin_role)
   if (!isAdmin) {
     const { data: leadership } = await adminSupabase
       .from('board_memberships')

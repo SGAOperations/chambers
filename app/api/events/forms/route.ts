@@ -2,6 +2,7 @@ import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { canWriteAdmin } from '@/lib/admin-roles'
 import { invalidFormLabel, invalidDueDays, DUE_DAYS_ERROR, UUID_RE } from '@/lib/event-forms'
 
 const adminSupabase = db
@@ -27,7 +28,11 @@ const MAX_ITEMS_PER_EVENT = 20
  */
 async function authorize() {
   const user = await getAuthedUserWithLiveRoles(db)
-  if (!user || (!user.app_metadata?.is_admin && !user.app_metadata?.iems_role)) {
+  // A view-only admin does not count as an admin here: Events is work, and
+  // that tier only reads Bookings (#217).
+  const actingAdmin =
+    !!user?.app_metadata?.is_admin && canWriteAdmin(user?.app_metadata?.admin_role)
+  if (!user || (!actingAdmin && !user.app_metadata?.iems_role)) {
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   }
   const rateLimitRes = await checkRateLimit(user.id)

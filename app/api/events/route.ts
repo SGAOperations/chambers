@@ -2,6 +2,7 @@ import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { canWriteAdmin } from '@/lib/admin-roles'
 import { sessionDatesOf, minDate, subtractDays, settingsFromRow, type SettingsRow } from '@/lib/pending-actions'
 
 // The Events tab is "every event this semester", for the two roles allowed to see
@@ -92,7 +93,11 @@ export async function GET() {
   const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
-  if (!user || (!user.app_metadata?.is_admin && !user.app_metadata?.iems_role)) {
+  // A view-only admin does not count as an admin here: Events is work, and
+  // that tier only reads Bookings (#217).
+  const actingAdmin =
+    !!user?.app_metadata?.is_admin && canWriteAdmin(user?.app_metadata?.admin_role)
+  if (!user || (!actingAdmin && !user.app_metadata?.iems_role)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
