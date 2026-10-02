@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { requireBookingManager } from '@/lib/booking-scope'
 import { cancellationRequestTarget, insertAuditRows } from '@/lib/audit'
+import { queueBookingRequestAlert } from '@/lib/admin-slack-alerts'
 
 const adminSupabase = db
 
@@ -195,6 +196,28 @@ export async function POST(request: Request) {
       ? [{ label: 'Status', from: previousStatus, to: 'Pending Cancellation' }]
       : null,
   }])
+
+  // The alert this whole feature exists for (issue #219). A cancellation filed
+  // an hour before the meeting used to sit on the Cancellations tab until an
+  // admin happened to look, which is regularly after the room has already gone
+  // unused -- so Operational Affairs and the Comptroller are DM'd directly.
+  //
+  // Queued and best effort, like the audit write above and for the same reason:
+  // the request is filed and the statuses have moved, and failing the response
+  // over a notification would only invite a second, duplicate request.
+  //
+  // occurrenceDate is passed so an occurrence-scoped request is reported against
+  // the week it is actually about rather than the next one on the series.
+  queueBookingRequestAlert(adminSupabase, {
+    kind: 'cancellation',
+    bookingId: booking_id,
+    requestedBy: user.id,
+    onDate: scope === 'occurrence' ? occurrenceDate : null,
+    detail:
+      scope === 'occurrence'
+        ? `${cancellation_type} of this date only`
+        : `${cancellation_type} of the whole booking`,
+  })
 
   return NextResponse.json({ success: true })
 }
