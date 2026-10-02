@@ -57,6 +57,27 @@ function formatDate(date: string) {
   })
 }
 
+/**
+ * When a request came in, to the minute (issue #211).
+ *
+ * The time is not decoration on this card. Whether CSC can still release a room
+ * turns on how much notice they were given, so an admin deciding between Mark as
+ * Done and Dismiss is really asking how long before the booking the request
+ * arrived -- and a date alone cannot answer that for a request made the day
+ * before, let alone one made the same morning.
+ *
+ * Rendered in the viewer's own timezone, like every other timestamp in the admin
+ * UI (the Audit tab's formatTimestamp does the same). created_at is an instant
+ * rather than one of the DATE columns lib/app-zone.ts pins to Boston, and the
+ * two tabs are read side by side.
+ */
+function formatSubmitted(ts: string) {
+  return new Date(ts).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit'
+  })
+}
+
 interface CancellationsTabProps {
     onCountChange: () => void
 }
@@ -183,7 +204,7 @@ export default function CancellationsTab({ onCountChange }: CancellationsTabProp
             {c.reservation_code && (
               <p><span className="font-medium text-[#f0f6ff]">Res. Code:</span> <span className="font-mono">{c.reservation_code}</span></p>
             )}
-            <p><span className="font-medium text-[#f0f6ff]">Submitted:</span> {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+            <p><span className="font-medium text-[#f0f6ff]">Submitted:</span> {formatSubmitted(c.created_at)}</p>
           </div>
 
           {dismissError[c.id] && (
