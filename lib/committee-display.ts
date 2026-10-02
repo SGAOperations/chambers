@@ -1,4 +1,5 @@
 import { resolveMeetingTime } from '@/lib/meeting-time'
+import { scopedBodyName, type BookingScope, type Division } from '@/lib/booking-scope'
 
 /**
  * What the committee display shows, and how it works out which way to point
@@ -263,6 +264,11 @@ export interface CommitteeMeeting {
   id: string
   /** 'YYYY-MM-DD'. The board can be showing a day other than today. */
   date: string
+  /**
+   * Who the board says is meeting -- already resolved through scopedBodyName(),
+   * so a divisional booking reads as its division and not as the body that
+   * filed it (issue #218).
+   */
   bodyName: string
   /** An IEMS event rather than an ordinary meeting, badged as such. */
   isEvent: boolean
@@ -300,7 +306,10 @@ export interface WeeklyCandidate {
   booking: {
     hidden: boolean | null
     purpose: string | null
+    /** The owning body. Attribution, not necessarily who the board names. */
     bodyName: string
+    scope: BookingScope
+    division: Division | null
   }
 }
 
@@ -328,7 +337,7 @@ export function resolveWeekly(c: WeeklyCandidate): CommitteeMeeting | null {
   return {
     id: c.id,
     date: c.date,
-    bodyName: c.booking.bodyName,
+    bodyName: scopedBodyName(c.booking, c.booking.bodyName),
     isEvent: c.is_event ?? false,
     purpose: c.purpose ?? c.booking.purpose,
     roomName: c.room_name ?? c.series.room_name,
@@ -351,7 +360,10 @@ export interface OneTimeCandidate {
   booking: {
     hidden: boolean | null
     purpose: string | null
+    /** The owning body. Attribution, not necessarily who the board names. */
     bodyName: string
+    scope: BookingScope
+    division: Division | null
     /** On the booking for a one-off, unlike weekly's per-occurrence flag. */
     isEvent: boolean
   }
@@ -364,7 +376,7 @@ export function resolveOneTime(c: OneTimeCandidate): CommitteeMeeting | null {
   return {
     id: c.id,
     date: c.date,
-    bodyName: c.booking.bodyName,
+    bodyName: scopedBodyName(c.booking, c.booking.bodyName),
     isEvent: c.booking.isEvent,
     purpose: c.booking.purpose,
     roomName: c.room_name,
