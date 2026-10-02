@@ -570,6 +570,29 @@ export interface ScopeLabelParts {
 }
 
 /**
+ * Who a booking is for, as against which body filed it (issues #212, #218).
+ *
+ * A divisional booking belongs to the division. The Campus Affairs co-working session is owned by
+ * Sustainability Committee, and naming that committee announces a meeting of a group that mostly
+ * is not meeting -- it misattributed the reminder in Slack (#212) and the meeting on the corridor
+ * display (#218) the same way, for the same reason.
+ *
+ * "Campus Affairs (Division)" rather than a bare "Campus Affairs": a division and a body can share
+ * a name, and the suffix is what keeps My Rooms, Slack and the display all saying the same thing.
+ *
+ * Every other scope is named by its owner. A multi booking's co-owners are named separately --
+ * collapsed by formatScopeLabel(), spelled out by the reminder's sharing line -- because the owner
+ * is still the attribution for it.
+ */
+export function scopedBodyName(
+  row: Pick<ScopedRow, 'scope' | 'division'>,
+  ownerName: string
+): string {
+  if (row.scope === 'divisional' && row.division) return `${row.division} (Division)`
+  return ownerName
+}
+
+/**
  * single      -> { short: 'DEI Committee',             full: ['DEI Committee'] }
  * divisional  -> { short: 'Campus Affairs (Division)', full: ['Campus Affairs (Division)'] }
  * multi       -> { short: 'DEI Committee + 2 others',  full: ['DEI Committee', ...rest] }
@@ -584,7 +607,7 @@ export function formatScopeLabel(
   const ownerName = row.bodies?.name ?? 'Unknown'
 
   if (row.scope === 'divisional' && row.division) {
-    const label = `${row.division} (Division)`
+    const label = scopedBodyName(row, ownerName)
     return { short: label, full: [label] }
   }
 

@@ -1,6 +1,6 @@
 import { APP_TIME_ZONE } from '@/lib/app-zone'
 import { resolveMeetingTime } from '@/lib/meeting-time'
-import type { BookingScope, Division } from '@/lib/booking-scope'
+import { scopedBodyName, type BookingScope, type Division } from '@/lib/booking-scope'
 
 /**
  * Working out which meetings the Slack bot should remind a channel about, and
@@ -262,19 +262,14 @@ function listNames(names: string[]): string {
 /**
  * Who the reminder says is meeting (issue #212).
  *
- * A divisional booking belongs to the division, not to whichever body happened
- * to file it. The Campus Affairs co-working session is owned by Sustainability
- * Committee, and naming that body announced to four other committees in the
- * division that a group they are not part of was meeting -- in channels the
- * reminder had no business being wrong in.
- *
- * "Campus Affairs (Division)" rather than a bare "Campus Affairs", matching
- * formatScopeLabel() so the name in Slack is the name on the booking in My
- * Rooms.
+ * Naming the owner of a divisional booking announced to four other committees
+ * in the division that a group they are not part of was meeting -- in channels
+ * the reminder had no business being wrong in. scopedBodyName() is that rule,
+ * shared with My Rooms and the corridor display so the name in Slack is the
+ * name everywhere else (issue #218).
  */
 function meetingName(m: ResolvedMeeting): string {
-  if (m.scope === 'divisional' && m.division) return `${m.division} (Division)`
-  return m.bodyName
+  return scopedBodyName(m, m.bodyName)
 }
 
 /**
