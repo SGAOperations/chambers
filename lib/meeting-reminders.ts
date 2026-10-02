@@ -1,5 +1,6 @@
 import { APP_TIME_ZONE } from '@/lib/app-zone'
 import { resolveMeetingTime } from '@/lib/meeting-time'
+import type { BookingScope, Division } from '@/lib/booking-scope'
 
 /**
  * Working out which meetings the Slack bot should remind a channel about, and
@@ -64,9 +65,60 @@ export function nextDay(date: string): string {
   return at.toISOString().slice(0, 10)
 }
 
+/** A body a reminder could be posted to, as the cron reads it. */
+export interface ReminderBody {
+  id: string
+  name: string
+  division: string | null
+  slack_channel_id: string | null
+  slack_reminders_enabled: boolean | null
+}
+
+/** The scope-bearing columns of the booking a candidate belongs to. */
+export interface ReminderBooking {
+  body_id: string
+  scope: BookingScope
+  division: Division | null
+  hidden: boolean | null
+  /** Its booking_bodies rows, for a multi booking. Ignored for any other scope. */
+  linkedBodyIds: string[]
+}
+
 /**
- * One occurrence as the reminder query returns it, with its series and body
- * attached. Only the fields the rules below touch are declared.
+ * Every body a booking's reminder is for (issue #212).
+ *
+ * The same rule resolveBookingBodyIds() applies to emails and alerts -- the
+ * division for a divisional booking, the listed bodies for a multi one, the
+ * owner alone otherwise -- answered from a list of bodies already in hand rather
+ * than a query per booking, because the cron reads every active body once and
+ * then settles the whole day from it.
+ *
+ * Live, not stored: a body added to a division is in the audience of that
+ * division's existing bookings from the next morning on. That is what divisional
+ * means, and it is the same choice resolveBookingBodyIds() makes.
+ *
+ * The owner is always included even where its own division has since moved,
+ * because the booking is still attributed to it.
+ */
+export function audienceBodies(booking: ReminderBooking, bodies: ReminderBody[]): ReminderBody[] {
+  const owner = bodies.find(b => b.id === booking.body_id)
+
+  let audience: ReminderBody[]
+  if (booking.scope === 'divisional' && booking.division) {
+    audience = bodies.filter(b => b.division === booking.division)
+  } else if (booking.scope === 'multi') {
+    audience = bodies.filter(b => booking.linkedBodyIds.includes(b.id))
+  } else {
+    audience = owner ? [owner] : []
+  }
+
+  if (owner && !audience.some(b => b.id === owner.id)) audience = [owner, ...audience]
+  return audience
+}
+
+/**
+ * One occurrence as the reminder query returns it, with its series, its booking
+ * and its audience attached. Only the fields the rules below touch are declared.
  */
 export interface ReminderCandidate {
   occurrence_date: string
@@ -84,21 +136,31 @@ export interface ReminderCandidate {
     meeting_time: string | null
     status: string | null
   }
-  booking: {
-    hidden: boolean | null
-  }
+  booking: ReminderBooking
+  /** The owning body: who the booking is attributed to, whatever its scope. */
   body: {
     name: string
-    slack_channel_id: string | null
   }
+  /** Every body the reminder is for, the owner among them (issue #212). */
+  audience: ReminderBody[]
 }
 
 /** A candidate resolved to the values that actually apply to that week. */
 export interface ResolvedMeeting {
   weeklyBookingId: string
   date: string
-  channelId: string
+  /**
+   * Every channel this reminder posts to: one per body in the audience that has
+   * a channel linked and reminders switched on. One entry for the ordinary
+   * single-body booking, which is every booking but one today.
+   */
+  channelIds: string[]
+  /** The owning body. Attribution, not necessarily who the reminder names. */
   bodyName: string
+  scope: BookingScope
+  division: Division | null
+  /** The other bodies a multi booking is shared with, for the line that says so. */
+  peerNames: string[]
   roomName: string | null
   startTime: string | null
   endTime: string | null
@@ -121,7 +183,19 @@ export interface ResolvedMeeting {
  * the same one My Rooms and the update emails apply.
  */
 export function resolveMeeting(c: ReminderCandidate): ResolvedMeeting | null {
-  if (!c.body.slack_channel_id) return null
+  // Each body in the audience decides for itself: its own channel, its own
+  // switch. The owner's settings used to gate the whole thing, which is the
+  // wrong lever now that a divisional booking reminds bodies the owner does not
+  // speak for -- a committee that has turned reminders off should not be posted
+  // to, and should not silence its division either.
+  const channelIds = [
+    ...new Set(
+      c.audience
+        .filter(b => b.slack_reminders_enabled && b.slack_channel_id)
+        .map(b => b.slack_channel_id as string)
+    ),
+  ]
+  if (!channelIds.length) return null
 
   // A hidden booking is visible only to the people who can manage it, so
   // announcing it to a channel would disclose it to everyone in that channel.
@@ -136,8 +210,14 @@ export function resolveMeeting(c: ReminderCandidate): ResolvedMeeting | null {
   return {
     weeklyBookingId: c.weekly_booking_id,
     date: c.occurrence_date,
-    channelId: c.body.slack_channel_id,
+    channelIds,
     bodyName: c.body.name,
+    scope: c.booking.scope,
+    division: c.booking.division,
+    peerNames: c.audience
+      .filter(b => b.id !== c.booking.body_id)
+      .map(b => b.name)
+      .sort((a, b) => a.localeCompare(b)),
     roomName: c.room_name ?? c.series.room_name,
     startTime,
     endTime: c.end_time ?? c.series.end_time,
@@ -173,6 +253,48 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+/** 'A', 'A and B', 'A, B and C'. */
+function listNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+/**
+ * Who the reminder says is meeting (issue #212).
+ *
+ * A divisional booking belongs to the division, not to whichever body happened
+ * to file it. The Campus Affairs co-working session is owned by Sustainability
+ * Committee, and naming that body announced to four other committees in the
+ * division that a group they are not part of was meeting -- in channels the
+ * reminder had no business being wrong in.
+ *
+ * "Campus Affairs (Division)" rather than a bare "Campus Affairs", matching
+ * formatScopeLabel() so the name in Slack is the name on the booking in My
+ * Rooms.
+ */
+function meetingName(m: ResolvedMeeting): string {
+  if (m.scope === 'divisional' && m.division) return `${m.division} (Division)`
+  return m.bodyName
+}
+
+/**
+ * The line that says who a shared booking is for, or null for an ordinary
+ * single-body one.
+ *
+ * A reminder landing in a channel whose body did not make the booking has to
+ * account for itself, and for a divisional booking this is also the only place
+ * the owning body still gets named.
+ */
+function sharingLine(m: ResolvedMeeting): string | null {
+  if (m.scope === 'divisional' && m.division) {
+    return `A divisional booking by ${esc(m.bodyName)}, open to every body in ${esc(m.division)}.`
+  }
+  if (m.scope === 'multi' && m.peerNames.length) {
+    return `A shared booking with ${listNames(m.peerNames.map(esc))}.`
+  }
+  return null
+}
+
 /**
  * The reminder text, in the wording set out in issue #104.
  *
@@ -182,16 +304,22 @@ function esc(s: string): string {
  * so a member reading quickly sees what is different from the usual week.
  *
  * A room or time that is missing says so rather than printing a blank.
+ *
+ * A booking shared beyond one body closes with a line saying so (issue #212),
+ * on every status including Cancelled: a channel being told a meeting is off
+ * should still be told whose.
  */
 export function formatReminder(m: ResolvedMeeting): string {
-  const body = `*${esc(m.bodyName)}*`
+  const body = `*${esc(meetingName(m))}*`
+  const sharing = sharingLine(m)
+  const lines = (...rest: string[]) => [...rest, ...(sharing ? [sharing] : [])].join('\n')
 
-  if (m.status === 'Cancelled') return `${body} has no meeting tomorrow.`
+  if (m.status === 'Cancelled') return lines(`${body} has no meeting tomorrow.`)
 
   const opening = `${body} meets tomorrow! Join us on ${formatDate(m.date)}.`
 
   if (m.status === 'Virtual') {
-    return [opening, 'Check with your Chair/Director for virtual meeting information.'].join('\n')
+    return lines(opening, 'Check with your Chair/Director for virtual meeting information.')
   }
 
   // The meeting time alone, not the reservation window (issue #126). The window
@@ -205,5 +333,5 @@ export function formatReminder(m: ResolvedMeeting): string {
   const roomLabel = ALTERNATE_ROOM.has(m.status) ? '*Alternate* Room' : 'Room'
   const timeLabel = ALTERNATE_TIME.has(m.status) ? '*Alternate* Time' : 'Time'
 
-  return [opening, `${roomLabel}: ${room}`, `${timeLabel}: ${when}`].join('\n')
+  return lines(opening, `${roomLabel}: ${room}`, `${timeLabel}: ${when}`)
 }
