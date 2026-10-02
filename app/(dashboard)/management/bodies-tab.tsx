@@ -264,6 +264,10 @@ export default function BodiesTab() {
                       </label>
                     </div>
                     <p className="text-xs text-[#6a96bb]">
+                      Covers this body&apos;s own weekly bookings and any divisional or shared booking it is part of,
+                      which is why a channel can be reminded about a meeting another body booked.
+                    </p>
+                    <p className="text-xs text-[#6a96bb]">
                       Leadership of this body can also turn this off themselves with
                       {' '}<code className="text-[#93b8d8]">/chambers-reminders off</code> in the channel.
                     </p>
