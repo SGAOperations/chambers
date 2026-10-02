@@ -50,6 +50,26 @@ export const MANAGEMENT_ROLES = [
  */
 export const VIEW_ONLY_ROLES = ['Student Body President']
 
+/**
+ * The offices the SGAssist bot direct-messages when a request is submitted
+ * (issue #219).
+ *
+ * Operational Affairs runs the booking work and the Comptroller does it without
+ * the Management page, so between them they are who actions a request. A
+ * cancellation filed an hour before a meeting is the case this exists for: it
+ * has to be seen before someone next happens to open Chambers.
+ *
+ * Deliberately not every admin. An alert that reaches all six is an alert nobody
+ * owns, and the view-only tier has nothing to do with a request at all.
+ * Recipients are resolved from this list by their Slack account link, so a role
+ * added here starts receiving alerts as soon as its holder links Slack
+ * (lib/admin-slack-alerts.ts).
+ */
+export const REQUEST_ALERT_ROLES = [
+  'Vice President of Operational Affairs',
+  'Comptroller',
+]
+
 /** True when `role` is one of MANAGEMENT_ROLES. Null-safe, so callers can pass a raw admin_role. */
 export function isManagementRole(role: string | null | undefined): boolean {
   return !!role && MANAGEMENT_ROLES.includes(role)

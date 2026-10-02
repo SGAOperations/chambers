@@ -4,8 +4,32 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { requireBookingManager } from '@/lib/booking-scope'
 import { OPEN_REQUEST_STATUSES, OPS_REVIEW } from '@/lib/request-status'
+import { queueBookingRequestAlert } from '@/lib/admin-slack-alerts'
 
 const adminSupabase = db
+
+/**
+ * What the revision actually asks for, as one line of the admin Slack alert
+ * (issue #219).
+ *
+ * change_type alone ('Time', 'Room' or 'Both') says which fields moved but not
+ * where to, which is the part an admin needs before they can judge whether it is
+ * worth chasing CSC for. A field left blank is omitted rather than printed
+ * empty -- change_type is the only required one of the three.
+ */
+function revisionDetail(
+  changeType: string,
+  newStartTime: string | null,
+  newEndTime: string | null,
+  newRoom: string | null
+): string {
+  const parts: string[] = []
+  if (newStartTime || newEndTime) {
+    parts.push(`new time ${[newStartTime, newEndTime].filter(Boolean).join('–')}`)
+  }
+  if (newRoom) parts.push(`new room ${newRoom}`)
+  return parts.length ? `Asks to change ${changeType}: ${parts.join(', ')}` : `Asks to change ${changeType}`
+}
 
 /**
  * The open revision request on a booking, if there is one, so the booking's
@@ -82,6 +106,16 @@ export async function POST(request: Request) {
     })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Operational Affairs and the Comptroller, over Slack (issue #219). Queued,
+  // and it swallows its own failures: the request is filed, and a Slack outage
+  // must not answer the leader with an error they would only retry.
+  queueBookingRequestAlert(adminSupabase, {
+    kind: 'revision',
+    bookingId: booking_id,
+    requestedBy: user.id,
+    detail: revisionDetail(change_type, new_start_time, new_end_time, new_room),
+  })
 
   return NextResponse.json({ success: true })
 }
