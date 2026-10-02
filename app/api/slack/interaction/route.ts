@@ -3,6 +3,7 @@ import { waitUntil } from '@vercel/functions'
 import { verifySlackRequest } from '@/lib/slack-verify'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { OPS_REVIEW } from '@/lib/request-status'
+import { queueAdminRequestAlert } from '@/lib/admin-slack-alerts'
 
 const adminSupabase = db
 
@@ -64,9 +65,11 @@ export async function POST(request: Request) {
   const body_id: string = vals.body_block.body_action.selected_option?.value
   const purpose: string = vals.purpose_block.purpose_action.value
 
+  // `name` for the admin alert below (issue #219); the row is read either way to
+  // check the body is real and active.
   const { data: bodyExists } = await adminSupabase
     .from('bodies')
-    .select('id')
+    .select('id, name')
     .eq('id', body_id)
     .eq('is_active', true)
     .maybeSingle()
@@ -161,6 +164,21 @@ export async function POST(request: Request) {
       return blockError({ purpose_block: 'Something went wrong. Please try again.' })
     }
   }
+
+  // A quick request from Slack is still a new booking request, so Operational
+  // Affairs and the Comptroller hear about it the same way (issue #219). A
+  // request made from here is always a single body on a single date.
+  queueAdminRequestAlert(adminSupabase, {
+    kind: 'booking',
+    bookingType: type,
+    audience: bodyExists.name,
+    requestedBy: connection.chambers_user_id,
+    room: isTabling ? null : room_name,
+    date,
+    startTime: start_time,
+    endTime: end_time,
+    detail: purpose,
+  })
 
   waitUntil(
     fetch('https://slack.com/api/chat.postEphemeral', {

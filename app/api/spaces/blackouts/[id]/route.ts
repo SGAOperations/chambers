@@ -2,6 +2,7 @@ import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { canWriteAdmin } from '@/lib/admin-roles'
 import { attendeeKeys, cancellationAddressing, resolveSpacesAddresses } from '@/lib/spaces-email'
 import { waitUntil } from '@vercel/functions'
 
@@ -52,6 +53,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // Closed to a view-only admin, who may read Bookings and nothing else (#217).
+  if (!canWriteAdmin(user.app_metadata?.admin_role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   const { id } = await params
   const { space_id, start_time, end_time } = await request.json()
 
@@ -88,6 +94,11 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   const user = await getAuthedUserWithLiveRoles(supabase)
   if (!user || !user.app_metadata?.is_admin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // Closed to a view-only admin, who may read Bookings and nothing else (#217).
+  if (!canWriteAdmin(user.app_metadata?.admin_role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const { id } = await params

@@ -2,6 +2,8 @@ import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { canWriteAdmin } from '@/lib/admin-roles'
+import { audienceLabel, queueAdminRequestAlert } from '@/lib/admin-slack-alerts'
 import { DIVISIONS, loadScopeContext, validateScopeSelection } from '@/lib/booking-scope'
 import { OPS_REVIEW } from '@/lib/request-status'
 import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-times'
@@ -23,7 +25,10 @@ export async function GET() {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const isAdmin = !!user.app_metadata?.is_admin
+  // A view-only admin gets no admin elevation here (#217): that tier reads the
+  // Bookings tab and is an ordinary user everywhere else.
+  const isAdmin =
+    !!user.app_metadata?.is_admin && canWriteAdmin(user.app_metadata?.admin_role)
 
   // The settings row is independent of the bodies lookup, so fetch both at once
   // rather than gating the bodies query behind it.
@@ -95,11 +100,16 @@ export async function POST(request: Request) {
   // actually leads that division. Any leadership may request a multi-body booking with any
   // combination of bodies, so there is no restriction on the non-owning bodies.
   const ctx = await loadScopeContext(supabase, user)
+  // `name` is only for the admin Slack alert at the bottom (issue #219), which
+  // has to say whose request this is. Taken off this read rather than as a
+  // lookup of its own: the rows are already being fetched to validate the
+  // selection.
   const { data: activeBodies } = await adminSupabase
     .from('bodies')
-    .select('id')
+    .select('id, name')
     .eq('is_active', true)
-  const validBodyIds = (activeBodies ?? []).map((b: { id: string }) => b.id)
+  const activeBodyRows = (activeBodies ?? []) as { id: string; name: string }[]
+  const validBodyIds = activeBodyRows.map(b => b.id)
 
   const selection = validateScopeSelection(
     ctx, { scope, body_id, division, body_ids }, validBodyIds
@@ -303,6 +313,64 @@ export async function POST(request: Request) {
 
     if (sessionError) return NextResponse.json({ error: sessionError.message }, { status: 500 })
   }
+
+  // Tell Operational Affairs and the Comptroller over Slack (issue #219).
+  //
+  // Last, after every row is in: the alert says the request exists, so it must
+  // not go out while a detail insert could still fail the response. Queued
+  // rather than awaited, and it swallows its own failures -- a filed request is
+  // not allowed to turn into an error because Slack was unreachable.
+  //
+  // The first date is the one the message leads with, because it is the one with
+  // the least time left on it. The others are counted, not listed; the Requests
+  // tab has them.
+  const dates =
+    type === 'Tabling'
+      ? tablingSessions.map(s => ({
+          date: s.session_date,
+          start: s.start_time,
+          end: s.end_time,
+          room: s.location,
+        }))
+      : type === 'Weekly Room'
+        ? [{
+            date: details.start_date as string,
+            start: details.start_time as string,
+            end: details.end_time as string,
+            room: (details.room_name as string) || null,
+          }]
+        : (sessions ?? []).map((s: {
+            session_date: string
+            start_time: string
+            end_time: string
+            room_name?: string
+          }) => ({
+            date: s.session_date,
+            start: s.start_time,
+            end: s.end_time,
+            room: s.room_name || null,
+          }))
+
+  const sortedDates = [...dates].sort((a, b) => a.date.localeCompare(b.date))
+  const first = sortedDates[0]
+
+  queueAdminRequestAlert(adminSupabase, {
+    kind: 'booking',
+    bookingType: type,
+    audience: audienceLabel(
+      activeBodyRows.find(b => b.id === selection.value.body_id)?.name,
+      selection.value.scope,
+      selection.value.division,
+      selection.value.body_ids.length
+    ),
+    requestedBy: user.id,
+    room: first?.room ?? null,
+    date: first?.date ?? null,
+    startTime: first?.start ?? null,
+    endTime: first?.end ?? null,
+    moreDates: Math.max(0, sortedDates.length - 1),
+    detail: purpose,
+  })
 
   return NextResponse.json({ success: true })
 }

@@ -12,6 +12,7 @@ import {
   useResponsibilityNotice,
 } from './nusso-responsibility-notice'
 import type { AvailableRoom } from './types'
+import { canWriteAdmin } from '@/lib/admin-roles'
 
 type ReservationType = 'room-request' | 'tabling'
 
@@ -59,8 +60,10 @@ const field =
 const labelCls = 'block text-xs font-medium text-[#93b8d8] mb-1'
 
 export default function NussoPage() {
-  const { isAdmin, isLeadership } = useIdentity()
-  const canBook = isAdmin || isLeadership
+  const { isAdmin, isLeadership, adminRole } = useIdentity()
+  // A view-only admin books nothing (#217) -- being an admin stops being the
+  // thing that grants it, though Leadership still does.
+  const canBook = (isAdmin && canWriteAdmin(adminRole)) || isLeadership
 
   // What booking through NUSSO makes you responsible for: up once per sign-in,
   // and reopenable from the header at any time.

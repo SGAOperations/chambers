@@ -4,6 +4,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
 import { sendSpaceBookingUpdatedEmail, type SpaceBookingDetails } from '@/lib/emails/space-booking-updated'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { canWriteAdmin } from '@/lib/admin-roles'
 import { advanceNoticeError } from '@/lib/spaces-advance-notice'
 import {
   EXTERNAL_ATTENDEES_ERROR,
@@ -36,7 +37,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (fetchError || !existing) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
 
-  const isAdmin = !!user.app_metadata?.is_admin
+  // A view-only admin gets no admin elevation here (#217): that tier reads the
+  // Bookings tab and is an ordinary user everywhere else.
+  const isAdmin =
+    !!user.app_metadata?.is_admin && canWriteAdmin(user.app_metadata?.admin_role)
   if (existing.creator_id !== user.id && !isAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -249,7 +253,10 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (fetchError || !booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
 
   // Only creator or admin can cancel
-  const isAdmin = !!user.app_metadata?.is_admin
+  // A view-only admin gets no admin elevation here (#217): that tier reads the
+  // Bookings tab and is an ordinary user everywhere else.
+  const isAdmin =
+    !!user.app_metadata?.is_admin && canWriteAdmin(user.app_metadata?.admin_role)
   if (booking.creator_id !== user.id && !isAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

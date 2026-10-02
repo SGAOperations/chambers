@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 // @/lib/app-zone because that is the one path that resolves both before and
 // after PR #189, which moves the function to lib/ but keeps a re-export here.
 import { todayInAppZone } from '@/app/(dashboard)/my-rooms/shared'
+import type { BookingScope, Division } from '@/lib/booking-scope'
 import {
   resolveOneTime,
   resolveWeekly,
@@ -56,6 +57,8 @@ interface BookingRow {
   hidden: boolean | null
   purpose: string | null
   is_event: boolean | null
+  scope: BookingScope
+  division: Division | null
   bodies: BodyRow | BodyRow[] | null
 }
 
@@ -104,13 +107,13 @@ const WEEKLY_SELECT = `
   id, occurrence_date, room_name, start_time, end_time, meeting_time, status, hidden, purpose, is_event,
   weekly_room_bookings!inner(
     room_name, start_time, end_time, meeting_time, status,
-    bookings!inner(hidden, purpose, is_event, bodies!inner(name, body_type))
+    bookings!inner(hidden, purpose, is_event, scope, division, bodies!inner(name, body_type))
   )
 `
 
 const ONE_TIME_SELECT = `
   id, booking_date, room_name, start_time, end_time, meeting_time, status,
-  bookings!inner(hidden, purpose, is_event, bodies!inner(name, body_type))
+  bookings!inner(hidden, purpose, is_event, scope, division, bodies!inner(name, body_type))
 `
 
 export async function GET(request: Request) {
@@ -217,7 +220,13 @@ export async function GET(request: Request) {
         status: series.status,
       },
       is_event: row.is_event,
-      booking: { hidden: booking.hidden, purpose: booking.purpose, bodyName: body.name },
+      booking: {
+        hidden: booking.hidden,
+        purpose: booking.purpose,
+        bodyName: body.name,
+        scope: booking.scope,
+        division: booking.division,
+      },
     }
     const resolved = resolveWeekly(candidate)
     if (resolved) meetings.push(resolved)
@@ -245,6 +254,8 @@ export async function GET(request: Request) {
         hidden: booking.hidden,
         purpose: booking.purpose,
         bodyName: body.name,
+        scope: booking.scope,
+        division: booking.division,
         isEvent: booking.is_event ?? false,
       },
     }

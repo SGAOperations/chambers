@@ -12,6 +12,8 @@ import EditTablingForm from './edit-tabling-form'
 import WeeklyBookingGrid from './weekly-booking-grid'
 import { Skeleton } from '@/app/_components/skeleton'
 import ScopeLabel from '@/app/_components/scope-label'
+import { useIdentity } from '../identity-context'
+import { isViewOnlyRole } from '@/lib/admin-roles'
 import type { Division, BookingScope } from '@/lib/booking-scope'
 
 type BookingSubTab = 'One-Time Rooms' | 'Weekly Rooms' | 'Tables'
@@ -206,6 +208,18 @@ function NussoBadge({ bookedViaNusso }: { bookedViaNusso: boolean | undefined })
 }
 
 export default function BookingsTab() {
+  /**
+   * Read-only rendering for a view-only admin (issue #217): the list, the
+   * sub-tabs and the two filters stay; everything that writes goes.
+   *
+   * Hiding the control is the courtesy, not the lock. The endpoints behind each
+   * of these answer 403 to this role on their own (canWriteAdmin, in every
+   * /api/administrator write path), so a button restored in devtools gets
+   * nowhere. What this avoids is offering an action and then refusing it.
+   */
+  const { adminRole } = useIdentity()
+  const viewOnly = isViewOnlyRole(adminRole)
+
   const [subTab, setSubTab] = useState<BookingSubTab>('One-Time Rooms')
   const [oneTime, setOneTime] = useState<OneTimeBooking[]>([])
   const [weekly, setWeekly] = useState<WeeklyBooking[]>([])
@@ -362,13 +376,15 @@ export default function BookingsTab() {
             <span className="text-xs text-[#93b8d8]">NUSSO Bookings Only</span>
           </label>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          disabled={loading}
-          className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          + New Booking
-        </button>
+        {!viewOnly && (
+          <button
+            onClick={() => setShowModal(true)}
+            disabled={loading}
+            className="px-4 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            + New Booking
+          </button>
+        )}
       </div>
 
       {/* Modal */}
@@ -521,36 +537,40 @@ export default function BookingsTab() {
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {firstSession.status}
                       </span>
-                      <button
-                        onClick={() => toggleEvent(b.id, b.is_event)}
-                        className="text-xs text-[#22d3ee] hover:text-[#67e8f9] font-medium transition-colors"
-                      >
-                        {b.is_event ? 'Unmark Event' : 'Mark Event'}
-                      </button>
-                      <button
-                        onClick={() => toggleHidden(b.id, b.hidden)}
-                        className="text-xs text-[#f59e0b] hover:text-[#fbbf24] font-medium transition-colors"
-                      >
-                        {b.hidden ? 'Unhide' : 'Hide'}
-                      </button>
-                      <button
-                        onClick={() => setEditingBooking(b)}
-                        className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setCancellingAdminBooking({
-                          booking: { id: b.id, type: 'One-Time Room', bodyName: b.bodies?.name ?? '', purpose: b.purpose },
-                          sessions: b.one_time_room_bookings!.map(d => ({
-                            id: d.id,
-                            label: `${formatDate(d.booking_date)} · ${formatTime(d.start_time)} – ${formatTime(d.end_time)}${d.room_name ? ` · ${d.room_name}` : ''}`,
-                          })),
-                        })}
-                        className="text-xs text-[#6a96bb] hover:text-[#f0f6ff] font-medium transition-colors"
-                      >
-                        Cancel
-                      </button>
+                      {!viewOnly && (
+                        <>
+                          <button
+                            onClick={() => toggleEvent(b.id, b.is_event)}
+                            className="text-xs text-[#22d3ee] hover:text-[#67e8f9] font-medium transition-colors"
+                          >
+                            {b.is_event ? 'Unmark Event' : 'Mark Event'}
+                          </button>
+                          <button
+                            onClick={() => toggleHidden(b.id, b.hidden)}
+                            className="text-xs text-[#f59e0b] hover:text-[#fbbf24] font-medium transition-colors"
+                          >
+                            {b.hidden ? 'Unhide' : 'Hide'}
+                          </button>
+                          <button
+                            onClick={() => setEditingBooking(b)}
+                            className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => setCancellingAdminBooking({
+                              booking: { id: b.id, type: 'One-Time Room', bodyName: b.bodies?.name ?? '', purpose: b.purpose },
+                              sessions: b.one_time_room_bookings!.map(d => ({
+                                id: d.id,
+                                label: `${formatDate(d.booking_date)} · ${formatTime(d.start_time)} – ${formatTime(d.end_time)}${d.room_name ? ` · ${d.room_name}` : ''}`,
+                              })),
+                            })}
+                            className="text-xs text-[#6a96bb] hover:text-[#f0f6ff] font-medium transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="mt-3 text-sm text-[#93b8d8] space-y-1">
@@ -575,7 +595,10 @@ export default function BookingsTab() {
         <div className="space-y-4">
           <WeeklyBookingGrid
             bookings={visibleWeekly}
-            onBookingClick={(b, occurrenceDate) => { setEditingWeekly(b); setEditingWeeklyOcc(occurrenceDate ?? null) }}
+            // Omitted for a view-only admin, which leaves the grid's cells as
+            // plain blocks: clicking one opens the edit form, and there is no
+            // read-only thing for it to open instead.
+            onBookingClick={viewOnly ? undefined : (b, occurrenceDate) => { setEditingWeekly(b); setEditingWeeklyOcc(occurrenceDate ?? null) }}
           />
           <div className="space-y-6">
           {visibleWeekly.length === 0 ? (
@@ -615,18 +638,22 @@ export default function BookingsTab() {
                       <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {w.status}
                       </span>
-                      <button
-                        onClick={() => toggleHidden(b.id, b.hidden)}
-                        className="text-xs text-[#f59e0b] hover:text-[#fbbf24] font-medium transition-colors"
-                      >
-                        {b.hidden ? 'Unhide' : 'Hide'}
-                      </button>
-                      <button
-                        onClick={() => { setEditingWeekly(b); setEditingWeeklyOcc(null) }}
-                        className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
-                      >
-                        Edit
-                      </button>
+                      {!viewOnly && (
+                        <>
+                          <button
+                            onClick={() => toggleHidden(b.id, b.hidden)}
+                            className="text-xs text-[#f59e0b] hover:text-[#fbbf24] font-medium transition-colors"
+                          >
+                            {b.hidden ? 'Unhide' : 'Hide'}
+                          </button>
+                          <button
+                            onClick={() => { setEditingWeekly(b); setEditingWeeklyOcc(null) }}
+                            className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors"
+                          >
+                            Edit
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="mt-3 text-sm text-[#93b8d8] space-y-0.5">
@@ -676,6 +703,8 @@ export default function BookingsTab() {
                         <span className="hidden md:inline text-xs font-medium px-2 py-0.5 rounded-full bg-[#2a1a00] text-[#f59e0b]">Hidden</span>
                       )}
                       <NussoBadge bookedViaNusso={b.booked_via_nusso} />
+                      {!viewOnly && (
+                        <>
                       <button
                         onClick={() => toggleEvent(b.id, b.is_event)}
                         className="text-xs text-[#22d3ee] hover:text-[#67e8f9] font-medium transition-colors"
@@ -706,6 +735,8 @@ export default function BookingsTab() {
                       >
                         Cancel
                       </button>
+                        </>
+                      )}
                     </div>
                   </div>
                   <p className="text-sm text-[#93b8d8] mb-3">{b.purpose}</p>

@@ -1,5 +1,6 @@
 /**
- * The admin roles, and the subset of them that counts as "high access".
+ * The admin roles, and the subsets of them that count as "high access" and
+ * "view only".
  *
  * Kept in a module of its own, with no imports, so a client component can pull
  * the list in without dragging the server-side Supabase helpers in
@@ -11,8 +12,8 @@ export const ADMIN_ROLES = [
   'Vice President of Operational Affairs',
   'Comptroller',
   'Digital Innovation Manager',
-  'Digital Innovation Project Member',
   'Information Manager',
+  'Student Body President',
 ] as const
 
 /**
@@ -22,8 +23,7 @@ export const ADMIN_ROLES = [
  * This is the same set that has always been allowed to grant and revoke roles,
  * which is the point: these four already decide who is an admin at all, so
  * everything else on that page is downstream of a power they hold anyway. The
- * remaining admin roles (Comptroller, Digital Innovation Project Member) keep
- * full access to Bookings, which is the day-to-day work.
+ * Comptroller keeps full access to Bookings, which is the day-to-day work.
  */
 export const MANAGEMENT_ROLES = [
   'Executive Vice President',
@@ -32,7 +32,65 @@ export const MANAGEMENT_ROLES = [
   'Information Manager',
 ]
 
+/**
+ * The roles that may *look* at the admin side and change nothing on it
+ * (issue #217).
+ *
+ * Student Body President is the first of these, and the reason the tier exists.
+ * The office needs to see what the organisation has booked without being
+ * another pair of hands on the booking work -- so it gets the Bookings tab,
+ * read only, and nothing else: no Requests, no Cancellations, no SGA Spaces, no
+ * Management, no Events.
+ *
+ * This is a third tier rather than an absence of one. Until now `isAdmin` was
+ * `!!admin_role` and every admin who was not a MANAGEMENT_ROLE had full write
+ * access to Bookings, so "admin" and "may change bookings" were the same
+ * sentence. They no longer are, and the endpoints are where that distinction
+ * has to hold: see canWriteAdmin() below.
+ */
+export const VIEW_ONLY_ROLES = ['Student Body President']
+
+/**
+ * The offices the SGAssist bot direct-messages when a request is submitted
+ * (issue #219).
+ *
+ * Operational Affairs runs the booking work and the Comptroller does it without
+ * the Management page, so between them they are who actions a request. A
+ * cancellation filed an hour before a meeting is the case this exists for: it
+ * has to be seen before someone next happens to open Chambers.
+ *
+ * Deliberately not every admin. An alert that reaches all six is an alert nobody
+ * owns, and the view-only tier has nothing to do with a request at all.
+ * Recipients are resolved from this list by their Slack account link, so a role
+ * added here starts receiving alerts as soon as its holder links Slack
+ * (lib/admin-slack-alerts.ts).
+ */
+export const REQUEST_ALERT_ROLES = [
+  'Vice President of Operational Affairs',
+  'Comptroller',
+]
+
 /** True when `role` is one of MANAGEMENT_ROLES. Null-safe, so callers can pass a raw admin_role. */
 export function isManagementRole(role: string | null | undefined): boolean {
   return !!role && MANAGEMENT_ROLES.includes(role)
+}
+
+/** True when `role` is one of VIEW_ONLY_ROLES. Null-safe, so callers can pass a raw admin_role. */
+export function isViewOnlyRole(role: string | null | undefined): boolean {
+  return !!role && VIEW_ONLY_ROLES.includes(role)
+}
+
+/**
+ * True when `role` may do admin work rather than only read it.
+ *
+ * Phrased as the permission rather than its absence so a call site reads as
+ * what it allows, and so a *new* view-only role is denied by being added to
+ * VIEW_ONLY_ROLES in one place instead of by remembering every endpoint.
+ *
+ * Note this says nothing about being an admin at all -- a null role is not
+ * view-only, so this returns true for it. Callers run it *after* the
+ * `!user.app_metadata?.is_admin` check, in the same shape as isManagementRole().
+ */
+export function canWriteAdmin(role: string | null | undefined): boolean {
+  return !isViewOnlyRole(role)
 }
