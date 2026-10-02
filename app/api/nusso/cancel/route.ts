@@ -3,6 +3,7 @@ import { db } from '@/lib/db/data-api'
 import { getNussoCaller } from '@/lib/nusso/authorize'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { requireBookingManager } from '@/lib/booking-scope'
+import { insertAuditRows } from '@/lib/audit'
 import {
   applyReleasedStatus,
   emsEventName,
@@ -41,7 +42,8 @@ interface CancelBody {
  * Outcome, per session:
  *   released -> Cancelled (full) or Virtual (going virtual), plus an audit entry
  *   not released -> Pending Cancellation and a real cancellation_requests row,
- *                   so an admin picks it up in the Cancellations tab as usual
+ *                   so an admin picks it up in the Cancellations tab as usual,
+ *                   plus an audit entry saying so
  *
  * A partial result is possible on a multi-session booking and is reported as
  * such rather than rounded to success or failure.
@@ -296,13 +298,38 @@ async function placeFallbackRequest(
   })
   if (requestError) return requestError.message
 
+  const pending: NussoCancelOutcome['target'][] = []
   for (const { target } of failed) {
     const { error } = await db
       .from(bookingType === 'One-Time Room' ? 'one_time_room_bookings' : 'tabling_sessions')
       .update({ status: 'Pending Cancellation' })
       .eq('id', target.id)
     if (error) return error.message
+    pending.push(target)
   }
+
+  // The same entry /api/cancellation-requests writes when a request is filed by
+  // hand (issue #211), since this leaves the booking in exactly that state. One
+  // per session rather than one for the request, because this path knows the
+  // dates it actually moved: `failed` is often a subset of a series, the rest of
+  // which EMS released and which is already logged as Cancelled.
+  //
+  // Stamped as NUSSO's doing for the reason 0011 gives: these rows are at
+  // Pending Cancellation because an EMS release did not go through, not because
+  // somebody went to My Rooms and asked.
+  await insertAuditRows(
+    db,
+    pending.map(target => ({
+      booking_id: bookingId,
+      admin_id: userId,
+      new_status: 'Pending Cancellation',
+      target: 'session' as const,
+      target_date: target.date,
+      action: 'requested' as const,
+      changes: null,
+      source: 'nusso' as const,
+    }))
+  )
 
   return null
 }

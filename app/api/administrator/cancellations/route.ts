@@ -4,7 +4,7 @@ import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { notifyCancelledReservations } from '@/lib/room-invites'
 import { waitUntil } from '@vercel/functions'
-import { insertAuditRows, type AuditTarget } from '@/lib/audit'
+import { cancellationRequestTarget, insertAuditRows } from '@/lib/audit'
 import {
   applyCancellationOutcomes,
   cancellationAuditRows,
@@ -161,16 +161,14 @@ export async function PATCH(request: Request) {
     // booking moved.
     if (req.booking_id) {
       const bookingType = (Array.isArray(req.bookings) ? req.bookings[0] : req.bookings)?.type
-      const isWeekly = bookingType === 'Weekly Room'
       const oneDate = req.scope === 'occurrence'
-      const target: AuditTarget = oneDate
-        ? (isWeekly ? 'occurrence' : 'session')
-        : (isWeekly ? 'series' : 'booking')
       await insertAuditRows(adminSupabase, [{
         booking_id: req.booking_id,
         admin_id: user.id,
         new_status: 'Pending Cancellation',
-        target,
+        // The same words the 'requested' entry used for this request, so the
+        // pair reads as a pair (issue #211).
+        target: cancellationRequestTarget(bookingType, req.scope),
         target_date: oneDate ? req.occurrence_date ?? null : null,
         action: 'dismissed',
         changes: null,
