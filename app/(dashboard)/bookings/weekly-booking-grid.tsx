@@ -50,11 +50,12 @@ interface WeeklyBooking {
 interface WeeklyBookingGridProps {
   bookings: WeeklyBooking[]
   /**
-   * Omitted by a caller with nothing to open -- a view-only admin (issue #217).
-   * The cells then render as blocks rather than buttons, so the grid still
-   * reads the same and nothing in it invites a click it would refuse.
+   * Required, including for a view-only admin: a cell opens the edit form for
+   * an admin who can write and the read-only details for one who cannot
+   * (issues #217, #225). Which of the two is the caller's decision; the grid
+   * only says which week was clicked.
    */
-  onBookingClick?: (booking: WeeklyBooking, occurrenceDate?: string) => void
+  onBookingClick: (booking: WeeklyBooking, occurrenceDate?: string) => void
 }
 
 
@@ -189,20 +190,12 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
                     const hex = statusCellHex[occ.status ?? w.status] ?? '#1e3a5f'
                     return (
                       <td key={wk} className="py-0.5">
-                        {onBookingClick ? (
-                          <button
-                            onClick={() => onBookingClick(b, occ.occurrence_date)}
-                            title={`${occ.occurrence_date}: ${occ.status ?? w.status}`}
-                            style={{ backgroundColor: hex }}
-                            className="w-10 h-5 rounded hover:opacity-70 transition-opacity block"
-                          />
-                        ) : (
-                          <div
-                            title={`${occ.occurrence_date}: ${occ.status ?? w.status}`}
-                            style={{ backgroundColor: hex }}
-                            className="w-10 h-5 rounded block"
-                          />
-                        )}
+                        <button
+                          onClick={() => onBookingClick(b, occ.occurrence_date)}
+                          title={`${occ.occurrence_date}: ${occ.status ?? w.status}`}
+                          style={{ backgroundColor: hex }}
+                          className="w-10 h-5 rounded hover:opacity-70 transition-opacity block"
+                        />
                       </td>
                     )
                   })}

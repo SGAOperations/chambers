@@ -10,6 +10,7 @@ import EditOneTimeForm from './edit-one-time-form'
 import EditWeeklyForm from './edit-weekly-form'
 import EditTablingForm from './edit-tabling-form'
 import WeeklyBookingGrid from './weekly-booking-grid'
+import BookingDetails, { statusColors, type BookingDetailsTarget } from './booking-details'
 import { Skeleton } from '@/app/_components/skeleton'
 import ScopeLabel from '@/app/_components/scope-label'
 import { useIdentity } from '../identity-context'
@@ -138,21 +139,6 @@ function weekdayIndex(dateStr: string): number {
   return (new Date(dateStr + 'T00:00:00').getDay() + 6) % 7
 }
 
-const statusColors: Record<string, string> = {
-  'Reserved': 'bg-[#0f3d20] text-[#4ade80]',
-  'Alternate Room': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Alternate Time': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Alternate Room and Time': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Waitlisted': 'bg-[#3d0f0f] text-[#f87171]',
-  'Unavailable': 'bg-[#3d0f0f] text-[#f87171]',
-  'Pending Cancellation': 'bg-[#3d2200] text-[#fb923c]',
-  'Cancelled': 'bg-[#2a1042] text-[#c084fc]',
-  'Virtual': 'bg-[#062f3b] text-[#22d3ee]',
-  'Missed': 'bg-[#1a1a2e] text-[#a78bfa]',
-  'Repurposed': 'bg-[#1a1a1a] text-white',
-  'Tentative': 'bg-[#2d2800] text-[#fef08a]',
-}
-
 function AdminRoleBadge({ role }: { role: string | null | undefined }) {
   if (role === 'Executive Vice President') {
     return (
@@ -240,10 +226,39 @@ export default function BookingsTab() {
   const [editingWeekly, setEditingWeekly] = useState<WeeklyBooking | null>(null)
   const [editingWeeklyOcc, setEditingWeeklyOcc] = useState<string | null>(null)
   const [editingTabling, setEditingTabling] = useState<TablingBooking | null>(null)
+  /**
+   * The booking a view-only admin has opened (issue #225). Where an admin who
+   * can write gets an editor, this one gets the same booking read only -- so a
+   * click on the tab always opens something, and what it opens is decided by
+   * the role rather than by which control happened to survive.
+   */
+  const [viewing, setViewing] = useState<BookingDetailsTarget | null>(null)
   const [cancellingAdminBooking, setCancellingAdminBooking] = useState<{
     booking: { id: string; type: 'One-Time Room' | 'Tabling'; bodyName: string; purpose: string }
     sessions: { id: string; label: string }[]
   } | null>(null)
+
+  const cardCls = 'border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm'
+  /**
+   * For a view-only admin the whole card is the way in, since the Edit button
+   * that used to be is not rendered for them. An admin who can write keeps the
+   * card inert: their buttons sit inside it, and a card that also opened
+   * something would turn every near-miss on Hide or Cancel into a modal.
+   */
+  const cardProps = (target: BookingDetailsTarget) => viewOnly
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick: () => setViewing(target),
+        onKeyDown: (e: React.KeyboardEvent) => {
+          // Only the card's own keypresses: Enter on the multi-body name
+          // inside it expands the name and should not also open the booking.
+          if (e.target !== e.currentTarget) return
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setViewing(target) }
+        },
+        className: `${cardCls} cursor-pointer hover:border-[#2563eb] transition-colors`,
+      }
+    : { className: cardCls }
 
   const fetchBookings = async (all = false) => {
     const res = await fetch(`/api/administrator/bookings${all ? '?all=true' : ''}`)
@@ -465,6 +480,16 @@ export default function BookingsTab() {
         </BookingModal>
       )}
 
+      {viewing && (
+        <BookingModal
+            title={`${viewing.type === 'One-Time Room' ? 'One-Time/Multiple Room' : viewing.type} Booking`}
+            badge={<NussoBadge bookedViaNusso={viewing.booking.booked_via_nusso} />}
+            onClose={() => setViewing(null)}
+        >
+            <BookingDetails target={viewing} />
+        </BookingModal>
+      )}
+
       {cancellingAdminBooking && (
         <AdminCancelModal
           booking={cancellingAdminBooking.booking}
@@ -513,7 +538,7 @@ export default function BookingsTab() {
               if (!b.one_time_room_bookings?.length) return null
               const firstSession = b.one_time_room_bookings[0]
               return (
-                <div key={b.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm">
+                <div key={b.id} {...cardProps({ type: 'One-Time Room', booking: b })}>
                   <div className="flex items-center justify-between">
                     <div>
                       <ScopeLabel row={b} linkedBodies={linkedBodiesOf(b)} className="block font-semibold text-[#f0f6ff]" />
@@ -595,10 +620,16 @@ export default function BookingsTab() {
         <div className="space-y-4">
           <WeeklyBookingGrid
             bookings={visibleWeekly}
-            // Omitted for a view-only admin, which leaves the grid's cells as
-            // plain blocks: clicking one opens the edit form, and there is no
-            // read-only thing for it to open instead.
-            onBookingClick={viewOnly ? undefined : (b, occurrenceDate) => { setEditingWeekly(b); setEditingWeeklyOcc(occurrenceDate ?? null) }}
+            // A view-only admin opens the same week read only rather than in
+            // the editor (issue #225).
+            onBookingClick={(b, occurrenceDate) => {
+              if (viewOnly) {
+                setViewing({ type: 'Weekly Room', booking: b, occurrenceDate: occurrenceDate ?? null })
+                return
+              }
+              setEditingWeekly(b)
+              setEditingWeeklyOcc(occurrenceDate ?? null)
+            }}
           />
           <div className="space-y-6">
           {visibleWeekly.length === 0 ? (
@@ -615,7 +646,7 @@ export default function BookingsTab() {
               const w = b.weekly_room_bookings?.[0]
               if (!w) return null
               return (
-                <div key={b.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm">
+                <div key={b.id} {...cardProps({ type: 'Weekly Room', booking: b })}>
                   <div className="flex items-center justify-between">
                     <div>
                       <ScopeLabel row={b} linkedBodies={linkedBodiesOf(b)} className="block font-semibold text-[#f0f6ff]" />
@@ -691,7 +722,7 @@ export default function BookingsTab() {
               const t = b.tabling_bookings?.[0]
               if (!t) return null
               return (
-                <div key={b.id} className="border border-[#1e5080] rounded-xl p-5 bg-[#184073] shadow-sm">
+                <div key={b.id} {...cardProps({ type: 'Tabling', booking: b })}>
                   <div className="flex items-center justify-between">
                     <ScopeLabel row={b} linkedBodies={linkedBodiesOf(b)} className="block font-semibold text-[#f0f6ff]" />
                     <div className="flex items-center gap-3">
