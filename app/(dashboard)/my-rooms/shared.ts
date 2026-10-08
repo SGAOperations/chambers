@@ -1,5 +1,6 @@
 import { formatScopeLabel, type BookingScope, type Division } from '@/lib/booking-scope'
 import { resolveMeetingTime } from '@/lib/meeting-time'
+import { AWAITING_CSC, OPS_REVIEW, type OpenRequestStatus } from '@/lib/request-status'
 
 export interface FlatBooking {
   id: string
@@ -114,6 +115,32 @@ export function bookingTitle(b: FlatBooking): string {
   return b.purpose?.trim() || b.scopeLabel
 }
 
+/**
+ * Every status a room booking, weekly occurrence or tabling session can hold --
+ * the same list, in the same order, as the status check constraints in
+ * db/neon/0001_baseline.sql.
+ *
+ * The colour maps below and STATUS_DEFINITIONS are each checked against it with
+ * `satisfies`, so adding a status here fails the build until it has a colour and
+ * a plain-language definition (issue #228). The maps stay typed by string
+ * because every caller indexes them with a row's raw status.
+ */
+export const BOOKING_STATUSES = [
+  'Reserved',
+  'Alternate Room',
+  'Alternate Time',
+  'Alternate Room and Time',
+  'Waitlisted',
+  'Unavailable',
+  'Pending Cancellation',
+  'Cancelled',
+  'Virtual',
+  'Missed',
+  'Repurposed',
+  'Tentative',
+] as const
+export type BookingStatus = typeof BOOKING_STATUSES[number]
+
 export const statusColors: Record<string, string> = {
   'Reserved': 'bg-[#0f3d20] border-[#22c55e]',
   'Alternate Room': 'bg-[#0e2f4f] border-[#4285f4]',
@@ -127,7 +154,7 @@ export const statusColors: Record<string, string> = {
   'Missed': 'bg-[#1a1a2e] border-[#a78bfa]',
   'Repurposed': 'bg-[#1a1a1a] border-white',
   'Tentative': 'bg-[#2d2800] border-[#fef08a]',
-}
+} satisfies Record<BookingStatus, string>
 
 export const statusBarColors: Record<string, string> = {
   'Reserved': 'bg-[#22c55e]',
@@ -142,7 +169,7 @@ export const statusBarColors: Record<string, string> = {
   'Missed': 'bg-[#a78bfa]',
   'Repurposed': 'bg-white',
   'Tentative': 'bg-[#fef08a]',
-}
+} satisfies Record<BookingStatus, string>
 
 export const statusTextColors: Record<string, string> = {
   'Reserved': 'text-[#4ade80]',
@@ -157,6 +184,79 @@ export const statusTextColors: Record<string, string> = {
   'Missed': 'text-[#a78bfa]',
   'Repurposed': 'text-white',
   'Tentative': 'text-[#fef08a]',
+} satisfies Record<BookingStatus, string>
+
+/**
+ * What each status means to someone reading My Rooms, and what they should do
+ * about it -- the copy behind the status glossary (issue #228).
+ *
+ * Written from what Chambers does with each status rather than from the label:
+ * which ones still get a Slack meeting reminder and a spot on the room calendar
+ * (lib/meeting-reminders.ts, lib/room-calendar.ts), which are set by a
+ * cancellation request (app/api/cancellation-requests) or a NUSSO release
+ * (lib/nusso/cancel-booking.ts), and which alert Operational Affairs (Missed).
+ * When one of those behaviours changes, the sentence here describing it should
+ * change with it.
+ */
+export const STATUS_DEFINITIONS = {
+  'Reserved': {
+    meaning: 'The room is booked for your body at the date and time shown.',
+    action: 'Nothing. Go to the room listed.',
+  },
+  'Alternate Room': {
+    meaning: 'The meeting is on, at the usual time, but in a different room from usual.',
+    action: 'Check the location before you go.',
+  },
+  'Alternate Time': {
+    meaning: 'The meeting is on, in the usual room, but at a different time from usual.',
+    action: 'Check the start time before you go.',
+  },
+  'Alternate Room and Time': {
+    meaning: 'The meeting is on, but both the room and the time have changed.',
+    action: 'Check the location and the start time before you go.',
+  },
+  'Waitlisted': {
+    meaning: 'The room has been asked for but not confirmed. CSC has put the booking on its waitlist, so there is no room to go to yet.',
+    action: "Don't count on the room until the status changes. No meeting reminder is posted in the meantime.",
+  },
+  'Unavailable': {
+    meaning: 'The room could not be booked for this date. There is no room for this meeting.',
+    action: "Ask your body's leadership whether you are meeting somewhere else.",
+  },
+  'Pending Cancellation': {
+    meaning: "Your body's leadership has asked to cancel this booking or move it online, and Operational Affairs hasn't settled the request yet.",
+    action: 'Nothing. It changes to Cancelled or Virtual once the request is settled.',
+  },
+  'Cancelled': {
+    meaning: 'The meeting is not happening, and the room has been given up.',
+    action: "Don't go.",
+  },
+  'Virtual': {
+    meaning: 'The meeting is still happening, but online rather than in a room.',
+    action: "Ask your body's leadership for the link.",
+  },
+  'Missed': {
+    meaning: 'An administrator recorded that this reservation went unused. Operational Affairs is alerted automatically when this happens.',
+    action: 'If you think it is a mistake, reach out to the Comptroller.',
+  },
+  'Repurposed': {
+    meaning: "The reservation has been put to another use, so it is no longer your body's meeting in this room.",
+    action: "Ask your body's leadership if you aren't sure where you are meeting.",
+  },
+  'Tentative': {
+    meaning: 'The plan is real, but not confirmed yet, and it may still change.',
+    action: 'Expect it to happen, but check back before you go.',
+  },
+} satisfies Record<BookingStatus, { meaning: string; action: string }>
+
+/**
+ * The callout colours for an open revision request on a booking's details. Here
+ * rather than inline in the detail modal so the status glossary shows the same
+ * colours the modal does.
+ */
+export const openRequestStatusStyles: Record<OpenRequestStatus, string> = {
+  [OPS_REVIEW]: 'border-[#fbbf24]/30 bg-[#fbbf24]/10 text-[#fcd34d]',
+  [AWAITING_CSC]: 'border-[#a78bfa]/30 bg-[#a78bfa]/10 text-[#c4b5fd]',
 }
 
 // Muted, tinted pills (matching statusColors' style) instead of a solid block,

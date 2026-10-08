@@ -6,6 +6,7 @@ import RevisionModal from './revision-modal'
 import BookingDetailModal from './booking-detail-modal'
 import NotificationBell from './notification-bell'
 import CalendarView from './calendar-view'
+import StatusGlossaryModal from './status-glossary-modal'
 import { Skeleton } from '@/app/_components/skeleton'
 import { wantsSenateSession } from '@/lib/senate-types'
 import {
@@ -91,6 +92,7 @@ export default function MyRoomsClient({
   const [all, setAll] = useState<FlatBooking[]>(initialBookings)
   const [loading, setLoading] = useState(false)
   const [detailBooking, setDetailBooking] = useState<FlatBooking | null>(null)
+  const [glossaryOpen, setGlossaryOpen] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('calendar')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('All')
@@ -303,7 +305,21 @@ export default function MyRoomsClient({
       {/* All Bookings */}
       <section>
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-          <h2 className="text-xl font-bold text-[#f0f6ff]">All Bookings</h2>
+          {/*
+            Beside the heading rather than inside the filter row, which is only
+            drawn when there are bookings: someone with nothing booked yet can
+            still want to know what the statuses mean (issue #228).
+          */}
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 className="text-xl font-bold text-[#f0f6ff]">All Bookings</h2>
+            <button
+              type="button"
+              onClick={() => setGlossaryOpen(true)}
+              className="text-sm text-[#93b8d8] underline underline-offset-2 hover:text-[#f0f6ff] transition-colors"
+            >
+              What do these statuses mean?
+            </button>
+          </div>
           <div className="flex gap-2">
             {(['calendar', 'list'] as ViewMode[]).map(mode => (
               <button
@@ -452,6 +468,7 @@ export default function MyRoomsClient({
           }}
         />
       )}
+      {glossaryOpen && <StatusGlossaryModal onClose={() => setGlossaryOpen(false)} />}
       {cancellingBooking && (
         <CancelModal
           booking={cancellingBooking}
