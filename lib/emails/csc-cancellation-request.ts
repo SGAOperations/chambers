@@ -1,4 +1,5 @@
-import { emailFrom, resend } from '@/lib/resend'
+import { emailFrom } from '@/lib/resend'
+import { sendToCsc } from './csc-send'
 import { sanitize, buildEmailHtml } from './utils'
 import { formatDate, formatTime } from './changes'
 
@@ -99,7 +100,7 @@ export async function sendCscCancellationRequest(params: CscCancellationRequestP
       </tr>`)
     .join('')
 
-  await resend.emails.send({
+  await sendToCsc({
     from: emailFrom(),
     to,
     ...(cc ? { cc } : {}),

@@ -5,11 +5,11 @@ import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { canWriteAdmin } from '@/lib/admin-roles'
 import {
   AWAITING_CSC,
-  AWAITING_CSC_ALERT,
   OPEN_REQUEST_STATUSES,
   isOpenRequestStatus,
   type RoomRequestStatus,
 } from '@/lib/request-status'
+import { alertAwaitingCsc } from '@/lib/request-alerts'
 
 const ROOM_REQUEST_STATUSES: RoomRequestStatus[] = [...OPEN_REQUEST_STATUSES, 'Fulfilled', 'Denied']
 
@@ -108,13 +108,8 @@ export async function PATCH(request: Request) {
 
   // Tell the requester their request has gone to CSC. Not fatal: the status has
   // moved, and failing here would invite the admin to move it again.
-  if (status === AWAITING_CSC && current.requested_by) {
-    const { error: alertError } = await adminSupabase.from('user_alerts').insert({
-      user_id: current.requested_by,
-      request_id: id,
-      booking_type: AWAITING_CSC_ALERT,
-    })
-    if (alertError) console.error('Awaiting CSC alert failed:', alertError)
+  if (status === AWAITING_CSC) {
+    await alertAwaitingCsc([{ id, requestedBy: current.requested_by }])
   }
 
   // Link booking if fulfilling
