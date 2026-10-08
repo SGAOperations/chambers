@@ -43,9 +43,24 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.0</h2>
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.3.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               We don&apos;t exactly know yet! If there&apos;s anything you&apos;d like to see, send a Slack DM to the Vice President of Operational Affairs ({vpName}) and the Digital Innovation Manager ({dimName}).
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.0</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              My Rooms now explains itself. Next to All Bookings there is a link, &ldquo;What do these statuses mean?&rdquo;, that lists every status a booking can carry &mdash; Reserved, Waitlisted, Pending Cancellation, Virtual and the rest &mdash; in the colour it appears in, with a line on what it means and whether you need to do anything about it.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Operational Affairs hears about a request the moment it is filed. Every new booking, revision and cancellation request sends a Slack message to the Vice President of Operational Affairs and the Comptroller, leading with how soon the reservation is, so a cancellation filed an hour before a meeting is read in time to matter. Tabling requests can also go to CSC in a batch: Auto-Request Tables writes the reservation email for the ones an administrator picks, the way Auto-Cancel already does for cancellations. Auto-Cancel itself no longer offers dates that have passed, or cancellations that were dismissed.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              IEMS can now black out the Conference Room for events in SGA, from the SGA Spaces page, without going through Operational Affairs. The Student Body President&apos;s view-only role can open any booking to read its details, still with nothing to edit or cancel. And a divisional booking is named for its division on the corridor display &mdash; &ldquo;Division of Campus Affairs&rdquo; rather than whichever committee happened to file it.
             </p>
           </section>
         </div>
