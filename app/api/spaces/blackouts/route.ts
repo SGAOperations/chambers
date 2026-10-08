@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { sendSpaceBookingCancelledEmail } from '@/lib/emails/space-booking-cancelled'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
-import { canWriteAdmin } from '@/lib/admin-roles'
+import { canManageBlackout, resolveBlackoutAccess } from '@/lib/blackout-access'
+import { IEMS_BLACKOUT_SPACE_NAME } from '@/lib/iems-blackouts'
 import { attendeeKeys, cancellationAddressing, resolveSpacesAddresses } from '@/lib/spaces-email'
 import { waitUntil } from '@vercel/functions'
 
@@ -17,42 +18,68 @@ function minutesOf(iso: string): number {
 export async function GET(request: Request) {
   const supabase = db
   const user = await getAuthedUserWithLiveRoles(supabase)
-  if (!user || !user.app_metadata?.is_admin) {
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Closed to a view-only admin, who may read Bookings and nothing else (#217).
-  if (!canWriteAdmin(user.app_metadata?.admin_role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Writing admins and IEMS (#227). Still closed to a view-only admin, who may
+  // read Bookings and nothing else (#217) -- see resolveBlackoutAccess().
+  const resolved = await resolveBlackoutAccess(adminSupabase, user)
+  if ('denied' in resolved) {
+    return NextResponse.json({ error: resolved.error }, { status: resolved.denied })
   }
+  const { access } = resolved
 
   const { searchParams } = new URL(request.url)
   const spaceId = searchParams.get('space_id')
 
   let query = adminSupabase.from('space_blackouts').select('*, spaces(name)').order('start_time')
-  if (spaceId) query = query.eq('space_id', spaceId)
+  if (access.kind === 'iems') {
+    // IEMS sees what covers the Conference Room, whatever it asked for. The
+    // all-spaces blackouts come too: they close the room just the same, and
+    // leaving them out would show IEMS a free room that is not.
+    query = query.or(`space_id.eq.${access.spaceId},space_id.is.null`)
+  } else if (spaceId) {
+    query = query.eq('space_id', spaceId)
+  }
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  // Each row says whether this caller may edit or delete it, so the page shows
+  // the controls the server will honour rather than re-deriving the rule.
+  const rows = ((data ?? []) as { space_id: string | null; created_by: string | null }[])
+    .map(b => ({ ...b, can_manage: canManageBlackout(access, user.id, b) }))
+  return NextResponse.json(rows)
 }
 
 export async function POST(request: Request) {
   const supabase = db
   const user = await getAuthedUserWithLiveRoles(supabase)
-  if (!user || !user.app_metadata?.is_admin) {
+  if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Closed to a view-only admin, who may read Bookings and nothing else (#217).
-  if (!canWriteAdmin(user.app_metadata?.admin_role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Writing admins and IEMS (#227). Still closed to a view-only admin (#217).
+  const resolved = await resolveBlackoutAccess(adminSupabase, user)
+  if ('denied' in resolved) {
+    return NextResponse.json({ error: resolved.error }, { status: resolved.denied })
   }
+  const { access } = resolved
 
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
   const { space_id, start_time, end_time } = await request.json()
+
+  // An empty space_id means every space, which IEMS may not close; anything
+  // other than the Conference Room's id is a room that is not theirs.
+  if (access.kind === 'iems' && space_id !== access.spaceId) {
+    return NextResponse.json(
+      { error: `IEMS can black out the ${IEMS_BLACKOUT_SPACE_NAME} only.` },
+      { status: 403 }
+    )
+  }
 
   if (!start_time || !end_time) {
     return NextResponse.json({ error: 'start_time and end_time are required' }, { status: 400 })

@@ -54,6 +54,12 @@ interface Blackout {
   start_time: string
   end_time: string
   spaces?: { name: string } | null
+  /**
+   * Whether the caller may edit or delete this one, as the server decided it
+   * (issue #227). Always true for a writing admin; for IEMS, only their own
+   * Conference Room blackouts.
+   */
+  can_manage?: boolean
 }
 
 interface LimitOverride {
@@ -181,7 +187,7 @@ export default function SGASpacesTab() {
       </div>
 
       {subTab === 'Bookings' && <AdminBookingsPanel spaces={spaces} />}
-      {subTab === 'Blackouts' && <AdminBlackoutsPanel spaces={spaces} />}
+      {subTab === 'Blackouts' && <BlackoutsPanel spaces={spaces} />}
       {subTab === 'Limit Overrides' && <AdminLimitOverridesPanel />}
     </div>
   )
@@ -357,12 +363,30 @@ function isoToFormDateTime(iso: string): { date: string; time: string } {
   }
 }
 
-function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
+/**
+ * Creating, editing and deleting SGA Spaces blackouts.
+ *
+ * Admins use it here, with every space and "All Spaces" on offer. IEMS uses it
+ * from the SGA Spaces page with `onlySpace` set to the Conference Room (issue
+ * #227): the picker then holds that room alone and no "All Spaces", which is
+ * the same rule the endpoints enforce -- the narrowing here is so IEMS is never
+ * offered a choice the server would refuse, not what stops them.
+ *
+ * `onChange` runs after anything is saved or removed, for a host page whose own
+ * view of the calendar -- including bookings a new blackout just cancelled --
+ * is now out of date.
+ */
+export function BlackoutsPanel({ spaces, onlySpace, onChange }: {
+  spaces: Space[]
+  onlySpace?: Space
+  onChange?: () => void
+}) {
+  const spaceOptions = onlySpace ? [onlySpace] : spaces
   const [blackouts, setBlackouts] = useState<Blackout[]>([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [form, setForm] = useState({
-    space_id: '',
+    space_id: onlySpace?.id ?? '',
     start_date: todayDateStr(),
     start_time: '07:00',
     end_date: todayDateStr(),
@@ -402,6 +426,7 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
       const data = await res.json()
       if (!res.ok) { setFormError(data.error ?? 'Failed to create blackout.'); return }
       await fetchBlackouts()
+      onChange?.()
       setForm(f => ({ ...f, start_time: '07:00', end_time: '23:00' }))
     } finally {
       setSubmitting(false)
@@ -411,7 +436,10 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
   const deleteBlackout = async (id: string) => {
     setDeletingId(id)
     const res = await fetch(`/api/spaces/blackouts/${id}`, { method: 'DELETE' })
-    if (res.ok) setBlackouts(prev => prev.filter(b => b.id !== id))
+    if (res.ok) {
+      setBlackouts(prev => prev.filter(b => b.id !== id))
+      onChange?.()
+    }
     setDeletingId(null)
   }
 
@@ -439,6 +467,7 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
       if (!res.ok) { setEditError(data.error ?? 'Failed to update blackout.'); return }
       setEditForm(null)
       await fetchBlackouts()
+      onChange?.()
     } finally {
       setEditSubmitting(false)
     }
@@ -450,14 +479,14 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
       <form onSubmit={handleCreate} className="bg-[#0f2a4a] border border-[#1e5080] rounded-xl p-5 space-y-4">
         <h3 className="text-sm font-semibold text-[#f0f6ff]">Create Blackout Window</h3>
         <div>
-          <label className={labelCls}>Space (leave blank for all spaces)</label>
+          <label className={labelCls}>{onlySpace ? 'Space' : 'Space (leave blank for all spaces)'}</label>
           <select
             value={form.space_id}
             onChange={e => setForm(f => ({ ...f, space_id: e.target.value }))}
             className={inputCls}
           >
-            <option value="">All Spaces</option>
-            {spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {!onlySpace && <option value="">All Spaces</option>}
+            {spaceOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
 
@@ -518,6 +547,8 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
                     <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(bl.start_time)}</td>
                     <td className="px-4 py-3 text-[#93b8d8] whitespace-nowrap">{formatDateTime(bl.end_time)}</td>
                     <td className="px-4 py-3">
+                      {/* Absent on an older response, which only an admin could get. */}
+                      {bl.can_manage !== false && (
                       <div className="flex items-center gap-3">
                         <button
                           onClick={() => openEdit(bl)}
@@ -533,6 +564,7 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
                           {deletingId === bl.id ? 'Deleting…' : 'Delete'}
                         </button>
                       </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -556,8 +588,8 @@ function AdminBlackoutsPanel({ spaces }: { spaces: Space[] }) {
               <div>
                 <label className={labelCls}>Space</label>
                 <select value={editForm.space_id} onChange={e => setEditForm(f => f && ({ ...f, space_id: e.target.value }))} className={inputCls}>
-                  <option value="">All Spaces</option>
-                  {spaces.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {!onlySpace && <option value="">All Spaces</option>}
+                  {spaceOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
