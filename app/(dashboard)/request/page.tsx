@@ -17,7 +17,7 @@ import {
   type RoomRequestStatus,
 } from '@/lib/request-status'
 import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-times'
-import { MAX_LOCATION, MAX_TABLES, TABLES_ERROR, invalidTableCount } from '@/lib/tabling-request'
+import { LOCATION_REQUIRED_ERROR, MAX_LOCATION, MAX_TABLES, TABLES_ERROR, invalidTableCount } from '@/lib/tabling-request'
 import { canWriteAdmin } from '@/lib/admin-roles'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
@@ -353,11 +353,15 @@ export default function RequestPage() {
         }
       }
       // How many tables is what Operational Affairs has to reserve, so it is
-      // asked rather than guessed (issue #164). The location beside it stays
-      // optional: it is a preference, as Preferred Room is on a room request.
+      // asked rather than guessed (issue #164). The location beside it became
+      // required with Auto-Request (#226), which hands it to CSC as written.
       for (const s of sessions) {
         if (invalidTableCount(s.tables)) {
           setError(TABLES_ERROR)
+          return
+        }
+        if (!s.location.trim()) {
+          setError(LOCATION_REQUIRED_ERROR)
           return
         }
       }
@@ -796,13 +800,14 @@ export default function RequestPage() {
                       )}
                     </div>
 
-                    {/* Optional, like Preferred Room above: a preference for
-                        Operational Affairs to work with, not a promise (#164). */}
+                    {/* Still a preference rather than a promise, but required
+                        since Auto-Request (#226) puts it straight into the email
+                        CSC reserves from -- see LOCATION_REQUIRED_ERROR. */}
                     <div>
-                      <label className={labelCls}>Preferred Location</label>
+                      <label className={labelCls}>Preferred Location *</label>
                       <input
                         type="text"
-                        placeholder="Optional — e.g. Curry Crossroads"
+                        placeholder="e.g. Curry Crossroads"
                         maxLength={MAX_LOCATION}
                         value={s.location}
                         onChange={e => updateSession(i, 'location', e.target.value)}

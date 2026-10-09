@@ -15,45 +15,9 @@ import {
   lineKey,
   requestsFullyCovered,
 } from '@/lib/pending-cancellations'
+import { cscRecipientPreview, resolveCscRecipient } from '@/lib/csc-recipient'
 
 const adminSupabase = db
-
-const DEFAULT_CSC_EMAIL = 'cscreservations@northeastern.edu'
-
-/**
- * Where the cancellation request goes, and whether it may be sent at all.
- *
- * The default used to apply everywhere CSC_EMAIL was unset, which made a test
- * run safe only if an environment variable had been set, in the right Vercel
- * scope, on a deployment created after it was added -- and gave no sign when any
- * of that was not true. It mailed CSC instead. That happened.
- *
- * So outside production the real address is refused rather than defaulted to.
- * A preview deployment or a local server must name its recipient explicitly, and
- * if it has not, the request fails with an explanation instead of reaching a
- * university office. The failure mode is now "your test did not send", which
- * costs a minute, rather than "CSC received a real cancellation request", which
- * costs an apology and a retraction.
- *
- * Production is unchanged: VERCEL_ENV is 'production' there and the default
- * applies, so nothing has to be configured for the feature to work in earnest.
- */
-function resolveRecipient(): { to: string; isDefault: boolean } | { error: string } {
-  const override = process.env.CSC_EMAIL?.trim()
-  if (override) return { to: override, isDefault: false }
-
-  // Vercel sets this to 'production' | 'preview' | 'development'. It is absent
-  // under `next dev`, which is treated as not-production -- the safe reading.
-  if (process.env.VERCEL_ENV !== 'production') {
-    return {
-      error:
-        `Refusing to send: this is not the production deployment, and CSC_EMAIL is not set, so the request would go to ${DEFAULT_CSC_EMAIL}. ` +
-        `Set CSC_EMAIL to a test address for this environment and redeploy, then try again.`,
-    }
-  }
-
-  return { to: DEFAULT_CSC_EMAIL, isDefault: true }
-}
 
 /**
  * Everything currently marked for cancellation, for the admin to choose from.
@@ -84,17 +48,11 @@ export async function GET() {
   if (rateLimitRes) return rateLimitRes
 
   const { lines, skipped } = await collectPending({ from: todayInAppZone() })
-  const recipient = resolveRecipient()
 
   return NextResponse.json({
     lines: lines.map(l => ({ ...l, key: lineKey(l) })),
     skipped,
-    // Surfaced before anything is selected, so the modal can say where this is
-    // headed -- or refuse up front rather than at the click.
-    recipient: 'to' in recipient ? recipient.to : null,
-    recipientIsReal: 'to' in recipient ? recipient.isDefault : false,
-    blocked: 'error' in recipient ? recipient.error : null,
-    cc: process.env.OPS_EMAIL || null,
+    ...cscRecipientPreview(),
   })
 }
 
@@ -184,7 +142,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const recipient = resolveRecipient()
+  const recipient = resolveCscRecipient()
   if ('error' in recipient) {
     // Checked after the selection resolves but before anything leaves or moves,
     // so a misconfigured environment cannot send and cannot cancel.

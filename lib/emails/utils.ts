@@ -1,5 +1,15 @@
 export const sanitize = (s: string) => s.replace(/[\r\n\t]/g, ' ').trim()
 
+/**
+ * For member-typed text going into an HTML body. sanitize() only flattens
+ * whitespace, which keeps a header on one line but does nothing about a `<` in a
+ * purpose or a location. Lifted out of space-series.ts when the CSC tabling
+ * request became the second template to need it (issue #226).
+ */
+export function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
 // opsemaillogo.png, not sga-logo.png. There has never been an sga-logo.png:
 // 390acfc added public/opsemaillogo.png and wrote this URL in the same commit,
 // and the two simply did not match, so the footer logo in every transactional

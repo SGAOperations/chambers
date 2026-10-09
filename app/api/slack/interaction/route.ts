@@ -4,6 +4,13 @@ import { verifySlackRequest } from '@/lib/slack-verify'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { OPS_REVIEW } from '@/lib/request-status'
 import { queueAdminRequestAlert } from '@/lib/admin-slack-alerts'
+import {
+  LOCATION_ERROR,
+  LOCATION_REQUIRED_ERROR,
+  TABLES_ERROR,
+  cleanLocation,
+  invalidTableCount,
+} from '@/lib/tabling-request'
 
 const adminSupabase = db
 
@@ -87,6 +94,32 @@ export async function POST(request: Request) {
     return blockError({ end_time_block: 'End time must be after start time.' })
   }
 
+  // Checked again here although Slack marks both blocks required: a modal
+  // opened before this release has neither block, and its submission must be
+  // refused rather than filed as a request Auto-Request can never send. The
+  // rules are the request form's, from the same module.
+  let tablingLocation: string | null = null
+  let tablingTables: number | null = null
+  if (isTabling) {
+    const location = cleanLocation(vals.location_block?.location_action?.value)
+    if (location === undefined) return blockError({ location_block: LOCATION_ERROR })
+    // A modal from before this change has no location_block to attach the
+    // error to, and Slack drops errors for unknown blocks, so it goes on purpose.
+    if (location === null) {
+      return blockError(vals.location_block
+        ? { location_block: LOCATION_REQUIRED_ERROR }
+        : { purpose_block: `${LOCATION_REQUIRED_ERROR} Close this form and run /chambers-table again.` })
+    }
+    const tables = vals.tables_block?.tables_action?.value
+    if (invalidTableCount(tables)) {
+      return blockError(vals.tables_block
+        ? { tables_block: TABLES_ERROR }
+        : { purpose_block: `${TABLES_ERROR} Close this form and run /chambers-table again.` })
+    }
+    tablingLocation = location
+    tablingTables = Number(tables)
+  }
+
   const { data: settings } = await adminSupabase
     .from('app_settings')
     .select('min_days_advance_room, min_days_advance_tabling')
@@ -158,6 +191,8 @@ export async function POST(request: Request) {
         session_date: date,
         start_time,
         end_time,
+        location: tablingLocation,
+        tables: tablingTables,
       })
 
     if (sessionError) {
@@ -173,7 +208,7 @@ export async function POST(request: Request) {
     bookingType: type,
     audience: bodyExists.name,
     requestedBy: connection.chambers_user_id,
-    room: isTabling ? null : room_name,
+    room: isTabling ? tablingLocation : room_name,
     date,
     startTime: start_time,
     endTime: end_time,
