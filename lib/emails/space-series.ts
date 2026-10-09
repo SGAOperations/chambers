@@ -1,5 +1,5 @@
 import { emailFrom, resend } from '@/lib/resend'
-import { sanitize, buildEmailHtml } from './utils'
+import { sanitize, buildEmailHtml, escapeHtml } from './utils'
 import {
   buildSpaceSeriesCancelIcs,
   buildSpaceSeriesIcs,
@@ -63,10 +63,6 @@ function cadenceOf(base: SeriesBase): SeriesFrequency {
 function Cadence(base: SeriesBase): string {
   const word = SERIES_CADENCE[cadenceOf(base)].adjective
   return word.charAt(0).toUpperCase() + word.slice(1)
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
 function toOccurrences(weeks: SeriesWeek[]): SeriesOccurrence[] {

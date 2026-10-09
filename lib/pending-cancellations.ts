@@ -144,6 +144,43 @@ export interface CancellationOutcome {
 interface RequestRef {
   id: string
   type: string
+  status: string | null
+  scope: string
+}
+
+/**
+ * Whether a reservation's request was dismissed, and so should not be offered
+ * for cancellation at all (issue #224).
+ *
+ * Dismissing a request deliberately leaves its booking at Pending Cancellation
+ * (issue #139): the admin has decided the cancellation will not go ahead as
+ * asked, and what the booking becomes instead is for them to set in the editor.
+ * So the status alone cannot tell this row apart from one still waiting on CSC.
+ * The request can -- and since the lookup below prefers a Pending request over a
+ * resolved one, a Dismissed request only wins when nobody has asked again since.
+ * Offering it anyway put a request the admin had already turned down back in
+ * front of them, ready to be sent to CSC and marked Cancelled.
+ *
+ * `precise` says whether the request was matched to this very date or session,
+ * rather than picked up by the booking-wide fallback. A series-scoped request
+ * covers every date in its booking, so it counts either way; an occurrence-scoped
+ * one found only through the booking is about some *other* date, and dismissing
+ * that says nothing about this one.
+ */
+export function isDismissed(request: Pick<RequestRef, 'status' | 'scope'> | undefined, precise: boolean): boolean {
+  return request?.status === 'Dismissed' && (precise || request.scope === 'series')
+}
+
+/**
+ * Whether a reservation is still ahead of us, by Boston's calendar.
+ *
+ * Auto-Cancel asks CSC to release a room, and a room on a day already gone has
+ * nothing left to release (issue #224). Both sides are 'YYYY-MM-DD', so the
+ * string comparison is the date comparison. Today counts: a meeting this evening
+ * can still give its room back.
+ */
+export function isUpcoming(date: string, today: string): boolean {
+  return date >= today
 }
 
 const DEFAULT_OUTCOME: CancellationOutcome = { status: 'Cancelled', fromRequest: false }
@@ -188,7 +225,13 @@ export interface PendingCancellations {
   skipped: SkippedReservation[]
 }
 
-export async function collectPending(): Promise<PendingCancellations> {
+/**
+ * `from`, when given, leaves out reservations dated before it -- see isUpcoming.
+ * Optional because not every caller wants it: marking a request Done applies its
+ * outcome to every date it covers, past ones included, since a week that has
+ * already gone by still needs its status settled.
+ */
+export async function collectPending({ from }: { from?: string } = {}): Promise<PendingCancellations> {
   const lines: CancellationLine[] = []
   const skipped: SkippedReservation[] = []
 
@@ -228,7 +271,7 @@ export async function collectPending(): Promise<PendingCancellations> {
       status: string | null
       cancellation_type: string
     }[]) {
-      const ref: RequestRef = { id: r.id, type: r.cancellation_type }
+      const ref: RequestRef = { id: r.id, type: r.cancellation_type, status: r.status, scope: r.scope }
       const isPending = r.status === 'Pending'
       if (pass === 'Pending' ? !isPending : isPending) continue
       // setDefault semantics: the first pass wins, so a Pending request is never
@@ -249,12 +292,19 @@ export async function collectPending(): Promise<PendingCancellations> {
     }
   }
 
-  /** Routes a row to `lines` or `skipped` on whether CSC could act on it. */
+  /**
+   * Routes a row to `lines` or `skipped` on whether CSC could act on it, or
+   * drops it when it is not CSC's business at all: dated before `from`, or
+   * covered by a request an admin dismissed.
+   */
   const add = (
     code: string | null,
     line: Omit<CancellationLine, 'reservationCode' | 'resultingStatus' | 'outcomeFromRequest' | 'cancellationRequestId'>,
     request: RequestRef | undefined,
+    precise: boolean,
   ) => {
+    if (from && !isUpcoming(line.date, from)) return
+    if (isDismissed(request, precise)) return
     const outcome = outcomeOf(request?.type)
     const resolved = {
       ...line,
@@ -269,6 +319,17 @@ export async function collectPending(): Promise<PendingCancellations> {
     else skipped.push({ ...resolved, reservationCode: null })
   }
 
+  /**
+   * The request behind a one-time or tabling date, and whether it names that
+   * date. The booking-wide fallback is kept for the outcome -- it is how an
+   * older request without an occurrence_date still passes on its
+   * cancellation_type -- but it is not precise, which matters to isDismissed.
+   */
+  const matchDated = (bookingId: string, date: string): [RequestRef | undefined, boolean] => {
+    const exact = byBookingDate.get(dateKey(bookingId, date))
+    return exact ? [exact, true] : [byBooking.get(bookingId), false]
+  }
+
   {
     const { data } = await adminSupabase
       .from('one_time_room_bookings')
@@ -276,6 +337,7 @@ export async function collectPending(): Promise<PendingCancellations> {
       .eq('status', PENDING)
 
     for (const r of (data ?? []) as unknown as (Record<string, string> & { bookings: BookingRef | null })[]) {
+      const [request, precise] = matchDated(r.booking_id, r.booking_date)
       add(r.reservation_code, {
         id: r.id,
         source: 'one_time',
@@ -286,7 +348,7 @@ export async function collectPending(): Promise<PendingCancellations> {
         roomOrTable: r.room_name || 'Not recorded',
         bodyName: bodyNameOf(r.bookings),
         bookingType: 'One-Time Room',
-      }, byBookingDate.get(dateKey(r.booking_id, r.booking_date)) ?? byBooking.get(r.booking_id))
+      }, request, precise)
     }
   }
 
@@ -300,6 +362,9 @@ export async function collectPending(): Promise<PendingCancellations> {
       tabling_bookings: { id: string; booking_id: string; reservation_code: string | null; bookings: BookingRef | null } | null
     })[]) {
       const parent = Array.isArray(r.tabling_bookings) ? r.tabling_bookings[0] : r.tabling_bookings
+      const [request, precise] = parent?.booking_id
+        ? matchDated(parent.booking_id, r.session_date)
+        : [undefined, false]
       // The session's own code wins; the booking's is the fallback, matching
       // how the tabling editor treats it.
       add(r.reservation_code || parent?.reservation_code || null, {
@@ -312,9 +377,7 @@ export async function collectPending(): Promise<PendingCancellations> {
         roomOrTable: r.location || 'Not recorded',
         bodyName: bodyNameOf(parent?.bookings ?? null),
         bookingType: 'Tabling',
-      }, parent?.booking_id
-        ? byBookingDate.get(dateKey(parent.booking_id, r.session_date)) ?? byBooking.get(parent.booking_id)
-        : undefined)
+      }, request, precise)
     }
   }
 
@@ -369,7 +432,9 @@ export async function collectPending(): Promise<PendingCancellations> {
           ?? (series?.booking_id
             ? byBookingDate.get(dateKey(series.booking_id, r.occurrence_date))
               ?? bySeriesBooking.get(series.booking_id)
-            : undefined)
+            : undefined),
+        // Every route to a request here names this week or the whole series.
+        true,
       )
     }
   }

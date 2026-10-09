@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto'
 import { verifySlackRequest } from '@/lib/slack-verify'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { ephemeral } from '@/lib/slack'
+import { MAX_LOCATION, MAX_TABLES } from '@/lib/tabling-request'
 
 const adminSupabase = db
 
@@ -143,6 +144,35 @@ function buildTablingModal(bodies: { id: string; name: string }[]) {
           type: 'plain_text_input',
           action_id: 'purpose_action',
           placeholder: { type: 'plain_text', text: 'What is this tabling session for?' },
+        },
+      },
+      // Both asked here as in the request form (issues #164, #226). Without them
+      // a Slack request could never go out through Auto-Request: it would always
+      // land in the "missing details" group, waiting on someone to chase the
+      // requester for what the form would have asked. Not `optional`, so Slack
+      // itself refuses a blank before the submission reaches Chambers.
+      {
+        type: 'input',
+        block_id: 'location_block',
+        label: { type: 'plain_text', text: 'Preferred Location' },
+        element: {
+          type: 'plain_text_input',
+          action_id: 'location_action',
+          max_length: MAX_LOCATION,
+          placeholder: { type: 'plain_text', text: 'e.g. Curry Crossroads' },
+        },
+      },
+      {
+        type: 'input',
+        block_id: 'tables_block',
+        label: { type: 'plain_text', text: 'Number of Tables' },
+        element: {
+          type: 'number_input',
+          action_id: 'tables_action',
+          is_decimal_allowed: false,
+          min_value: '1',
+          max_value: String(MAX_TABLES),
+          initial_value: '1',
         },
       },
       {

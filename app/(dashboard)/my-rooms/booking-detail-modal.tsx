@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import BookingModal from '../bookings/booking-modal'
-import { type FlatBooking, statusTextColors, senateTypeBadgeColors, DEFAULT_SENATE_BADGE } from './shared'
-import { AWAITING_CSC, OPEN_STATUS_DESCRIPTIONS, type OpenRequestStatus } from '@/lib/request-status'
+import { type FlatBooking, statusTextColors, senateTypeBadgeColors, DEFAULT_SENATE_BADGE, openRequestStatusStyles } from './shared'
+import { OPEN_STATUS_DESCRIPTIONS, type OpenRequestStatus } from '@/lib/request-status'
 
 interface BookingDetailModalProps {
   booking: FlatBooking
@@ -119,11 +119,7 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
         </div>
 
         {openRevision && (
-          <div className={`rounded-lg border px-3 py-2.5 text-sm ${
-            openRevision.status === AWAITING_CSC
-              ? 'border-[#a78bfa]/30 bg-[#a78bfa]/10 text-[#c4b5fd]'
-              : 'border-[#fbbf24]/30 bg-[#fbbf24]/10 text-[#fcd34d]'
-          }`}>
+          <div className={`rounded-lg border px-3 py-2.5 text-sm ${openRequestStatusStyles[openRevision.status]}`}>
             <p className="font-semibold">Revision request: {openRevision.status}</p>
             <p className="text-xs mt-0.5 opacity-90">
               {OPEN_STATUS_DESCRIPTIONS[openRevision.status]} Submitted{' '}
