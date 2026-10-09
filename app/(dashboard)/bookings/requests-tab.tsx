@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import FulfillModal from './fulfill-modal'
 import DenyModal from './deny-modal'
+import AutoRequestModal from './auto-request-modal'
 import { Skeleton } from '@/app/_components/skeleton'
 import ScopeLabel from '@/app/_components/scope-label'
 import type { BookingScope, Division } from '@/lib/booking-scope'
@@ -161,6 +162,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   const [typeFilter, setTypeFilter] = useState<'all' | BookingScope>('all')
   const [moving, setMoving] = useState<string | null>(null)
   const [moveError, setMoveError] = useState<{ id: string; message: string } | null>(null)
+  const [showAutoRequest, setShowAutoRequest] = useState(false)
 
   const fetchRequests = async () => {
     const [reqRes, revRes] = await Promise.all([
@@ -206,6 +208,7 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
   if (requests.length === 0 && revisions.length === 0) return <div className="text-[#6a96bb] text-sm">No requests found.</div>
 
   const filteredRequests = requests.filter(r => typeFilter === 'all' || r.scope === typeFilter)
+  const hasRequestableTabling = requests.some(r => r.type === 'Tabling' && r.status === OPS_REVIEW)
 
   const TYPE_FILTERS: { value: 'all' | BookingScope; label: string }[] = [
     { value: 'all', label: 'All' },
@@ -299,7 +302,20 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
             {revisions.length > 0 && (
               <h3 className="text-xs font-semibold uppercase tracking-widest text-[#6a96bb]">Room Requests</h3>
             )}
-            <div className="flex gap-1 flex-wrap ml-auto">
+            <div className="flex gap-1 flex-wrap ml-auto items-center">
+              {/*
+                Offered only while there is a tabling request it could send
+                (issue #226). Rooms never qualify, so a tab of room requests
+                does not grow a button that would open onto an empty list.
+              */}
+              {hasRequestableTabling && (
+                <button
+                  onClick={() => setShowAutoRequest(true)}
+                  className="mr-2 px-3 py-1 text-xs bg-[#0f2a4a] border border-[#1e5080] text-[#f0f6ff] rounded-md font-medium hover:border-[#93b8d8] transition-colors"
+                >
+                  Auto-Request Tables
+                </button>
+              )}
               {TYPE_FILTERS.map(f => (
                 <button
                   key={f.value}
@@ -468,6 +484,14 @@ export default function RequestsTab({ onCountChange }: RequestsTabProps) {
         </div>
       ))}
         </div>
+      )}
+      {showAutoRequest && (
+        <AutoRequestModal
+          onClose={() => setShowAutoRequest(false)}
+          // Refreshed on send rather than on close, so the cards behind the
+          // modal already show Awaiting CSC by the time it is dismissed.
+          onSent={() => { fetchRequests(); onCountChange() }}
+        />
       )}
       {fulfillingRequest && (
         <FulfillModal
