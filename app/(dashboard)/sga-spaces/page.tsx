@@ -7,6 +7,8 @@ import SpaceBookingDetails from './space-booking-details'
 import { Skeleton } from '@/app/_components/skeleton'
 import { useIdentity } from '../identity-context'
 import { canWriteAdmin } from '@/lib/admin-roles'
+import { IEMS_BLACKOUT_SPACE_NAME } from '@/lib/iems-blackouts'
+import { BlackoutsPanel } from '../bookings/sga-spaces-tab'
 
 interface Space {
   id: string
@@ -171,7 +173,7 @@ export default function SGASpacesPage() {
   const [minHoursAdvance, setMinHoursAdvance] = useState<number>(24)
   const [semesterEndDate, setSemesterEndDate] = useState<string | null>(null)
   // From the shell, which resolved them from the users row on the server.
-  const { userId: currentUserId, isAdmin, isLeadership, adminRole } = useIdentity()
+  const { userId: currentUserId, isAdmin, isLeadership, isIEMS, adminRole } = useIdentity()
   const [modalSlot, setModalSlot] = useState<ModalSlot | null>(null)
   const [editBooking, setEditBooking] = useState<EditBooking | null>(null)
   // Someone else's booking, opened read-only (issue #142).
@@ -181,6 +183,16 @@ export default function SGASpacesPage() {
   // A view-only admin books nothing (#217) -- being an admin stops being the
   // thing that grants it, though Leadership still does.
   const canBook = (isAdmin && canWriteAdmin(adminRole)) || isLeadership
+
+  // IEMS may black out the Conference Room for SGA events (issue #227). Offered
+  // here because this page is the one IEMS already has -- Bookings, where admins
+  // manage blackouts, is not theirs. A writing admin is not offered it: they
+  // already manage every blackout from Bookings, without the one-room limit.
+  // Shown only once the room is found, since the panel is useless without it.
+  const iemsBlackoutSpace = isIEMS && !(isAdmin && canWriteAdmin(adminRole))
+    ? spaces.find(s => s.name === IEMS_BLACKOUT_SPACE_NAME)
+    : undefined
+  const [showBlackouts, setShowBlackouts] = useState(false)
 
   const isTodayWeek = (() => {
     const now = new Date()
@@ -357,7 +369,17 @@ export default function SGASpacesPage() {
       */}
       <div className="flex flex-col gap-5 h-full min-h-0">
         <div className="flex items-center justify-between flex-wrap gap-3 flex-shrink-0">
-          <h1 className="text-2xl font-bold text-[#f0f6ff]">SGA Spaces</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold text-[#f0f6ff]">SGA Spaces</h1>
+            {iemsBlackoutSpace && (
+              <button
+                onClick={() => setShowBlackouts(true)}
+                className="py-2 px-4 border border-[#1e5080] text-[#93b8d8] hover:text-[#f0f6ff] hover:border-[#93b8d8] text-sm font-medium rounded-lg transition-colors"
+              >
+                {IEMS_BLACKOUT_SPACE_NAME} blackouts
+              </button>
+            )}
+          </div>
           {canBook && (remainingHours !== null ? (
             <div className="flex items-center gap-3 flex-wrap justify-end">
               <div className="flex items-center gap-2 bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-4 py-2">
@@ -477,6 +499,30 @@ export default function SGASpacesPage() {
             spaces={spaces}
             semesterEndDate={semesterEndDate}
           />
+        )}
+
+        {/* IEMS's Conference Room blackouts (issue #227) */}
+        {iemsBlackoutSpace && showBlackouts && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowBlackouts(false)}>
+            <div className="bg-[#0a1628] border border-[#1e5080] rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-5 border-b border-[#1e5080]">
+                <div>
+                  <h3 className="text-base font-semibold text-[#f0f6ff]">{IEMS_BLACKOUT_SPACE_NAME} Blackouts</h3>
+                  <p className="text-xs text-[#93b8d8] mt-0.5">
+                    A blackout cancels any booking it overlaps, and everyone on it is emailed.
+                  </p>
+                </div>
+                <button onClick={() => setShowBlackouts(false)} className="text-[#93b8d8] hover:text-[#f0f6ff] transition-colors" aria-label="Close">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              <div className="p-5">
+                {/* The calendar behind refetches on every change: a new blackout
+                    may have cancelled bookings it is still showing. */}
+                <BlackoutsPanel spaces={spaces} onlySpace={iemsBlackoutSpace} onChange={fetchCalendarData} />
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Read-only view of someone else's booking (issue #142) */}
