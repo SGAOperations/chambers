@@ -52,8 +52,8 @@ export async function GET() {
   if ('res' in auth) return auth.res
 
   try {
-    const { lines, skipped } = await collectRequestable()
-    return NextResponse.json({ lines, skipped, ...cscRecipientPreview() })
+    const { lines, skipped, incomplete } = await collectRequestable()
+    return NextResponse.json({ lines, skipped, incomplete, ...cscRecipientPreview() })
   } catch (e) {
     console.error('Auto-Request could not load:', e)
     return NextResponse.json({ error: 'Could not load tabling requests.' }, { status: 500 })
@@ -68,7 +68,7 @@ export async function GET() {
  * - The selection is a choice among what the server finds, never the source of
  *   truth. Each posted id is matched against a fresh collection, and the email
  *   is built from the server's rows -- a client cannot add a date, change a
- *   location or slip in a room request.
+ *   location, slip in a room request, or send one missing a detail CSC needs.
  * - One stale id refuses the whole send. Quietly sending the rest would mail a
  *   different set from the one the admin reviewed.
  * - The email goes first and statuses move only once it has been accepted.
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
   if (missing.length) {
     return NextResponse.json(
       {
-        error: `${missing.length} of the ${requested.length} selected request${requested.length === 1 ? '' : 's'} ${missing.length === 1 ? 'is' : 'are'} no longer in Ops Review with an upcoming date. Nothing was sent. Reload the list and choose again.`,
+        error: `${missing.length} of the ${requested.length} selected request${requested.length === 1 ? '' : 's'} ${missing.length === 1 ? 'is' : 'are'} no longer in Ops Review with an upcoming date and every detail filled in. Nothing was sent. Reload the list and choose again.`,
         stale: missing,
       },
       { status: 409 }

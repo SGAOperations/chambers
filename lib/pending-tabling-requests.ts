@@ -2,6 +2,7 @@ import { db } from './db/data-api'
 import { todayInAppZone } from './app-zone'
 import { formatScopeLabel, type BookingScope, type Division } from './booking-scope'
 import { OPS_REVIEW } from './request-status'
+import { missingTablingFields } from './tabling-request'
 
 const adminSupabase = db
 
@@ -53,9 +54,24 @@ export interface SkippedTablingRequest {
   lastDate: string | null
 }
 
+/**
+ * Has an upcoming date, but is missing something CSC would need (see
+ * missingTablingFields in lib/tabling-request.ts). Shown rather than dropped, so
+ * an admin knows why it cannot be ticked and what to go and ask for.
+ */
+export interface IncompleteTablingRequest {
+  id: string
+  bodyName: string
+  purpose: string
+  requesterName: string
+  firstDate: string
+  missing: string[]
+}
+
 export interface RequestableTabling {
   lines: TablingRequestLine[]
   skipped: SkippedTablingRequest[]
+  incomplete: IncompleteTablingRequest[]
 }
 
 interface RawRequest {
@@ -147,6 +163,7 @@ export async function collectRequestable(): Promise<RequestableTabling> {
   const today = todayInAppZone()
   const lines: TablingRequestLine[] = []
   const skipped: SkippedTablingRequest[] = []
+  const incomplete: IncompleteTablingRequest[] = []
 
   for (const r of rows) {
     const bodyName = formatScopeLabel(
@@ -157,6 +174,23 @@ export async function collectRequestable(): Promise<RequestableTabling> {
 
     if (!upcoming.length) {
       skipped.push({ id: r.id, bodyName, purpose: r.purpose, lastDate: past.at(-1)?.session_date ?? null })
+      continue
+    }
+
+    // Checked on the upcoming sessions only, since those are all that would be
+    // sent: a gap on a date already past is not something CSC would ever see.
+    // Enforced here, in the collection, so the POST refuses an incomplete
+    // request's id the same way it refuses any other id not in this list.
+    const missing = missingTablingFields({ purpose: r.purpose, requestedBy: r.requested_by, sessions: upcoming })
+    if (missing.length) {
+      incomplete.push({
+        id: r.id,
+        bodyName,
+        purpose: r.purpose,
+        requesterName: r.users?.full_name ?? 'Unknown',
+        firstDate: upcoming[0].session_date,
+        missing,
+      })
       continue
     }
 
@@ -183,5 +217,6 @@ export async function collectRequestable(): Promise<RequestableTabling> {
   // Soonest first: the request with the least notice left is the one CSC most
   // needs to see today.
   lines.sort((a, b) => a.sessions[0].date.localeCompare(b.sessions[0].date))
-  return { lines, skipped }
+  incomplete.sort((a, b) => a.firstDate.localeCompare(b.firstDate))
+  return { lines, skipped, incomplete }
 }

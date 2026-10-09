@@ -28,6 +28,16 @@ interface SkippedTablingRequest {
   lastDate: string | null
 }
 
+/** Has an upcoming date, but a field CSC needs is empty, so it cannot be sent. */
+interface IncompleteTablingRequest {
+  id: string
+  bodyName: string
+  purpose: string
+  requesterName: string
+  firstDate: string
+  missing: string[]
+}
+
 function formatDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
 }
@@ -53,6 +63,7 @@ function formatStamp(ts: string) {
 export default function AutoRequestModal({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
   const [lines, setLines] = useState<TablingRequestLine[]>([])
   const [skipped, setSkipped] = useState<SkippedTablingRequest[]>([])
+  const [incomplete, setIncomplete] = useState<IncompleteTablingRequest[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [recipient, setRecipient] = useState('')
   const [recipientIsReal, setRecipientIsReal] = useState(false)
@@ -72,6 +83,7 @@ export default function AutoRequestModal({ onClose, onSent }: { onClose: () => v
       const data = await res.json()
       setLines(data.lines ?? [])
       setSkipped(data.skipped ?? [])
+      setIncomplete(data.incomplete ?? [])
       setRecipient(data.recipient ?? '')
       setRecipientIsReal(!!data.recipientIsReal)
       setBlocked(data.blocked ?? null)
@@ -83,6 +95,7 @@ export default function AutoRequestModal({ onClose, onSent }: { onClose: () => v
       setError(e instanceof Error ? e.message : 'Could not load the list.')
       setLines([])
       setSkipped([])
+      setIncomplete([])
     }
     setLoading(false)
   }, [])
@@ -163,7 +176,7 @@ export default function AutoRequestModal({ onClose, onSent }: { onClose: () => v
     <BookingModal title="Auto-Request — Ask CSC for Tables" onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm text-[#93b8d8]">
-          Every tabling request in <span className="text-[#fb923c] font-medium">Ops Review</span> with an upcoming date is listed below.
+          Every tabling request in <span className="text-[#fb923c] font-medium">Ops Review</span> with an upcoming date and every detail filled in is listed below.
           Tick the ones to send; CSC gets a single email with each request&apos;s dates, times, preferred locations and table counts,
           and those requests move to <span className="text-[#a78bfa] font-medium">Awaiting CSC</span>. Room requests are not included.
         </p>
@@ -239,9 +252,38 @@ export default function AutoRequestModal({ onClose, onSent }: { onClose: () => v
           )}
 
           {!loading && lines.length === 0 && !error && (
-            <p className="text-sm text-[#6a96bb]">No tabling request in Ops Review has an upcoming date.</p>
+            <p className="text-sm text-[#6a96bb]">
+              {incomplete.length > 0
+                ? 'No tabling request in Ops Review is ready to send.'
+                : 'No tabling request in Ops Review has an upcoming date.'}
+            </p>
           )}
         </div>
+
+        {/*
+          Not selectable, and named with what is missing, so an admin can go and
+          ask the requester for it rather than wonder why a request is absent.
+          Sending one would put "Not specified" in front of CSC, which is a
+          question they have to send back before they can reserve anything.
+        */}
+        {incomplete.length > 0 && !loading && (
+          <div className="border border-[#fb923c]/40 bg-[#3d2200]/40 rounded-lg px-3 py-2.5">
+            <p className="text-xs text-[#fb923c] font-medium mb-1">
+              {incomplete.length} not listed — missing details
+            </p>
+            <p className="text-xs text-[#93b8d8] mb-1.5">
+              These cannot be sent until every field is filled in. Get the rest from the requester, or handle them with CSC directly.
+            </p>
+            <ul className="text-xs text-[#6a96bb] space-y-1">
+              {incomplete.map(ic => (
+                <li key={ic.id}>
+                  {ic.bodyName} · {ic.purpose || <em>no purpose</em>} · {formatDate(ic.firstDate)} · requested by {ic.requesterName}
+                  <span className="block text-[#fb923c]">Missing: {ic.missing.join(', ')}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/*
           Shown so they are not mistaken for handled. There is nothing to ask CSC
