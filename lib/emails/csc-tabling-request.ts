@@ -18,8 +18,7 @@ interface CscTablingRequestParams {
 // this names where they go, and keeps a reply for when a request cannot be met.
 const REPLY_NOTE =
   'Please send reservation confirmations to sgaOperations@northeastern.edu. ' +
-  'If you cannot fulfill this request as proposed, please reply to this email and add sgaOperations@northeastern.edu. ' +
-  'This inbox is a no-reply.'
+  'If you cannot fulfill this request as proposed, please reply to this email and add sgaOperations@northeastern.edu.'
 
 const INFORMATION_ONLY = 'All tabling in this request is information only.'
 
