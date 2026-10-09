@@ -9,6 +9,7 @@ import { OPS_REVIEW } from '@/lib/request-status'
 import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-times'
 import {
   LOCATION_ERROR,
+  LOCATION_REQUIRED_ERROR,
   TABLES_ERROR,
   cleanLocation,
   invalidTableCount,
@@ -142,21 +143,26 @@ export async function POST(request: Request) {
    * Resolved before anything is written, so a bad number cannot leave a request
    * row behind with no sessions under it. The table count is required here --
    * Operational Affairs has to reserve a specific number and was previously
-   * guessing -- while the location stays optional, being a preference in the
-   * same sense as a room request's preferred room.
+   * guessing -- and so, since Auto-Request (issue #226), is the location, which
+   * now goes to CSC as written.
    *
-   * The Slack quick-request flow writes its own row and asks for neither, which
-   * is why the columns are nullable rather than NOT NULL.
+   * The columns stay nullable: requests from before either was required have
+   * nothing honest to put there, and Auto-Request sets those aside as incomplete.
    */
   const tablingSessions: {
     session_date: string
     start_time: string
     end_time: string
-    location: string | null
+    location: string
     tables: number
   }[] = []
 
   if (type === 'Tabling') {
+    // A tabling request with no sessions asks for nothing, and would sit in Ops
+    // Review as an incomplete request no one can act on.
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      return NextResponse.json({ error: 'Add at least one tabling session.' }, { status: 400 })
+    }
     for (const s of (sessions ?? []) as { session_date: string; start_time: string; end_time: string; location?: unknown; tables?: unknown }[]) {
       if (invalidTableCount(s.tables)) {
         return NextResponse.json({ error: TABLES_ERROR }, { status: 400 })
@@ -164,6 +170,10 @@ export async function POST(request: Request) {
       const location = cleanLocation(s.location)
       if (location === undefined) {
         return NextResponse.json({ error: LOCATION_ERROR }, { status: 400 })
+      }
+      // Blank counts as missing: cleanLocation folds whitespace to null.
+      if (location === null) {
+        return NextResponse.json({ error: LOCATION_REQUIRED_ERROR }, { status: 400 })
       }
       tablingSessions.push({
         session_date: s.session_date,
