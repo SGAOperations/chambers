@@ -161,7 +161,8 @@ export default function AutoCancelModal({ onClose }: { onClose: () => void }) {
     <BookingModal title="Auto-Cancel — Request CSC Cancellation" onClose={onClose}>
       <div className="space-y-4">
         <p className="text-sm text-[#93b8d8]">
-          Every booking marked <span className="text-[#fb923c] font-medium">Pending Cancellation</span> is listed below.
+          Every upcoming booking marked <span className="text-[#fb923c] font-medium">Pending Cancellation</span> is listed below,
+          apart from any whose cancellation request was dismissed.
           Tick the ones to include; CSC gets a single request with the date, time and reservation code of each,
           and each booking then takes the status its cancellation asked for —
           <span className="text-[#f0f6ff]"> Cancelled</span>, or <span className="text-[#f0f6ff]">Virtual</span> if the meeting is moving online.

@@ -6,10 +6,12 @@ import { canWriteAdmin } from '@/lib/admin-roles'
 import { notifyCancelledReservations } from '@/lib/room-invites'
 import { waitUntil } from '@vercel/functions'
 import { sendCscCancellationRequest } from '@/lib/emails/csc-cancellation-request'
+import { todayInAppZone } from '@/lib/app-zone'
 import {
   applyCancellationOutcomes,
   cancellationAuditRows,
   collectPending,
+  isUpcoming,
   lineKey,
   requestsFullyCovered,
 } from '@/lib/pending-cancellations'
@@ -24,6 +26,10 @@ const adminSupabase = db
  * booking type and a date range and act on whatever matched, which made the
  * filter -- something you set to look around with -- decide what got cancelled.
  * The admin now picks rows explicitly, and this is the list they pick from.
+ *
+ * Whole, but not unbounded: a date already gone by is left out, because there is
+ * no room left for CSC to release (issue #224). Mark as Done on the
+ * Cancellations tab is still there for settling one of those.
  */
 export async function GET() {
   const supabase = db
@@ -41,7 +47,7 @@ export async function GET() {
   const rateLimitRes = await checkRateLimit(user.id)
   if (rateLimitRes) return rateLimitRes
 
-  const { lines, skipped } = await collectPending()
+  const { lines, skipped } = await collectPending({ from: todayInAppZone() })
 
   return NextResponse.json({
     lines: lines.map(l => ({ ...l, key: lineKey(l) })),
@@ -108,8 +114,16 @@ export async function POST(request: Request) {
     )
   }
 
+  // Collected whole and narrowed here, rather than asking collectPending for
+  // the upcoming dates alone, because the two uses want different sets. What
+  // can be selected is what the GET offered: today onwards. Whether a request
+  // is finished is judged against every date it covers, past ones included --
+  // a series request with a week that went by still pending has not been dealt
+  // with just because the future weeks were sent, and closing it would hide
+  // that week from the Cancellations tab, the one place left to settle it.
   const { lines } = await collectPending()
-  const available = new Map(lines.map(l => [lineKey(l), l]))
+  const today = todayInAppZone()
+  const available = new Map(lines.filter(l => isUpcoming(l.date, today)).map(l => [lineKey(l), l]))
 
   const selected = requested.map(k => available.get(k)).filter(l => l !== undefined)
   const missing = requested.filter(k => !available.has(k))
