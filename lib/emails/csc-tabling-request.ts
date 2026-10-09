@@ -14,6 +14,13 @@ interface CscTablingRequestParams {
   replyTo?: string
 }
 
+// CSC sends reservation confirmations on their own rather than as a reply, so
+// this names where they go, and keeps a reply for when a request cannot be met.
+const REPLY_NOTE =
+  'Please send reservation confirmations to sgaOperations@northeastern.edu. ' +
+  'If you cannot fulfill this request as proposed, please reply to this email and add sgaOperations@northeastern.edu. ' +
+  'This inbox is a no-reply.'
+
 const INFORMATION_ONLY = 'All tabling in this request is information only.'
 
 function tablesText(tables: number | null): string {
@@ -101,7 +108,7 @@ ${INFORMATION_ONLY}
 ${textBlocks}
 Requested by ${sRequestedBy}.
 
-Please reply all with a reservation code for each session you can accommodate, and let us know if any cannot be, or if a different location or time would work instead.
+${REPLY_NOTE}
 
 Thank you,
 SGA Operational Affairs Team`,
@@ -111,7 +118,7 @@ SGA Operational Affairs Team`,
       <p style="margin:0 0 16px;"><strong>${INFORMATION_ONLY}</strong></p>
       ${htmlBlocks}
       <p style="margin:0 0 16px;">Requested by <strong>${escapeHtml(sRequestedBy)}</strong>.</p>
-      <p style="margin:0 0 16px;color:#555;">Please reply all with a reservation code for each session you can accommodate, and let us know if any cannot be, or if a different location or time would work instead.</p>
+      <p style="margin:0 0 16px;color:#555;">${REPLY_NOTE}</p>
       <p style="margin:0;">Thank you,<br>SGA Operational Affairs Team</p>
     `),
   })
