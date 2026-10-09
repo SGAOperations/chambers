@@ -14,6 +14,8 @@ interface CscTablingRequestParams {
   replyTo?: string
 }
 
+const INFORMATION_ONLY = 'All tabling in this request is information only.'
+
 function tablesText(tables: number | null): string {
   return tables == null ? 'Not specified' : `${tables} ${tables === 1 ? 'table' : 'tables'}`
 }
@@ -32,6 +34,10 @@ function tablesText(tables: number | null): string {
  *
  * The location is labelled a preference because it is one: the requester typed
  * where they would like to be, and CSC decides where tables actually go.
+ *
+ * Every request says the tabling is information only, as fixed text rather than
+ * anything a member chose: it is true of all SGA tabling, so it is stated once
+ * for the whole email instead of being left to be read off each purpose line.
  */
 export async function sendCscTablingRequest(params: CscTablingRequestParams) {
   const { requests, requestedBy, to, cc, replyTo } = params
@@ -90,6 +96,8 @@ export async function sendCscTablingRequest(params: CscTablingRequestParams) {
 
 SGA would like to reserve tables for the ${sessionCount} ${sessionsPlural} below, across ${requests.length} ${requestsPlural}:
 
+${INFORMATION_ONLY}
+
 ${textBlocks}
 Requested by ${sRequestedBy}.
 
@@ -100,6 +108,7 @@ SGA Operational Affairs Team`,
     html: buildEmailHtml(`
       <p style="margin:0 0 16px;">Hello,</p>
       <p style="margin:0 0 16px;">SGA would like to reserve tables for the <strong>${sessionCount} ${sessionsPlural}</strong> below, across ${requests.length} ${requestsPlural}:</p>
+      <p style="margin:0 0 16px;"><strong>${INFORMATION_ONLY}</strong></p>
       ${htmlBlocks}
       <p style="margin:0 0 16px;">Requested by <strong>${escapeHtml(sRequestedBy)}</strong>.</p>
       <p style="margin:0 0 16px;color:#555;">Please reply all with a reservation code for each session you can accommodate, and let us know if any cannot be, or if a different location or time would work instead.</p>
