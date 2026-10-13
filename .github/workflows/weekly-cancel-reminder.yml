@@ -1,0 +1,30 @@
+name: weekly-cancel-reminder
+
+# Hits /api/cron/weekly-cancel-reminder on production, which reminds the
+# leadership channel set on the Management page to cancel any weekly room that
+# will not be used in the coming week -- only when that week has any held.
+#
+# A GitHub Action for the same reasons as slack-reminders.yml, and it fires
+# several times for the same reason too: GitHub schedules lag and are sometimes
+# skipped. The endpoint posts nothing on any day but Sunday or before noon
+# Eastern, and records what it posts, so the repeats are no-ops.
+#
+# 16:00-19:00 UTC is noon-3pm Eastern in EDT, 11am-2pm in EST. Under EST the
+# 16:00 run declines on the noon gate and the 17:00 one posts.
+#
+# Needs the CRON_SECRET repo secret, shared with slack-reminders.yml.
+
+on:
+  schedule:
+    - cron: '0 16,17,18,19 * * 0'
+  workflow_dispatch:
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post the weekly cancellation reminder
+        run: |
+          curl -fsS -m 60 --retry 2 \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://chambers.northeasternsga.com/api/cron/weekly-cancel-reminder
