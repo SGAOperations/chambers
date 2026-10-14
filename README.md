@@ -64,7 +64,7 @@ Say in the file's header comment what it changes and how to undo it. Migrations 
 
 Production deploys from `main`. `db/neon/README.md` covers setting up previews, rehearsing a migration, and the Supabase cutover that got us here.
 
-GitHub Actions runs the build on every pull request, and drives two schedules: keeping a warm function instance ready, and the Slack meeting reminders.
+GitHub Actions runs the build on every pull request, and drives three schedules: keeping a warm function instance ready, the Slack meeting reminders, and the Sunday reminder to cancel unused weekly rooms (its channel is set on the Management page).
 
 ## Contributing
 

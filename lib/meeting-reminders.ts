@@ -273,17 +273,16 @@ function meetingName(m: ResolvedMeeting): string {
 }
 
 /**
- * The line that says who a shared booking is for, or null for an ordinary
- * single-body one.
+ * The line that says who a multi-body booking is shared with, or null for any
+ * other.
  *
- * A reminder landing in a channel whose body did not make the booking has to
- * account for itself, and for a divisional booking this is also the only place
- * the owning body still gets named.
+ * A divisional booking gets none. Its headline already names the division, and
+ * the line that used to follow it -- "A divisional booking by <committee>, open
+ * to every body in <division>" -- put back the very attribution meetingName()
+ * exists to keep out: the committee that happened to file it, read by a
+ * division that is not that committee.
  */
 function sharingLine(m: ResolvedMeeting): string | null {
-  if (m.scope === 'divisional' && m.division) {
-    return `A divisional booking by ${esc(m.bodyName)}, open to every body in ${esc(m.division)}.`
-  }
   if (m.scope === 'multi' && m.peerNames.length) {
     return `A shared booking with ${listNames(m.peerNames.map(esc))}.`
   }
@@ -300,9 +299,10 @@ function sharingLine(m: ResolvedMeeting): string | null {
  *
  * A room or time that is missing says so rather than printing a blank.
  *
- * A booking shared beyond one body closes with a line saying so (issue #212),
- * on every status including Cancelled: a channel being told a meeting is off
- * should still be told whose.
+ * A multi-body booking closes with a line naming who it is shared with (issue
+ * #212), on every status including Cancelled: a channel being told a meeting is
+ * off should still be told whose. A divisional one is named by its headline
+ * alone.
  */
 export function formatReminder(m: ResolvedMeeting): string {
   const body = `*${esc(meetingName(m))}*`

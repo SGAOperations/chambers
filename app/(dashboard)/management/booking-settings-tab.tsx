@@ -89,6 +89,11 @@ export default function BookingSettingsTab() {
   const [paSaving, setPaSaving] = useState(false)
   const [paMsg, setPaMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
+  // Where the Sunday weekly-room cancellation reminder posts. Blank is off.
+  const [reminderChannel, setReminderChannel] = useState('')
+  const [reminderSaving, setReminderSaving] = useState(false)
+  const [reminderMsg, setReminderMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
   // Semester state
   const [semesters, setSemesters] = useState<Semester[]>([])
   const [semesterLoading, setSemesterLoading] = useState(true)
@@ -130,6 +135,8 @@ export default function BookingSettingsTab() {
         setMinHoursSpaces(data.min_hours_advance_spaces ?? 24)
         setNussoMinDaysRoom(data.nusso_min_days_advance_room ?? 0)
         setNussoMinDaysTabling(data.nusso_min_days_advance_tabling ?? 0)
+        const channel = (data as Record<string, unknown>).cancel_reminder_channel_id
+        setReminderChannel(typeof channel === 'string' ? channel : '')
         setPa(prev => {
           const merged = { ...prev }
           for (const k of Object.keys(PA_DEFAULTS)) {
@@ -199,6 +206,23 @@ export default function BookingSettingsTab() {
       setPaMsg({ ok: false, text: data.error || 'Something went wrong.' })
     }
     setPaSaving(false)
+  }
+
+  const handleReminderSave = async () => {
+    setReminderMsg(null)
+    setReminderSaving(true)
+    const res = await fetch('/api/administrator/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cancel_reminder_channel_id: reminderChannel.trim() || null }),
+    })
+    if (res.ok) {
+      setReminderMsg({ ok: true, text: reminderChannel.trim() ? 'Channel saved.' : 'Reminder turned off.' })
+    } else {
+      const data = await res.json()
+      setReminderMsg({ ok: false, text: data.error || 'Something went wrong.' })
+    }
+    setReminderSaving(false)
   }
 
   const handleCreateSemester = async () => {
@@ -401,6 +425,37 @@ export default function BookingSettingsTab() {
           className="mt-4 px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
         >
           {paSaving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+
+      {/* Sunday weekly-room cancellation reminder */}
+      <div>
+        <h2 className="text-sm font-semibold text-[#f0f6ff] mb-1">Weekly Cancellation Reminder</h2>
+        <p className="text-xs text-[#6a96bb] mb-4">
+          Every Sunday at noon, SGAssist reminds this Slack channel to cancel any weekly rooms that won&apos;t be used
+          in the coming week. It only posts when the active semester has weekly rooms reserved for that week. Use the
+          channel ID, not its name (in Slack, open the channel&apos;s details; the ID is at the bottom). The bot has
+          to be invited to the channel. Leave it blank to turn the reminder off.
+        </p>
+        <label className={labelCls}>Slack channel ID</label>
+        <input
+          type="text"
+          placeholder="e.g. C0821FJE50F"
+          value={reminderChannel}
+          onChange={e => { setReminderMsg(null); setReminderChannel(e.target.value) }}
+          className={inputCls}
+        />
+
+        {reminderMsg && (
+          <p className={`text-sm mt-3 ${reminderMsg.ok ? 'text-green-400' : 'text-[#c8102e]'}`}>{reminderMsg.text}</p>
+        )}
+
+        <button
+          onClick={handleReminderSave}
+          disabled={reminderSaving}
+          className="mt-4 px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
+        >
+          {reminderSaving ? 'Saving...' : 'Save'}
         </button>
       </div>
 

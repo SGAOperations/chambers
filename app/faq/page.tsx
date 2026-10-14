@@ -52,6 +52,21 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.1</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Every Sunday at noon, SGAssist reminds the leadership channel on Slack to cancel any weekly room that won&apos;t be used in the week ahead. A weekly room is booked for the whole semester at once, so a week a body skips is still held unless someone asks for it to be released &mdash; and the time to ask is before the week starts, not after the room has sat empty. The message says how many rooms each body is holding that week and links straight to My Rooms.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              It only posts when there is something to cancel, so a week with nothing booked stays quiet. Administrators who run the Management page can point it at a different channel, or switch it off, from Booking Settings.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Meeting reminders for a divisional booking no longer end by naming the committee that filed it. The reminder is for the whole division, and it now says so and nothing else.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               My Rooms now explains itself. Next to All Bookings there is a link, &ldquo;What do these statuses mean?&rdquo;, that lists every status a booking can carry &mdash; Reserved, Waitlisted, Pending Cancellation, Virtual and the rest &mdash; in the colour it appears in, with a line on what it means and whether you need to do anything about it.
