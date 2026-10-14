@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { isManagementRole } from '@/lib/admin-roles'
+import { SLACK_CHANNEL_ID_PATTERN } from '@/lib/weekly-cancel-reminder'
 
 const adminSupabase = db
 
@@ -94,7 +95,7 @@ export async function PATCH(request: Request) {
 
   const body = (await request.json()) as Record<string, unknown>
 
-  const patch: Record<string, number> = {}
+  const patch: Record<string, number | string | null> = {}
   for (const key of ALL_KEYS) {
     if (body[key] === undefined) continue
     const v = body[key]
@@ -107,13 +108,31 @@ export async function PATCH(request: Request) {
     patch[key] = v as number
   }
 
+  // Where the Sunday cancellation reminder posts. Blank switches it off. A
+  // channel id, not a name: Slack refuses a name, and would do so silently
+  // every Sunday rather than here.
+  if (body.cancel_reminder_channel_id !== undefined) {
+    const v = body.cancel_reminder_channel_id
+    const channel = typeof v === 'string' ? v.trim().toUpperCase() : v
+    if (channel === null || channel === '') {
+      patch.cancel_reminder_channel_id = null
+    } else if (typeof channel !== 'string' || !SLACK_CHANNEL_ID_PATTERN.test(channel)) {
+      return NextResponse.json(
+        { error: 'The reminder channel must be a Slack channel ID, like C0821FJE50F.' },
+        { status: 400 }
+      )
+    } else {
+      patch.cancel_reminder_channel_id = channel
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'No valid settings provided.' }, { status: 400 })
   }
 
   for (const [startKey, endKey] of RANGE_PAIRS) {
-    const start = patch[startKey]
-    const end = patch[endKey]
+    const start = patch[startKey] as number | undefined
+    const end = patch[endKey] as number | undefined
     if (start !== undefined && end !== undefined && start < end) {
       return NextResponse.json(
         { error: `${startKey} (far edge) cannot be less than ${endKey} (near edge).` },
