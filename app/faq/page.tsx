@@ -59,6 +59,9 @@ export default async function FaqPage() {
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               It only posts when there is something to cancel, so a week with nothing booked stays quiet. Administrators who run the Management page can point it at a different channel, or switch it off, from Booking Settings.
             </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Meeting reminders for a divisional booking no longer end by naming the committee that filed it. The reminder is for the whole division, and it now says so and nothing else.
+            </p>
           </section>
         </div>
 
