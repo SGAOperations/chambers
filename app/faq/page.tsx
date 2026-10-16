@@ -52,6 +52,15 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.2</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              You can now ask for a cancellation from Slack. <code>/chambers-cancel</code> lists the upcoming bookings you can cancel &mdash; the same ones My Rooms offers a Cancel button on &mdash; and asks whether it is a full cancellation or going virtual, and whether it is for that date only or the whole booking. It files the same request My Rooms does, so Operational Affairs hears about it straight away and the booking shows as Pending Cancellation until it is settled.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.1</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               Every Sunday at noon, SGAssist reminds the leadership channel on Slack to cancel any weekly room that won&apos;t be used in the week ahead. A weekly room is booked for the whole semester at once, so a week a body skips is still held unless someone asks for it to be released &mdash; and the time to ask is before the week starts, not after the room has sat empty. The message says how many rooms each body is holding that week and links straight to My Rooms.
