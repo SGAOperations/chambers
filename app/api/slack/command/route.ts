@@ -387,6 +387,15 @@ export async function POST(request: Request) {
     return new Response(null, { status: 200 })
   }
 
+  // Named, not a fallback. Every command not matched above used to open the
+  // room modal, so a command this deployment does not know yet -- one registered
+  // in Slack ahead of the release that handles it -- turned into a room request.
+  if (command !== '/chambers-room' && command !== '/chambers-table') {
+    return ephemeral(
+      `Chambers does not recognise \`${command ?? ''}\` yet. Try \`/chambers-room\`, \`/chambers-table\`, \`/chambers-cancel\` or \`/chambers-reminders\`.`
+    )
+  }
+
   const { data: bodies } = await adminSupabase
     .from('bodies')
     .select('id, name')
