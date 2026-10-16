@@ -4,6 +4,7 @@ import { verifySlackRequest } from '@/lib/slack-verify'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { ephemeral } from '@/lib/slack'
 import { MAX_LOCATION, MAX_TABLES } from '@/lib/tabling-request'
+import { buildCancelModal, loadCancellableSessions } from '@/lib/slack-cancel'
 
 const adminSupabase = db
 
@@ -373,6 +374,19 @@ export async function POST(request: Request) {
   // Everything below opens a modal, which Slack only allows against a trigger.
   if (!triggerId) return new Response('Bad Request', { status: 400 })
 
+  if (command === '/chambers-cancel') {
+    const sessions = await loadCancellableSessions(adminSupabase, connection.chambers_user_id)
+    // An empty select is not a modal Slack will open, and an empty form would be
+    // a worse answer than saying so.
+    if (sessions.length === 0) {
+      return ephemeral(
+        'You have no upcoming bookings to cancel. Only Leadership of a body can request a cancellation, and bookings already pending, cancelled or virtual are not listed.'
+      )
+    }
+    await openModal(triggerId, buildCancelModal(sessions))
+    return new Response(null, { status: 200 })
+  }
+
   const { data: bodies } = await adminSupabase
     .from('bodies')
     .select('id, name')
@@ -384,14 +398,18 @@ export async function POST(request: Request) {
       ? buildTablingModal(bodies ?? [])
       : buildRoomModal(bodies ?? [])
 
+  await openModal(triggerId, modal)
+
+  return new Response(null, { status: 200 })
+}
+
+async function openModal(triggerId: string, view: unknown) {
   await fetch('https://slack.com/api/views.open', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
     },
-    body: JSON.stringify({ trigger_id: triggerId, view: modal }),
+    body: JSON.stringify({ trigger_id: triggerId, view }),
   })
-
-  return new Response(null, { status: 200 })
 }
