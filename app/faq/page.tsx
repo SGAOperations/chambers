@@ -52,6 +52,18 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.3</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              <code>/chambers-cancel</code> now says whose each booking is. The list is grouped by body &mdash; or by division, for a divisional booking &mdash; and every entry names it too, so someone who leads several bodies can tell one committee&apos;s General Meeting from another&apos;s. The confirmation it sends names the body as well.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Auto-Request loads tabling requests again. It had been failing to fetch the list since it arrived in v2.2.0.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.2</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               You can now ask for a cancellation from Slack. <code>/chambers-cancel</code> lists the upcoming bookings you can cancel &mdash; the same ones My Rooms offers a Cancel button on &mdash; and asks whether it is a full cancellation or going virtual, and whether it is for that date only or the whole booking. It files the same request My Rooms does, so Operational Affairs hears about it straight away and the booking shows as Pending Cancellation until it is settled.
