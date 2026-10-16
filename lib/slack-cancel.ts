@@ -78,9 +78,41 @@ function truncate(text: string, max: number): string {
 }
 
 function optionText(s: CancellableSession): string {
-  const what = s.purpose?.trim() || s.scopeLabel
+  // The body is in the text as well as the group heading because a closed
+  // select shows only the chosen option's text -- the heading is gone the moment
+  // something is picked, and that is when the requester checks they have the
+  // right one (issue #241). It goes before the purpose so truncation eats the
+  // location first, not the body.
+  const purpose = s.purpose?.trim()
+  const what = purpose && purpose !== s.scopeLabel ? `${s.scopeLabel}: ${purpose}` : s.scopeLabel
   const where = s.location ? ` — ${s.location}` : ''
   return truncate(`${formatDate(s.date)} ${formatTime(s.startTime)} · ${what}${where}`, MAX_OPTION_TEXT)
+}
+
+/**
+ * The options under a heading per body (issue #241). Someone with Leadership in
+ * several bodies otherwise saw one flat run of dates and purposes with nothing
+ * saying whose each was -- and two committees' "General Meeting" read the same.
+ *
+ * Headed by scopeLabel, the name My Rooms groups All Bookings by, so a
+ * divisional booking sits under its division and a multi booking under "X + N
+ * others" rather than whichever body filed it. Groups keep the order of their
+ * soonest session, and each keeps its sessions in date order.
+ */
+function groupByBody(sessions: CancellableSession[]) {
+  const groups = new Map<string, { label: string; sessions: CancellableSession[] }>()
+  for (const s of sessions) {
+    const group = groups.get(s.scopeKey) ?? { label: s.scopeLabel, sessions: [] }
+    group.sessions.push(s)
+    groups.set(s.scopeKey, group)
+  }
+  return [...groups.values()].map(g => ({
+    label: { type: 'plain_text', text: truncate(g.label || 'Other', MAX_OPTION_TEXT) },
+    options: g.sessions.map(s => ({
+      text: { type: 'plain_text', text: optionText(s) },
+      value: sessionOptionValue(s),
+    })),
+  }))
 }
 
 /** bookingId and session id, which is all the submission needs to find it again. */
@@ -99,10 +131,7 @@ export function buildCancelModal(sessions: CancellableSession[]) {
         type: 'static_select',
         action_id: 'session_action',
         placeholder: { type: 'plain_text', text: 'Select a date' },
-        options: shown.map(s => ({
-          text: { type: 'plain_text', text: optionText(s) },
-          value: sessionOptionValue(s),
-        })),
+        option_groups: groupByBody(shown),
       },
     },
     {
