@@ -85,7 +85,12 @@ async function handleCancelSubmission(payload: any): Promise<Response> {
     return blockError({ session_block: 'Something went wrong. Please try again.' })
   }
 
-  const what = session.purpose?.trim() || session.scopeLabel
+  const purpose = session.purpose?.trim()
+  // Names the body too (issue #241): someone leading several bodies otherwise
+  // gets a confirmation that could be about any of them.
+  const what = purpose && purpose !== session.scopeLabel
+    ? `${purpose} (${session.scopeLabel})`
+    : session.scopeLabel
   const which = scope === 'occurrence' ? `on ${session.date}` : '(the whole booking)'
   confirmToUser(
     slackUserId,
