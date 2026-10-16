@@ -11,6 +11,12 @@ import {
   cleanLocation,
   invalidTableCount,
 } from '@/lib/tabling-request'
+import { fileCancellationRequest } from '@/lib/cancellation-request'
+import {
+  CANCEL_CALLBACK_ID,
+  loadCancellableSessions,
+  parseCancelSubmission,
+} from '@/lib/slack-cancel'
 
 const adminSupabase = db
 
@@ -22,6 +28,71 @@ function getMinDateStr(days: number): string {
 
 function blockError(errors: Record<string, string>) {
   return Response.json({ response_action: 'errors', errors })
+}
+
+function confirmToUser(slackUserId: string, text: string) {
+  waitUntil(
+    fetch('https://slack.com/api/chat.postEphemeral', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+      },
+      body: JSON.stringify({ channel: slackUserId, user: slackUserId, text }),
+    }).catch(() => {})
+  )
+}
+
+/**
+ * A /chambers-cancel submission. The request itself is filed by the same code
+ * as My Rooms' (lib/cancellation-request.ts); what is Slack's own is finding
+ * the session again and proving the caller may cancel it (lib/slack-cancel.ts).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleCancelSubmission(payload: any): Promise<Response> {
+  const slackUserId: string = payload.user.id
+
+  const { data: connection } = await adminSupabase
+    .from('slack_connections')
+    .select('chambers_user_id')
+    .eq('slack_user_id', slackUserId)
+    .maybeSingle()
+
+  if (!connection) {
+    return blockError({ session_block: 'Your Slack account is not linked to Chambers. Please connect at https://chambers.northeasternsga.com/slack/connect' })
+  }
+
+  const rateLimitRes = await checkRateLimit(connection.chambers_user_id)
+  if (rateLimitRes) return rateLimitRes
+
+  const sessions = await loadCancellableSessions(adminSupabase, connection.chambers_user_id)
+  const parsed = parseCancelSubmission(payload.view.state.values, sessions)
+  if (!parsed.ok) return blockError(parsed.errors)
+
+  const { session, scope, cancellationType } = parsed.value
+
+  const { error } = await fileCancellationRequest(adminSupabase, {
+    bookingId: session.bookingId,
+    bookingType: session.type,
+    occurrenceId: scope === 'occurrence' ? session.id : null,
+    scope,
+    cancellationType,
+    requestedBy: connection.chambers_user_id,
+  })
+
+  if (error) {
+    console.error('slack /chambers-cancel failed:', error)
+    return blockError({ session_block: 'Something went wrong. Please try again.' })
+  }
+
+  const what = session.purpose?.trim() || session.scopeLabel
+  const which = scope === 'occurrence' ? `on ${session.date}` : '(the whole booking)'
+  confirmToUser(
+    slackUserId,
+    `Your ${cancellationType === 'Virtual' ? 'request to go virtual' : 'cancellation request'} for ${what} ${which} has been submitted. You can follow it at https://chambers.northeasternsga.com/my-rooms`
+  )
+
+  return Response.json({ response_action: 'clear' })
 }
 
 export async function POST(request: Request) {
@@ -46,6 +117,9 @@ export async function POST(request: Request) {
   }
 
   const callbackId: string = payload.view.callback_id
+
+  if (callbackId === CANCEL_CALLBACK_ID) return handleCancelSubmission(payload)
+
   const isRoom = callbackId === 'chambers_room_request'
   const isTabling = callbackId === 'chambers_table_request'
 
