@@ -12,6 +12,7 @@ import { planInvites } from '@/lib/room-calendar'
 import { appToday, sendPerAudience, weeklyRoomSeries, weeklyRoomSessions, type OccurrenceRow } from '@/lib/room-invites'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { canWriteAdmin } from '@/lib/admin-roles'
+import { queueEventChannel, queueEventChannelNotice, UNMARKED_NOTICE, type EventTarget } from '@/lib/event-channels'
 import { waitUntil } from '@vercel/functions'
 
 import {
@@ -372,8 +373,30 @@ export async function PATCH(request: Request) {
   // recipient's event is moved rather than duplicated.
   const { data: storedOccurrences } = await adminSupabase
     .from('weekly_room_occurrences')
-    .select('id, occurrence_date, room_name, start_time, end_time, status, senate_type, purpose')
+    .select('id, occurrence_date, room_name, start_time, end_time, status, senate_type, purpose, is_event')
     .eq('weekly_booking_id', weekly_id)
+
+  // A weekly event is marked week by week, and each week that became one gets
+  // its own Slack channel; a week that stopped being one hears about it in
+  // its channel. Queued, so the save stands whatever Slack says
+  // (lib/event-channels.ts).
+  {
+    const wasEvent = new Set(
+      ((prevOccurrences ?? []) as { occurrence_date: string; is_event: boolean | null }[])
+        .filter(o => o.is_event)
+        .map(o => o.occurrence_date)
+    )
+    const stored = (storedOccurrences ?? []) as { id: string; occurrence_date: string; is_event: boolean }[]
+    for (const o of stored) {
+      if (o.is_event && !wasEvent.has(o.occurrence_date)) {
+        queueEventChannel({ kind: 'occurrence', occurrenceId: o.id })
+      }
+    }
+    const unmarked: EventTarget[] = stored
+      .filter(o => !o.is_event && wasEvent.has(o.occurrence_date))
+      .map(o => ({ kind: 'occurrence', occurrenceId: o.id }))
+    queueEventChannelNotice(unmarked, UNMARKED_NOTICE)
+  }
 
   const { data: bodyData } = await adminSupabase
     .from('bodies')
