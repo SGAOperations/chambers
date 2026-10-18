@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
   const call = await getLatestCall(db)
   if (!isCallOpen(call)) {
-    return NextResponse.json({ error: 'The call for programs is closed.' }, { status: 409 })
+    return NextResponse.json({ error: 'The Call for Programs is closed.' }, { status: 409 })
   }
 
   const bodyId = raw.body_id

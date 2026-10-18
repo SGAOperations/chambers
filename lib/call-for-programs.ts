@@ -183,7 +183,7 @@ export function formatCallTime(iso: string): string {
 export function formatCallOpenedMessage(closesAt: string | null): string {
   const deadline = closesAt ? ` It closes ${formatCallTime(closesAt)}.` : ''
   return (
-    `:mega: *The call for programs is open.*${deadline}\n` +
+    `:mega: *The Call for Programs is open.*${deadline}\n` +
     `Body leadership: tell Operational Affairs whether to keep your weekly booking as it is or change its room or time. ` +
     `<${CHAMBERS_URL}/request?type=programs|Submit in Chambers>`
   )

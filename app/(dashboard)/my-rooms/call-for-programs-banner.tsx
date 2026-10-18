@@ -30,7 +30,7 @@ export default function CallForProgramsBanner() {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-[#c8102e]/50 bg-[#2d0810] px-5 py-4">
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-[#f0f6ff]">The call for programs is open</p>
+        <p className="text-sm font-semibold text-[#f0f6ff]">The Call for Programs is open</p>
         <p className="text-xs text-[#fca5a5]">
           Still to submit: {state.pending.join(', ')}
           {state.closesAt && <> · closes {formatCallTime(state.closesAt)}</>}

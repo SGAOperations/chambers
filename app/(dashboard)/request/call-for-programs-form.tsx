@@ -207,7 +207,7 @@ export default function CallForProgramsForm({
                 <label className={labelCls}>Room or room type *</label>
                 <input
                   type="text"
-                  placeholder="e.g. Curry 344, or a classroom with a projector"
+                  placeholder="e.g. Curry 344, bigger meeting room than last semester"
                   maxLength={MAX_ROOM}
                   value={room}
                   onChange={e => setRoom(e.target.value)}
