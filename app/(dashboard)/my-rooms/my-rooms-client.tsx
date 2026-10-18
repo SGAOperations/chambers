@@ -7,6 +7,7 @@ import BookingDetailModal from './booking-detail-modal'
 import NotificationBell from './notification-bell'
 import CalendarView from './calendar-view'
 import StatusGlossaryModal from './status-glossary-modal'
+import CallForProgramsBanner from './call-for-programs-banner'
 import { Skeleton } from '@/app/_components/skeleton'
 import { wantsSenateSession } from '@/lib/senate-types'
 import {
@@ -172,6 +173,8 @@ export default function MyRoomsClient({
 
   return (
     <div className="space-y-10">
+      <CallForProgramsBanner />
+
       {/* My Upcoming Spaces */}
       <section>
         <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
