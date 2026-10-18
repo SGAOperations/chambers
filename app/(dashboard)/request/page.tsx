@@ -19,8 +19,17 @@ import {
 import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-times'
 import { LOCATION_REQUIRED_ERROR, MAX_LOCATION, MAX_TABLES, TABLES_ERROR, invalidTableCount } from '@/lib/tabling-request'
 import { canWriteAdmin } from '@/lib/admin-roles'
+import CallForProgramsForm, { type CallState } from './call-for-programs-form'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
+
+/**
+ * The tabs: the three request types, and the call for programs as the last
+ * one while a call is open. That one is not a room request -- it posts to
+ * /api/call-for-programs and has its own form.
+ */
+const CALL_TAB = 'Call for Programs' as const
+type Tab = RequestType | typeof CALL_TAB
 
 interface Body {
   id: string
@@ -100,7 +109,7 @@ const emptySession = (): TablingSession => ({
 
 const emptyOneTimeSession = (): OneTimeSession => ({ session_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME, room_name: '' })
 
-function GuidelinesPanel({ type }: { type: RequestType }) {
+function GuidelinesPanel({ type }: { type: Tab }) {
   const email = 'sgaOperations@northeastern.edu'
 
   const emailLine = (
@@ -144,6 +153,18 @@ function GuidelinesPanel({ type }: { type: RequestType }) {
             {email}
           </a>
         </p>
+      </div>
+    )
+  }
+
+  if (type === CALL_TAB) {
+    return (
+      <div className="bg-[#0f2a4a] border border-[#1e5080] rounded-xl p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-[#f0f6ff]">Call for Programs</h2>
+        <p className="text-xs text-[#6a96bb] leading-relaxed">
+          Operational Affairs books every body&apos;s weekly room for the semester at once. Tell us now whether yours should stay as it was or move, so it can be requested with the rest.
+        </p>
+        {emailLine}
       </div>
     )
   }
@@ -200,7 +221,10 @@ function getMinDate(days: number): string {
 export default function RequestPage() {
   const router = useRouter()
   const { isAdmin, adminRole } = useIdentity()
-  const [type, setType] = useState<RequestType>('One-Time Room')
+  const [type, setType] = useState<Tab>('One-Time Room')
+  // The open call for programs and the bodies this user leads, if any.
+  const [callState, setCallState] = useState<CallState>({ call: null, bodies: [] })
+  const showCallTab = !!callState.call && callState.bodies.length > 0
   const [bodies, setBodies] = useState<Body[]>([])
   // The multi-body pool is every active body; leadership may request any combination.
   const [allBodies, setAllBodies] = useState<Body[]>([])
@@ -243,6 +267,9 @@ export default function RequestPage() {
   /** Tabling books a table, not a room, so there is no capacity to fit. */
   const needsCapacity = type === 'One-Time Room' || type === 'Weekly Room'
 
+  const fetchCall = (): Promise<CallState | null> =>
+    fetch('/api/call-for-programs').then(res => (res.ok ? res.json() : null))
+
   useEffect(() => {
     const fetchBodies = async () => {
       const res = await fetch('/api/request')
@@ -260,6 +287,16 @@ export default function RequestPage() {
       setBodiesLoading(false)
     }
     fetchBodies()
+    // Opens the tab straight away when the page was reached from the My Rooms
+    // banner or the Slack message (?type=programs).
+    fetchCall().then(data => {
+      if (!data) return
+      setCallState(data)
+      if (data.call && data.bodies.length > 0 &&
+          new URLSearchParams(window.location.search).get('type') === 'programs') {
+        setType(CALL_TAB)
+      }
+    })
   }, [])
 
   const fetchMyRequests = async () => {
@@ -454,7 +491,7 @@ export default function RequestPage() {
           screens instead of overflowing off-screen (issue #24), matching the Administrator
           tab bar's established pattern. */}
       <div className="flex gap-1 border-b border-[#1e5080] overflow-x-auto overflow-y-hidden">
-        {(['One-Time Room', 'Weekly Room', 'Tabling'] as RequestType[]).map(t => (
+        {([...(['One-Time Room', 'Weekly Room', 'Tabling'] as Tab[]), ...(showCallTab ? [CALL_TAB] : [])] as Tab[]).map(t => (
           <button
             key={t}
             onClick={() => setType(t)}
@@ -467,6 +504,7 @@ export default function RequestPage() {
             {t === 'One-Time Room' ? 'One-Time/Multiple Room' : t}
           </button>
         ))}
+        {type !== CALL_TAB && (
         <label className="ml-auto flex items-center gap-2.5 cursor-pointer pb-2 pl-3 select-none flex-shrink-0">
           <span className={`text-sm font-medium whitespace-nowrap transition-colors ${showMyRequests ? 'text-[#f0f6ff]' : 'text-[#93b8d8]'}`}>
             Viewing Previous Requests
@@ -490,9 +528,12 @@ export default function RequestPage() {
             />
           </button>
         </label>
+        )}
       </div>
 
-      {showMyRequests ? (
+      {type === CALL_TAB ? (
+        <CallForProgramsForm state={callState} onSubmitted={() => fetchCall().then(data => { if (data) setCallState(data) })} />
+      ) : showMyRequests ? (
         <div className="space-y-3">
           {requestsLoading ? (
             [0, 1, 2].map(i => (

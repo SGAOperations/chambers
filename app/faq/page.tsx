@@ -52,6 +52,18 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.3.0</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              The Call for Programs is in Chambers. Operational Affairs opens it from Management, optionally with a time it closes on its own, and opening it posts once to the leadership channel in Slack. While it is open, body leadership answer from a new Call for Programs tab on the Request page: keep last fall or spring&apos;s weekly booking as it was, or change its room, its time, or both. Each body answers once, and My Rooms shows a banner until every body you lead has.
+            </p>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Semesters now say whether they are a fall, spring or summer term, set under Management &rsaquo; Other Settings.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.2.3</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               <code>/chambers-cancel</code> now says whose each booking is. The list is grouped by body &mdash; or by division, for a divisional booking &mdash; and every entry names it too, so someone who leads several bodies can tell one committee&apos;s General Meeting from another&apos;s. The confirmation it sends names the body as well.

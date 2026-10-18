@@ -5,6 +5,7 @@ import { getJson } from '@/lib/fetch-json'
 import { useIdentity } from '../identity-context'
 import { Skeleton } from '@/app/_components/skeleton'
 import EventFormsSection from './event-forms-section'
+import { SEMESTER_TERMS } from '@/lib/call-for-programs'
 
 function BookingSettingsTabSkeleton() {
   return (
@@ -68,6 +69,8 @@ const PA_RANGE_ROWS: [string, string, string][] = [
 interface Semester {
   id: string
   name: string
+  /** Fall / Spring / Summer; the call for programs looks back to the latest fall or spring. */
+  term: string | null
   is_active: boolean
   end_date: string | null
   created_at: string
@@ -261,6 +264,24 @@ export default function BookingSettingsTab() {
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
       setEndDateError({ id, text: data.error || 'Could not save that date.' })
+      fetchSemesters()
+    }
+  }
+
+  // Which term a semester is (0018), saved as soon as it is picked like the
+  // end date. Errors share the end date's line, since only one row is edited
+  // at a time.
+  const saveTerm = async (id: string, term: string | null) => {
+    setEndDateError(null)
+    setSemesters(prev => prev.map(s => s.id === id ? { ...s, term } : s))
+    const res = await fetch('/api/administrator/semesters', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, term }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setEndDateError({ id, text: data.error || 'Could not save the term.' })
       fetchSemesters()
     }
   }
@@ -510,6 +531,16 @@ export default function BookingSettingsTab() {
                   onChange={e => saveEndDate(sem.id, e.target.value || null)}
                   className="bg-[#0a1628] border border-[#1e5080] rounded-md px-2 py-1 text-xs text-[#f0f6ff] [color-scheme:dark] focus:outline-none focus:border-[#c8102e]"
                 />
+                <label htmlFor={`sem-term-${sem.id}`} className="text-xs text-[#93b8d8] ml-2">Term</label>
+                <select
+                  id={`sem-term-${sem.id}`}
+                  value={sem.term ?? ''}
+                  onChange={e => saveTerm(sem.id, e.target.value || null)}
+                  className="bg-[#0a1628] border border-[#1e5080] rounded-md px-2 py-1 text-xs text-[#f0f6ff] focus:outline-none focus:border-[#c8102e]"
+                >
+                  <option value="">—</option>
+                  {SEMESTER_TERMS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
                 {sem.is_active && !sem.end_date && (
                   <span className="text-xs text-[#fbbf24]">Weekly SGA Space bookings are off until this is set.</span>
                 )}
