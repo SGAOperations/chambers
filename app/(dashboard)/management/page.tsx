@@ -7,6 +7,7 @@ import BodiesTab from './bodies-tab'
 import AuditTab from './audit-tab'
 import ArchiveTab from './archive-tab'
 import BookingSettingsTab from './booking-settings-tab'
+import CallForProgramsTab from './call-for-programs-tab'
 
 /**
  * Management -- the former Administrator > Advanced Settings sub-tabs, promoted
@@ -18,9 +19,9 @@ import BookingSettingsTab from './booking-settings-tab'
  * they became their own page with their own guard, and Administrator was renamed
  * to Bookings for what it actually is now.
  */
-type Tab = 'Users' | 'Bodies' | 'Audit' | 'Archive' | 'Other Settings'
+type Tab = 'Users' | 'Bodies' | 'Audit' | 'Archive' | 'Call for Programs' | 'Other Settings'
 
-const TABS: Tab[] = ['Users', 'Bodies', 'Audit', 'Archive', 'Other Settings']
+const TABS: Tab[] = ['Users', 'Bodies', 'Audit', 'Archive', 'Call for Programs', 'Other Settings']
 
 export default function ManagementPage() {
   const [activeTab, setActiveTab] = useState<Tab>('Users')
@@ -51,6 +52,7 @@ export default function ManagementPage() {
           {activeTab === 'Bodies' && <BodiesTab />}
           {activeTab === 'Audit' && <AuditTab />}
           {activeTab === 'Archive' && <ArchiveTab />}
+          {activeTab === 'Call for Programs' && <CallForProgramsTab />}
           {activeTab === 'Other Settings' && <BookingSettingsTab />}
         </div>
       </div>

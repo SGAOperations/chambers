@@ -3,6 +3,12 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { canWriteAdmin } from '@/lib/admin-roles'
+import { SEMESTER_TERMS } from '@/lib/call-for-programs'
+
+/** A term from a semester's name, for when one is created without one. */
+function termFromName(name: string): string | null {
+  return SEMESTER_TERMS.find(t => name.toLowerCase().includes(t.toLowerCase())) ?? null
+}
 
 const adminSupabase = db
 
@@ -16,7 +22,7 @@ export async function GET() {
 
   const { data: semesters, error } = await adminSupabase
     .from('semesters')
-    .select('id, name, is_active, end_date, created_at')
+    .select('id, name, term, is_active, end_date, created_at')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -46,9 +52,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Semester name is required.' }, { status: 400 })
   }
 
+  // Fall or spring is what the call for programs looks back to, so a new
+  // semester gets its term from its name; the Management page can correct it.
   const { error } = await adminSupabase
     .from('semesters')
-    .insert({ name: name.trim() })
+    .insert({ name: name.trim(), term: termFromName(name) })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -84,6 +92,18 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'end_date must be a date or null.' }, { status: 400 })
     }
     const { error } = await adminSupabase.from('semesters').update({ end_date: endDate }).eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true })
+  }
+
+  // Fall / Spring / Summer, or null (the call for programs, 0018). Like the
+  // end date, told apart by the key and returned from before activation.
+  if ('term' in body) {
+    const term = body.term
+    if (term !== null && !(SEMESTER_TERMS as readonly unknown[]).includes(term)) {
+      return NextResponse.json({ error: 'term must be Fall, Spring, Summer or null.' }, { status: 400 })
+    }
+    const { error } = await adminSupabase.from('semesters').update({ term }).eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ success: true })
   }
