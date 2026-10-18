@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
+import DateField from '@/app/_components/date-field'
+import TimePicker from '../bookings/time-picker'
 import {
   CHANGE_TYPE_LABELS,
   formatCallTime,
@@ -37,7 +39,6 @@ interface TabData {
   missing: string[]
 }
 
-const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition [color-scheme:dark]"
 const labelCls = "block text-xs font-medium text-[#93b8d8] mb-1"
 const buttonCls = "px-5 py-2 bg-[#c8102e] hover:bg-[#a00d24] text-white text-sm rounded-lg font-medium transition-colors disabled:opacity-50"
 
@@ -48,12 +49,12 @@ function formatTime(time: string) {
 }
 
 /**
- * A datetime-local value is the admin's wall clock with no zone. new Date()
- * reads it in the browser's zone, which for the people on this page is Boston,
- * and the server stores the instant.
+ * The picked date and time are the admin's wall clock with no zone. new Date()
+ * reads them in the browser's zone, which for the people on this page is
+ * Boston, and the server stores the instant. No date means no automatic close.
  */
-function localToIso(value: string): string | null {
-  return value ? new Date(value).toISOString() : null
+function localToIso(date: string, time: string): string | null {
+  return date ? new Date(`${date}T${time}`).toISOString() : null
 }
 
 function callLabel(c: ProgramCall): string {
@@ -67,7 +68,8 @@ function callLabel(c: ProgramCall): string {
  */
 export default function CallForProgramsTab() {
   const [data, setData] = useState<TabData | null>(null)
-  const [closesAt, setClosesAt] = useState('')
+  const [closeDate, setCloseDate] = useState('')
+  const [closeTime, setCloseTime] = useState('17:00')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -98,7 +100,7 @@ export default function CallForProgramsTab() {
     } else {
       setMsg({ ok: true, text: done })
     }
-    setClosesAt('')
+    setCloseDate('')
     load()
   }
 
@@ -141,7 +143,19 @@ export default function CallForProgramsTab() {
 
           <div>
             <label className={labelCls}>{open ? 'Change the automatic close' : 'Close automatically at (optional)'}</label>
-            <input type="datetime-local" value={closesAt} onChange={e => { setMsg(null); setClosesAt(e.target.value) }} className={inputCls} />
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 min-w-0">
+                <DateField value={closeDate} onChange={v => { setMsg(null); setCloseDate(v) }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <TimePicker interval={15} value={closeTime} onChange={v => { setMsg(null); setCloseTime(v) }} />
+              </div>
+            </div>
+            {closeDate && (
+              <button onClick={() => setCloseDate('')} className="mt-1 text-xs text-[#6a96bb] hover:text-[#f0f6ff] transition-colors">
+                Clear
+              </button>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -149,10 +163,10 @@ export default function CallForProgramsTab() {
               <>
                 <button
                   disabled={busy}
-                  onClick={() => send('PATCH', { closes_at: localToIso(closesAt) }, closesAt ? 'Close time saved.' : 'Automatic close removed.')}
+                  onClick={() => send('PATCH', { closes_at: localToIso(closeDate, closeTime) }, closeDate ? 'Close time saved.' : 'Automatic close removed.')}
                   className={buttonCls}
                 >
-                  {closesAt ? 'Save close time' : 'Remove automatic close'}
+                  {closeDate ? 'Save close time' : 'Remove automatic close'}
                 </button>
                 <button
                   disabled={busy}
@@ -165,7 +179,7 @@ export default function CallForProgramsTab() {
             ) : (
               <button
                 disabled={busy}
-                onClick={() => send('POST', { closes_at: localToIso(closesAt) }, 'Call opened.')}
+                onClick={() => send('POST', { closes_at: localToIso(closeDate, closeTime) }, 'Call opened.')}
                 className={buttonCls}
               >
                 {busy ? 'Opening...' : 'Open call'}
