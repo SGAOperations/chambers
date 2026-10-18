@@ -29,6 +29,12 @@ interface Submission {
   comments: string | null
   bodies: { name: string } | null
   users: { full_name: string } | null
+  /**
+   * The prior booking as it is now, read live rather than from the snapshot:
+   * CSC's reservation code can arrive or change after the body answered.
+   * Null once that booking is gone.
+   */
+  weekly_room_bookings: { reservation_code: string | null } | null
 }
 
 interface TabData {
@@ -241,6 +247,10 @@ export default function CallForProgramsTab() {
                           <div>
                             <span className="text-xs font-medium text-[#93b8d8]">Booking in {p.semester_name}</span>
                             <p>{p.purpose} · {p.room_name} · {p.day}s {formatTime(p.start_time)} – {formatTime(p.end_time)}</p>
+                            <p className="text-xs text-[#93b8d8]">
+                              Reservation code:{' '}
+                              <span className="font-mono text-[#f0f6ff]">{s.weekly_room_bookings?.reservation_code || 'None'}</span>
+                            </p>
                           </div>
                         )}
                         {needsRoom(s.change_type) && (

@@ -62,7 +62,7 @@ export async function GET(request: Request) {
       .select(`
         id, body_id, created_at, prior_snapshot, change_type, requested_room, requested_capacity,
         requested_day, requested_start_time, requested_end_time, time_is_range, comments,
-        bodies(name), users(full_name)
+        bodies(name), users(full_name), weekly_room_bookings(reservation_code)
       `)
       .eq('call_id', selected.id),
     db.from('bodies').select('id, name').eq('is_active', true).order('name', { ascending: true }),
