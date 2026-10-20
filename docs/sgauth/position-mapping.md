@@ -57,7 +57,7 @@ Both are curated offices, so the import gives them those positions directly. The
 | Q2 | Executive Board | **Decided:** Leadership = SBP + EVP. Members = the seven division VPs, the Parliamentarian and the Speaker of the Senate. That accounts for 9 of today's 10 Member rows; the tenth is a deactivated former VP, who gets no positions on import. | Decided |
 | Q3 | Appeals Board | ~~No chair key; who is Leadership?~~ **Decided:** the Parliamentarian is Leadership. Justices are Members. | Decided |
 | Q4 | SGA General | **Decided:** Leadership = VP of Operational Affairs. No member positions. The current holder already gets that position from their `admin_role`, so the import covers this seat with no hand assignment. | Decided |
-| Q5 | Student-Designed NU Merch Team | Is this the curated "T-Shirt Team"? | Yes |
+| Q5 | Student-Designed NU Merch Team | **Decided:** yes, it is the curated T-Shirt Team. Leadership = `t-shirt-team-chair`, Members = `t-shirt-team-member`. | Decided |
 | Q6 | SenatePortal / Website Creation Team | ~~Shared team lead?~~ **Decided:** each team gets its own lead. Leadership = that team's lead + DIM + VPOA. The curated list still has one shared `digital-innovation-team-lead`; SGAuth needs to replace it with `digital-innovation-senateportal-team-lead` and `digital-innovation-website-creation-team-lead` (proposed names, matching the member keys). | Decided |
 | Q7 | Senate | ~~Speaker + Senate Operations Coordinator?~~ **Decided:** the EVP is the Senate's vice chair for Chambers purposes. Leadership = Speaker + EVP. | Decided |
 | Q8 | Student Organization boards | There are 3 to 4 Leadership seats each today but only director + VP keys. Are some of today's "Leadership" really Members? | Director + VPSI. The rest become Members. |
