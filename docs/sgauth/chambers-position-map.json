@@ -20,7 +20,7 @@
     "information-manager"
   ],
   "bodies": {
-    "Appeals Board": { "leadership": [], "member": ["appeals-board-justice"] },
+    "Appeals Board": { "leadership": ["parliamentarian"], "member": ["appeals-board-justice"] },
     "Elections Board": {
       "leadership": ["director-of-elections", "vice-chair-of-elections"],
       "member": ["elections-board-member"]

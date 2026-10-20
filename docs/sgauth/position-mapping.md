@@ -55,7 +55,7 @@ Both are curated offices, so the import gives them those positions directly. The
 |---|---|---|---|
 | Q1 | (all divisional bodies) | Is the division VP Leadership of every body in their division? | Yes |
 | Q2 | Executive Board | Leadership = SBP + EVP. Members = the seven division VPs + the **Parliamentarian** (decided). Today there are **10** Members, so two seats are still unaccounted for (Speaker? Comptroller?). | SBP + EVP / 7 VPs + Parliamentarian |
-| Q3 | Appeals Board | There is no chair key. Who is Leadership (1 today)? | None (justices are Members). Ask SGAuth for a chief-justice key if there is one. |
+| Q3 | Appeals Board | ~~No chair key; who is Leadership?~~ **Decided:** the Parliamentarian is Leadership. Justices are Members. | Decided |
 | Q4 | SGA General | No position fits. Who is Leadership (1 today), and what is the body for? | No mapping. Keep it Chambers-managed or retire it. |
 | Q5 | Student-Designed NU Merch Team | Is this the curated "T-Shirt Team"? | Yes |
 | Q6 | SenatePortal / Website Creation Team | ~~Shared team lead?~~ **Decided:** each team gets its own lead. Leadership = that team's lead + DIM + VPOA. The curated list still has one shared `digital-innovation-team-lead`; SGAuth needs to replace it with `digital-innovation-senateportal-team-lead` and `digital-innovation-website-creation-team-lead` (proposed names, matching the member keys). | Decided |
