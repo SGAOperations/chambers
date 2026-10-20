@@ -54,7 +54,7 @@ Both are curated offices, so the import gives them those positions directly. The
 | # | Body | Question | Draft answer |
 |---|---|---|---|
 | Q1 | (all divisional bodies) | Is the division VP Leadership of every body in their division? | Yes |
-| Q2 | Executive Board | Leadership = SBP + EVP. Members = the seven division VPs + the **Parliamentarian** (decided). Today there are **10** Members, so two seats are still unaccounted for (Speaker? Comptroller?). | SBP + EVP / 7 VPs + Parliamentarian |
+| Q2 | Executive Board | **Decided:** Leadership = SBP + EVP. Members = the seven division VPs, the Parliamentarian and the Speaker of the Senate. That accounts for 9 of today's 10 Member rows; the tenth is a deactivated former VP, who gets no positions on import. | Decided |
 | Q3 | Appeals Board | ~~No chair key; who is Leadership?~~ **Decided:** the Parliamentarian is Leadership. Justices are Members. | Decided |
 | Q4 | SGA General | No position fits. Who is Leadership (1 today), and what is the body for? | No mapping. Keep it Chambers-managed or retire it. |
 | Q5 | Student-Designed NU Merch Team | Is this the curated "T-Shirt Team"? | Yes |
