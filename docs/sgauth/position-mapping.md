@@ -53,16 +53,18 @@ Both are curated offices, so the import gives them those positions directly. The
 
 | # | Body | Question | Draft answer |
 |---|---|---|---|
-| Q1 | (all divisional bodies) | Is the division VP Leadership of every body in their division? | Yes |
+| Q1 | (all divisional bodies) | **Decided:** yes, the division VP is Leadership of every body in their division. | Decided |
 | Q2 | Executive Board | **Decided:** Leadership = SBP + EVP. Members = the seven division VPs, the Parliamentarian and the Speaker of the Senate. That accounts for 9 of today's 10 Member rows; the tenth is a deactivated former VP, who gets no positions on import. | Decided |
 | Q3 | Appeals Board | ~~No chair key; who is Leadership?~~ **Decided:** the Parliamentarian is Leadership. Justices are Members. | Decided |
 | Q4 | SGA General | **Decided:** Leadership = VP of Operational Affairs. No member positions. The current holder already gets that position from their `admin_role`, so the import covers this seat with no hand assignment. | Decided |
 | Q5 | Student-Designed NU Merch Team | **Decided:** yes, it is the curated T-Shirt Team. Leadership = `t-shirt-team-chair`, Members = `t-shirt-team-member`. | Decided |
 | Q6 | SenatePortal / Website Creation Team | ~~Shared team lead?~~ **Decided:** each team gets its own lead. Leadership = that team's lead + DIM + VPOA. The curated list still has one shared `digital-innovation-team-lead`; SGAuth needs to replace it with `digital-innovation-senateportal-team-lead` and `digital-innovation-website-creation-team-lead` (proposed names, matching the member keys). | Decided |
 | Q7 | Senate | ~~Speaker + Senate Operations Coordinator?~~ **Decided:** the EVP is the Senate's vice chair for Chambers purposes. Leadership = Speaker + EVP. | Decided |
-| Q8 | Student Organization boards | There are 3 to 4 Leadership seats each today but only director + VP keys. Are some of today's "Leadership" really Members? | Director + VPSI. The rest become Members. |
-| Q9 | Communications & Events | Include assistant-director-of-events and the AVP of External Affairs as Leadership? | No (not drafted) |
-| Q10 | Global Experience Office / Holistic Wellness WGs | Leadership = the matching Student Success director, with no VP? | As drafted |
+| Q8 | Student Organization boards | **Decided:** Leadership = the board's director + VPSI; anyone else is a Member. This is the official mapping for SGAuth. Some of today's extra Leadership seats are temporary access for a transition (the EVP and the previous VP of Student Involvement). They do not carry over (see the note below this table). | Decided |
+| Q9 | Communications & Events | **Decided:** no. Only chairs/directors and VPs are Leadership. The assistant roles can be added later if someone asks. | Decided |
+| Q10 | Global Experience Office / Holistic Wellness WGs | **Decided:** Leadership = the matching Student Success director + the VP of Student Success. | Decided |
+
+**Transitional access goes away at cutover.** Memberships are derived only from positions, so the temporary Student Organization Leadership seats held by the EVP and the previous VP of Student Involvement (Q8) disappear when Chambers switches to SGAuth. If they still need that access then, give them the matching position in SGAuth for the transition and take it away afterwards. Chambers has no override of its own.
 
 ## 4. The import: what it can and cannot carry
 

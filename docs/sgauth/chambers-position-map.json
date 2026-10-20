@@ -140,11 +140,11 @@
       "member": ["global-experience-committee-member"]
     },
     "Global Experience Office Working Group": {
-      "leadership": ["director-of-global-experience"],
+      "leadership": ["director-of-global-experience", "vice-president-of-student-success"],
       "member": ["global-experience-office-working-group-member"]
     },
     "Holistic Wellness Working Group": {
-      "leadership": ["director-of-wellness"],
+      "leadership": ["director-of-wellness", "vice-president-of-student-success"],
       "member": ["holistic-wellness-working-group-member"]
     },
     "Student Engagement Committee": {
