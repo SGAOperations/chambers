@@ -47,14 +47,14 @@ Both are curated offices, so the import gives them those positions directly. The
 - Each body's director or chair key → Leadership. Its `-member` / `-committee-member` / `-board-member` key → Member.
 - **The division VP → Leadership of every body in their division.** This is a proposal, not something already in the data. Most bodies have about one more Leadership seat today than they have director keys, which fits VP + director. Holding Leadership is what lets someone book for a body.
 - If someone holds positions that map to both roles in the same body, Leadership wins.
-- Positions with no Chambers body grant nothing in Chambers: parliamentarian, faculty-senate-student-representative, university-undergraduate-curriculum-committee-representative, college-liaison, assistant-vice-president-of-external-affairs, assistant-director-of-events, graphic-design-manager, finance-manager, boston-intercollegiate-government-representative, legislative-affairs-coordinator, senate-operations-coordinator, senate-communications-coordinator.
+- Positions with no Chambers body grant nothing in Chambers: faculty-senate-student-representative, university-undergraduate-curriculum-committee-representative, college-liaison, assistant-vice-president-of-external-affairs, assistant-director-of-events, graphic-design-manager, finance-manager, boston-intercollegiate-government-representative, legislative-affairs-coordinator, senate-operations-coordinator, senate-communications-coordinator.
 
 ### Decisions needed
 
 | # | Body | Question | Draft answer |
 |---|---|---|---|
 | Q1 | (all divisional bodies) | Is the division VP Leadership of every body in their division? | Yes |
-| Q2 | Executive Board | Leadership = SBP + EVP. Members = the seven division VPs. Today there are **10** Members. Who are the other three (Speaker? Comptroller? Parliamentarian?)? | SBP + EVP / 7 VPs |
+| Q2 | Executive Board | Leadership = SBP + EVP. Members = the seven division VPs + the **Parliamentarian** (decided). Today there are **10** Members, so two seats are still unaccounted for (Speaker? Comptroller?). | SBP + EVP / 7 VPs + Parliamentarian |
 | Q3 | Appeals Board | There is no chair key. Who is Leadership (1 today)? | None (justices are Members). Ask SGAuth for a chief-justice key if there is one. |
 | Q4 | SGA General | No position fits. Who is Leadership (1 today), and what is the body for? | No mapping. Keep it Chambers-managed or retire it. |
 | Q5 | Student-Designed NU Merch Team | Is this the curated "T-Shirt Team"? | Yes |
