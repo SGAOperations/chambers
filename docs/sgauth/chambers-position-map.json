@@ -156,6 +156,6 @@
       "member": ["wellness-committee-member"]
     },
 
-    "SGA General": { "leadership": [], "member": [] }
+    "SGA General": { "leadership": ["vice-president-of-operational-affairs"], "member": [] }
   }
 }
