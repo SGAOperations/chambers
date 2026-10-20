@@ -95,11 +95,11 @@
     },
 
     "SenatePortal Team": {
-      "leadership": ["digital-innovation-team-lead", "digital-innovation-manager", "vice-president-of-operational-affairs"],
+      "leadership": ["digital-innovation-senateportal-team-lead", "digital-innovation-manager", "vice-president-of-operational-affairs"],
       "member": ["digital-innovation-senateportal-team-member"]
     },
     "Website Creation Team": {
-      "leadership": ["digital-innovation-team-lead", "digital-innovation-manager", "vice-president-of-operational-affairs"],
+      "leadership": ["digital-innovation-website-creation-team-lead", "digital-innovation-manager", "vice-president-of-operational-affairs"],
       "member": ["digital-innovation-website-creation-team-member"]
     },
     "Website Management Team": {
@@ -108,7 +108,7 @@
     },
 
     "Senate": {
-      "leadership": ["speaker-of-the-senate", "senate-operations-coordinator"],
+      "leadership": ["speaker-of-the-senate", "executive-vice-president"],
       "member": ["senator"]
     },
 

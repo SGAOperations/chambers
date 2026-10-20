@@ -9,7 +9,7 @@ There are two files, because they answer two different questions:
 | [`chambers-position-map.json`](chambers-position-map.json) | *Going forward*: what does holding position X let someone do in Chambers? | `lib/permissions.ts` and the membership sync (#151) |
 | [`chambers-positions.draft.json`](chambers-positions.draft.json) | *Once, at import*: which positions should an existing Chambers user be given? | SGAuth `scripts/import-users.ts` (AUTH-T87, SGAOperations/auth#99) |
 
-All keys come from the curated list in SGAOperations/auth `prisma/seed/positions.json`, and all of them have been checked against it. `chambers-iems` is the only product role. Body names match `public.bodies` in production (31 active bodies, 2026-10-20).
+All keys come from the curated list in SGAOperations/auth `prisma/seed/positions.json`, and have been checked against it, with two exceptions: `digital-innovation-senateportal-team-lead` and `digital-innovation-website-creation-team-lead` are **not curated yet** (see Q6). `chambers-iems` is the only product role. Body names match `public.bodies` in production (31 active bodies, 2026-10-20).
 
 ## 1. Admin tiers
 
@@ -47,7 +47,7 @@ Both are curated offices, so the import gives them those positions directly. The
 - Each body's director or chair key → Leadership. Its `-member` / `-committee-member` / `-board-member` key → Member.
 - **The division VP → Leadership of every body in their division.** This is a proposal, not something already in the data. Most bodies have about one more Leadership seat today than they have director keys, which fits VP + director. Holding Leadership is what lets someone book for a body.
 - If someone holds positions that map to both roles in the same body, Leadership wins.
-- Positions with no Chambers body grant nothing in Chambers: parliamentarian, faculty-senate-student-representative, university-undergraduate-curriculum-committee-representative, college-liaison, assistant-vice-president-of-external-affairs, assistant-director-of-events, graphic-design-manager, finance-manager, boston-intercollegiate-government-representative, legislative-affairs-coordinator, senate-communications-coordinator.
+- Positions with no Chambers body grant nothing in Chambers: parliamentarian, faculty-senate-student-representative, university-undergraduate-curriculum-committee-representative, college-liaison, assistant-vice-president-of-external-affairs, assistant-director-of-events, graphic-design-manager, finance-manager, boston-intercollegiate-government-representative, legislative-affairs-coordinator, senate-operations-coordinator, senate-communications-coordinator.
 
 ### Decisions needed
 
@@ -58,8 +58,8 @@ Both are curated offices, so the import gives them those positions directly. The
 | Q3 | Appeals Board | There is no chair key. Who is Leadership (1 today)? | None (justices are Members). Ask SGAuth for a chief-justice key if there is one. |
 | Q4 | SGA General | No position fits. Who is Leadership (1 today), and what is the body for? | No mapping. Keep it Chambers-managed or retire it. |
 | Q5 | Student-Designed NU Merch Team | Is this the curated "T-Shirt Team"? | Yes |
-| Q6 | SenatePortal / Website Creation Team | There are 4 Leadership seats each today. Proposal: digital-innovation-team-lead + DIM + VPOA. | As drafted |
-| Q7 | Senate | Leadership = Speaker + Senate Operations Coordinator? (2 today) | As drafted |
+| Q6 | SenatePortal / Website Creation Team | ~~Shared team lead?~~ **Decided:** each team gets its own lead. Leadership = that team's lead + DIM + VPOA. The curated list still has one shared `digital-innovation-team-lead`; SGAuth needs to replace it with `digital-innovation-senateportal-team-lead` and `digital-innovation-website-creation-team-lead` (proposed names, matching the member keys). | Decided |
+| Q7 | Senate | ~~Speaker + Senate Operations Coordinator?~~ **Decided:** the EVP is the Senate's vice chair for Chambers purposes. Leadership = Speaker + EVP. | Decided |
 | Q8 | Student Organization boards | There are 3 to 4 Leadership seats each today but only director + VP keys. Are some of today's "Leadership" really Members? | Director + VPSI. The rest become Members. |
 | Q9 | Communications & Events | Include assistant-director-of-events and the AVP of External Affairs as Leadership? | No (not drafted) |
 | Q10 | Global Experience Office / Holistic Wellness WGs | Leadership = the matching Student Success director, with no VP? | As drafted |
@@ -79,3 +79,4 @@ After cutover, a user's Chambers memberships are exactly what their positions sa
 - [ ] Chambers lead: tiers, IEMS, body table, Q1–Q10
 - [ ] Primary Admin: import file (then set `approvedBy` / `approvedAt`)
 - [ ] `board:<slug>:<role>` keys agreed on SGAOperations/auth#98 / #99
+- [ ] Per-team lead keys (Q6) added to the curated list in SGAOperations/auth
