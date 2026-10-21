@@ -1,19 +1,19 @@
-import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
-import { pool } from '@/lib/db/pool'
-import { getActiveSemesterId } from '@/lib/active-semester'
 import { rateLimiter } from '@/lib/rate-limit'
 
 /**
- * Hit by a Vercel cron (see vercel.json) every few minutes to keep a warm
- * function instance -- and the pooled Supabase + Upstash connections it holds --
- * alive. On a cold path the first dashboard load pays a ~870ms first-connection
- * tax (measured on prod: /api/my-rooms cold ~870ms, warm ~250ms, on fresh
- * instances either way -- so the cost is connection warmup, not isolate boot).
- * Fluid Compute keeps the isolate around; this keeps what it talks to warm too.
+ * Hit by a GitHub Action (.github/workflows/keep-warm.yml) every few minutes to
+ * keep a warm function instance -- and its Upstash connection -- alive, so real
+ * dashboard loads skip the cold-start and connection-warmup cost.
  *
- * Set the CRON_SECRET env var to gate this; Vercel sends it as a bearer token
- * automatically. Without it the endpoint is open but only does trivial reads.
+ * It deliberately does not touch the database. Neon suspends the compute after
+ * 5 idle minutes, and a 5-minute ping that queried it kept production awake ~80%
+ * of the time, which on its own spent nearly the whole monthly CU-hour allowance
+ * at the 0.25 CU floor. The first load after an idle stretch now pays for Neon
+ * waking up instead.
+ *
+ * Set the CRON_SECRET env var to gate this. Without it the endpoint is open, but
+ * all it does is one rate-limiter call.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
@@ -21,11 +21,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = db
-
   const warmed = await Promise.allSettled([
-    pool.query('select 1'), // warms the Postgres pool that Better Auth and the live role checks use
-    getActiveSemesterId(supabase), // warms the Supabase pooler + primes the semester cache
     rateLimiter.limit('cron:warm'), // warms the Upstash connection
   ])
 
