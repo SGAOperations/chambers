@@ -10,6 +10,7 @@ import {
   type RoomRequestStatus,
 } from '@/lib/request-status'
 import { alertAwaitingCsc } from '@/lib/request-alerts'
+import { queueEventChannel } from '@/lib/event-channels'
 
 const ROOM_REQUEST_STATUSES: RoomRequestStatus[] = [...OPEN_REQUEST_STATUSES, 'Fulfilled', 'Denied']
 
@@ -117,12 +118,21 @@ export async function PATCH(request: Request) {
     const bookingUpdate: Record<string, unknown> = { request_id: id }
     if (is_event) bookingUpdate.is_event = true
 
+    // Whether this is what makes it an event, so a booking already marked does
+    // not get a second announcement in its channel.
+    const { data: before } = is_event
+      ? await adminSupabase.from('bookings').select('is_event').eq('id', booking_id).maybeSingle()
+      : { data: null }
+
     const { error: bookingError } = await adminSupabase
       .from('bookings')
       .update(bookingUpdate)
       .eq('id', booking_id)
 
     if (bookingError) return NextResponse.json({ error: bookingError.message }, { status: 500 })
+
+    // Queued: the request is fulfilled whatever Slack says (lib/event-channels.ts).
+    if (before && !before.is_event) queueEventChannel({ kind: 'booking', bookingId: booking_id })
   }
 
   // Create denial notification for the requester

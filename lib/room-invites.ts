@@ -3,6 +3,7 @@ import { appZoneParts } from './meeting-reminders'
 import { resolveBookingRecipients, type Recipient, type ScopedRow } from './booking-scope'
 import { calendarRecipientsFor, calendarStateOf, occurrenceUid, sessionUid, splitByAudience, type RoomSeries, type RoomSession } from './room-calendar'
 import { sendBookingCancelledEmail } from './emails/booking-cancelled'
+import { noticeCancelledEventChannels } from './event-channels'
 
 /**
  * Turning room bookings into the calendar sessions an invite is built from, and
@@ -183,6 +184,14 @@ interface BookingRow {
  * sending a body an email about an event they were never sent.
  */
 export async function notifyCancelledReservations(rows: CancelledReservation[]): Promise<void> {
+  // An event's Slack channel hears about it too, tabling included. Caught here
+  // so a Slack failure cannot stop the emails below.
+  try {
+    await noticeCancelledEventChannels(rows)
+  } catch (e) {
+    console.error('[event-channels] cancellation notice failed:', e)
+  }
+
   const roomRows = rows.filter(r => r.source !== 'tabling_session')
   if (!roomRows.length) return
 
