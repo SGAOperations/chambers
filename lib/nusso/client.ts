@@ -287,39 +287,63 @@ export interface NussoRoomOption {
   DefaultSetupTypeId: number
 }
 
+/** EMS HTML-encodes display text ("Blackman &amp; Fenway Center"). */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+}
+
+type EmsRecord = Record<string, unknown>
+
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+const str = (v: unknown): string => (typeof v === 'string' ? decodeEntities(v).trim() : '')
+
 /**
- * Deep-collect any room-shaped objects from an arbitrary response. The
- * GetBrowseLocationsRooms envelope nests rooms under buildings and its exact
- * shape is only partly known, so rather than hard-code a path we walk the tree
- * and pick out every object that carries a numeric RoomId. De-duplicated by id.
+ * Rooms out of a GetBrowseLocationsRooms response.
+ *
+ * Observed in October 2026: `{ Buildings: [{ Id, Description, Rooms: [{ Id,
+ * Code, Description, Capacity, BuildingID, RecordType, ... }] }] }`. A room's
+ * `Id` is the same number GetBrowseLocationsBookings calls `RoomId`. Nothing in
+ * this envelope is named RoomId, which is what the first version of this parser
+ * looked for -- it returned no rooms at all and nobody noticed, because nothing
+ * rendered the list until Browse/Book Rooms.
+ *
+ * `AvailableBuildings` is the building filter's option list, with empty Rooms,
+ * so only `Buildings` is read.
  */
-function collectRooms(node: unknown, out: Map<number, NussoRoomOption>): void {
-  if (Array.isArray(node)) {
-    for (const item of node) collectRooms(item, out)
-    return
-  }
-  if (node && typeof node === 'object') {
-    const obj = node as Record<string, unknown>
-    if (typeof obj.RoomId === 'number' && !out.has(obj.RoomId)) {
-      out.set(obj.RoomId, {
-        RoomId: obj.RoomId,
-        RoomCode: String(obj.RoomCode ?? obj.RoomDescription ?? obj.RoomId),
-        RoomDescription: String(obj.RoomDescription ?? obj.RoomCode ?? ''),
-        BuildingDescription: String(obj.BuildingDescription ?? obj.BuildingCode ?? ''),
-        Capacity: typeof obj.Capacity === 'number' ? obj.Capacity : 0,
-        DefaultSetupTypeId: typeof obj.DefaultSetupTypeId === 'number' ? obj.DefaultSetupTypeId : 0,
+function parseBrowseRooms(data: unknown): NussoRoomOption[] {
+  const buildings = Array.isArray((data as EmsRecord | null)?.Buildings)
+    ? ((data as EmsRecord).Buildings as EmsRecord[])
+    : []
+  const out = new Map<number, NussoRoomOption>()
+  for (const building of buildings) {
+    const buildingName = str(building.Description) || str(building.DisplayText) || str(building.Code)
+    for (const room of Array.isArray(building.Rooms) ? (building.Rooms as EmsRecord[]) : []) {
+      const id = num(room.Id) ?? num(room.RoomId)
+      if (id === null || out.has(id)) continue
+      const code = str(room.Code) || str(room.DisplayText) || str(room.Description) || String(id)
+      out.set(id, {
+        RoomId: id,
+        RoomCode: code,
+        RoomDescription: str(room.Description) || code,
+        BuildingDescription: buildingName,
+        Capacity: num(room.Capacity) ?? 0,
+        DefaultSetupTypeId: num(room.DefaultSetupTypeId) ?? 0,
       })
     }
-    for (const value of Object.values(obj)) collectRooms(value, out)
   }
+  return [...out.values()]
 }
 
 /** The list of rooms (across buildings) for a window, for the room picker. */
 export async function browseRooms(window: NussoTimeWindow): Promise<NussoRoomOption[]> {
   const data = await serverApi<unknown>('GetBrowseLocationsRooms', { filterData: browseFilters(window) })
-  const out = new Map<number, NussoRoomOption>()
-  collectRooms(data, out)
-  return [...out.values()].sort((a, b) =>
+  return parseBrowseRooms(data).sort((a, b) =>
     a.BuildingDescription.localeCompare(b.BuildingDescription) || a.RoomCode.localeCompare(b.RoomCode)
   )
 }
