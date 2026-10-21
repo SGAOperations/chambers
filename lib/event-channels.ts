@@ -428,7 +428,7 @@ export async function noticeEventChannel(target: EventTarget, text: string): Pro
 }
 
 export const UNMARKED_NOTICE =
-  ':information_source: This booking is no longer marked as an event in Chambers. The channel stays open.'
+  ':information_source: This booking is no longer marked as an event in Chambers.'
 
 /**
  * Tells each affected event channel that its reservation was cancelled. Called
