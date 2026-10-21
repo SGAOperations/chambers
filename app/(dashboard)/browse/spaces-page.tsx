@@ -387,11 +387,6 @@ export default function SpacesPage({ registrarEnabled }: { registrarEnabled: boo
       <div className="flex-shrink-0 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-[#f0f6ff]">Browse/Book Rooms</h1>
-          <p className="text-sm text-[#93b8d8] mt-0.5">
-            {registrarEnabled
-              ? 'What is booked across NUSSO and the Registrar · book NUSSO rooms here, request Registrar rooms from the Registrar'
-              : 'Find an available Northeastern event space · nuevents.neu.edu'}
-          </p>
         </div>
         <ResponsibilitiesButton onClick={notice.reopen} />
       </div>
@@ -550,7 +545,7 @@ export default function SpacesPage({ registrarEnabled }: { registrarEnabled: boo
               <SpaceTimeline groups={visibleBrowse} nowMinute={nowMinute} />
               {showRegistrar && source !== 'nusso' && registrar.data && (
                 <p className="text-xs text-[#6a96bb] pb-2">
-                  Registrar rooms come from 25Live&apos;s public view, refreshed every few minutes. One that looks free can still be held for something 25Live does not show publicly, so confirm with the Registrar before you plan around it.
+                  Registrar rooms come from 25Live&apos;s public view, refreshed every few minutes. One that looks free can still be held for something 25Live does not show publicly, so confirm with Operational Affairs before you book or plan around it.
                 </p>
               )}
             </div>
