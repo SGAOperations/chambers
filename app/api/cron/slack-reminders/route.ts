@@ -52,7 +52,7 @@ const adminSupabase = db
  * memory; a day's occurrences are a few dozen rows.
  */
 const SELECT = `
-  occurrence_date, room_name, start_time, end_time, meeting_time, status, hidden, weekly_booking_id,
+  occurrence_date, room_name, start_time, end_time, meeting_time, status, hidden, senate_type, weekly_booking_id,
   weekly_room_bookings!inner(
     room_name, start_time, end_time, meeting_time, status,
     bookings!inner(
@@ -154,6 +154,7 @@ export async function GET(request: Request) {
         meeting_time: row.meeting_time,
         status: row.status,
         hidden: row.hidden,
+        senate_type: row.senate_type,
       },
     })
   }
