@@ -60,8 +60,16 @@ const nextConfig: NextConfig = {
   // indefinitely and would be painful to walk back if the route is ever renamed
   // again. Nothing here is indexed, so there is no reason to want the permanent
   // form.
+  //
+  // /nusso became /browse when Browse/Book NUSSO took in the Registrar's rooms
+  // and stopped being only NUSSO (v2.4.0); same reasoning for keeping the old
+  // URL alive. The /api/nusso/* routes keep their name -- they still only talk
+  // to NUSSO.
   async redirects() {
-    return [{ source: '/administrator', destination: '/bookings', permanent: false }]
+    return [
+      { source: '/administrator', destination: '/bookings', permanent: false },
+      { source: '/nusso', destination: '/browse', permanent: false },
+    ]
   },
   // next-pwa adds a webpack config, and Next 16 refuses to run `next dev`
   // (Turbopack) alongside one unless a turbopack config exists. Nothing needs

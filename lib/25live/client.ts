@@ -2,7 +2,7 @@ import { APP_TIME_ZONE } from '@/lib/app-zone'
 
 /**
  * Read-only access to Northeastern's 25Live, for the Registrar rooms in Browse
- * mode on Browse/Book Rooms (app/(dashboard)/nusso/spaces-page.tsx).
+ * mode on Browse/Book Rooms (app/(dashboard)/browse/spaces-page.tsx).
  *
  * 25Live is where the Registrar schedules rooms. Northeastern has configured a
  * "Viewer Seat" -- what someone who is not signed in may see -- so its data
