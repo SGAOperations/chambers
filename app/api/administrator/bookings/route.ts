@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { canWriteAdmin } from '@/lib/admin-roles'
+import { queueEventChannel, queueEventChannelNotice, UNMARKED_NOTICE } from '@/lib/event-channels'
 
 const adminSupabase = db
 
@@ -127,12 +128,25 @@ export async function PATCH(request: Request) {
   if (is_event !== undefined) patch.is_event = is_event
   if (hidden !== undefined) patch.hidden = hidden
 
+  // Read first, so only a real change of the flag opens a Slack channel or
+  // posts a notice in one -- toggling Hidden resubmits nothing about events.
+  const { data: before } = is_event !== undefined
+    ? await adminSupabase.from('bookings').select('is_event').eq('id', id).maybeSingle()
+    : { data: null }
+
   const { error } = await adminSupabase
     .from('bookings')
     .update(patch)
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Queued: the change is saved whatever Slack says (lib/event-channels.ts).
+  if (before && is_event === true && !before.is_event) {
+    queueEventChannel({ kind: 'booking', bookingId: id })
+  } else if (before && is_event === false && before.is_event) {
+    queueEventChannelNotice([{ kind: 'booking', bookingId: id }], UNMARKED_NOTICE)
+  }
 
   return NextResponse.json({ success: true })
 }

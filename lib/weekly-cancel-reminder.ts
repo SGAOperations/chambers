@@ -1,5 +1,3 @@
-import { scopedBodyName, type BookingScope, type Division } from '@/lib/booking-scope'
-
 /**
  * The Sunday nudge to #1-leadership to cancel weekly rooms nobody will use.
  *
@@ -77,13 +75,7 @@ export function upcomingWeek(sunday: string): { start: string; end: string } {
 export interface CancelCandidate {
   /** The occurrence's own status; null means the series'. */
   status: string | null
-  /** The occurrence's own visibility; null means the booking's. */
-  hidden: boolean | null
   seriesStatus: string | null
-  bookingHidden: boolean | null
-  bodyName: string
-  scope: BookingScope
-  division: Division | null
 }
 
 /** Whether a week is a room held for someone, with the occurrence-over-series precedence. */
@@ -92,48 +84,16 @@ export function isHeld(c: CancelCandidate): boolean {
   return !!status && HELD_STATUSES.has(status)
 }
 
-export interface CancelSummary {
-  /** Every held week next week, hidden ones included. */
-  total: number
-  /** Held weeks per named booker, largest first. Hidden bookings are not named. */
-  byBody: { name: string; count: number }[]
-  /** Held weeks belonging to hidden bookings: counted, never named. */
-  hiddenCount: number
-}
-
 /**
- * Tallies next week's held rooms, or returns null when there are none -- the
- * signal not to post at all.
+ * Whether next week holds any weekly room at all -- the signal to post.
  *
- * A hidden booking still holds a room, so it still counts towards whether the
- * reminder goes out and towards the total. It is just never named: hidden means
- * only its managers can see it, and a channel is not its managers.
+ * The message itself names no bodies and counts nothing (issue #254). Most
+ * bodies hold one weekly room, so a per-body tally was a long list telling each
+ * leader what they already knew; a short nudge reads better in the channel and
+ * on a phone. Hidden bookings still count here: they hold a room as much as any.
  */
-export function summarize(candidates: CancelCandidate[]): CancelSummary | null {
-  const held = candidates.filter(isHeld)
-  if (!held.length) return null
-
-  const counts = new Map<string, number>()
-  let hiddenCount = 0
-  for (const c of held) {
-    if (c.hidden ?? c.bookingHidden) {
-      hiddenCount++
-      continue
-    }
-    const name = scopedBodyName(c, c.bodyName)
-    counts.set(name, (counts.get(name) ?? 0) + 1)
-  }
-
-  const byBody = [...counts]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-
-  return { total: held.length, byBody, hiddenCount }
-}
-
-/** Slack mrkdwn escaping: only these three characters carry meaning in message text. */
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+export function hasHeldRooms(candidates: CancelCandidate[]): boolean {
+  return candidates.some(isHeld)
 }
 
 function formatDay(date: string): string {
@@ -146,22 +106,10 @@ function formatDay(date: string): string {
   })
 }
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
-
 /** The message, as plain mrkdwn so it reads the same in a phone notification. */
-export function formatCancelReminder(week: { start: string; end: string }, summary: CancelSummary): string {
-  const lines = [
+export function formatCancelReminder(week: { start: string; end: string }): string {
+  return [
     `:calendar: *Weekly room check: ${formatDay(week.start)} – ${formatDay(week.end)}*`,
-    `SGA is holding ${plural(summary.total, 'weekly room reservation')} next week:`,
-    ...summary.byBody.map(b => `• ${esc(b.name)}: ${b.count}`),
-  ]
-  if (summary.hiddenCount) {
-    lines.push(`• ${plural(summary.hiddenCount, 'other reservation')} not listed`)
-  }
-  lines.push(
-    '',
-    'If your body is not meeting one of these weeks, request a cancellation before the week starts so the room can be released.',
-    `<${CHAMBERS_URL}/my-rooms|Open My Rooms>`
-  )
-  return lines.join('\n')
+    `Not meeting this week? Cancel your room before the week starts, in <${CHAMBERS_URL}/my-rooms|Chambers> or with \`/chambers-cancel\`.`,
+  ].join('\n')
 }

@@ -1,6 +1,7 @@
 import { APP_TIME_ZONE } from '@/lib/app-zone'
 import { resolveMeetingTime } from '@/lib/meeting-time'
 import { scopedBodyName, type BookingScope, type Division } from '@/lib/booking-scope'
+import { SENATE_BODY_NAME } from '@/lib/senate-types'
 
 /**
  * Working out which meetings the Slack bot should remind a channel about, and
@@ -128,6 +129,8 @@ export interface ReminderCandidate {
   meeting_time: string | null
   status: string | null
   hidden: boolean | null
+  /** 'Full Body', 'Weekly' or 'Office Hours' on a Senate week; null anywhere else. */
+  senate_type: string | null
   weekly_booking_id: string
   series: {
     room_name: string | null
@@ -172,6 +175,12 @@ export interface ResolvedMeeting {
    */
   meetingTime: string | null
   status: string
+  /**
+   * Which kind of Senate session this is, or null for any other body (issue
+   * #255). Only ever set when Senate owns the booking, the one body whose weeks
+   * carry a session type.
+   */
+  senateType: string | null
 }
 
 /**
@@ -227,6 +236,7 @@ export function resolveMeeting(c: ReminderCandidate): ResolvedMeeting | null {
     // before the field existed (issue #126).
     meetingTime: resolveMeetingTime(c.meeting_time, c.series.meeting_time, startTime),
     status,
+    senateType: c.body.name === SENATE_BODY_NAME ? c.senate_type?.trim() || null : null,
   }
 }
 
@@ -269,7 +279,12 @@ function listNames(names: string[]): string {
  * name everywhere else (issue #218).
  */
 function meetingName(m: ResolvedMeeting): string {
-  return scopedBodyName(m, m.bodyName)
+  const name = scopedBodyName(m, m.bodyName)
+  // Senate meets three different ways, and a channel told only "Senate meets
+  // tomorrow" cannot tell Full Body from Office Hours (issue #255). In the name
+  // rather than on a line of its own, so the Cancelled one-liner says which
+  // session is off too.
+  return m.senateType ? `${name} (${m.senateType})` : name
 }
 
 /**

@@ -446,7 +446,7 @@ export default function DashboardShell({
           <div className="flex flex-col gap-1 px-3 py-4 flex-1">
             {navLink('/my-rooms', 'My Rooms')}
             {navLink('/sga-spaces', 'SGA Spaces')}
-            {navLink('/nusso', 'Browse/Book NUSSO')}
+            {navLink('/browse', 'Browse/Book Rooms')}
             {/*
               Bookings is the one admin link a view-only admin gets (issue
               #217), so the other two drop the "is an admin" half of their
