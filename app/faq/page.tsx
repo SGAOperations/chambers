@@ -61,6 +61,15 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.3.1</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Chambers no longer keeps its database awake around the clock just to stay fast. The first page you open after a quiet stretch may take a moment longer while the database wakes up; everything after that is as quick as before.
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
             <h2 className="text-[#f0f6ff] font-medium text-base">v2.3.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               The Call for Programs is in Chambers. Operational Affairs opens it from Management, optionally with a time it closes on its own, and opening it posts once to the leadership channel in Slack. While it is open, body leadership answer from a new Call for Programs tab on the Request page: keep last fall or spring&apos;s weekly booking as it was, or change its room, its time, or both. Each body answers once, and My Rooms shows a banner until every body you lead has.
