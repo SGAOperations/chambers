@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useSyncExternalStore } from 'react'
+import { useState, useCallback, useSyncExternalStore } from 'react'
 
 /**
  * The responsibilities anyone booking through NUSSO is agreeing to.
@@ -117,26 +117,21 @@ export function ResponsibilitiesButton({ onClick }: { onClick: () => void }) {
   )
 }
 
+/**
+ * The notice is an acknowledgement, so "I understand" is the only way out: no
+ * close button, and neither a click outside nor Escape dismisses it. Each of
+ * those would record the notice as seen without anyone having said so.
+ */
 export function ResponsibilityModal({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
   return (
     <div
       className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-labelledby="nusso-responsibilities-title"
     >
-      <div
-        className="bg-[#0a1628] border border-[#1e5080] rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-[#1e5080]">
+      <div className="bg-[#0a1628] border border-[#1e5080] rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-[#1e5080]">
           <div>
             <h2 id="nusso-responsibilities-title" className="text-lg font-semibold text-[#f0f6ff]">
               Before you book through NUSSO
@@ -145,13 +140,6 @@ export function ResponsibilityModal({ onClose }: { onClose: () => void }) {
               These reservations go straight onto Northeastern&apos;s calendar under SGA&apos;s account.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            className="flex-shrink-0 text-[#93b8d8] hover:text-[#f0f6ff] transition-colors"
-            aria-label="Close"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-          </button>
         </div>
 
         <div className="px-6 py-5 space-y-4">
