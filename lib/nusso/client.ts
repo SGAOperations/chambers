@@ -423,21 +423,23 @@ function bookingOverlaps(b: NussoExistingBooking, startISO: string, endISO: stri
 }
 
 /**
- * Search every room for availability in a window (the "find a room" query).
+ * Every room a reservation of this kind could use on the window's day, with
+ * whether each is free for the window itself. Book mode draws all of them, so a
+ * taken room shows as taken rather than vanishing.
  *
- * GetAvailabilityList with RoomId -1 lists all rooms matching the filters, but
- * for *requestable* rooms it includes ones that already have a booking (EMS lets
- * you submit a request against a taken room; the browse grid just shows the
- * conflict). DaysAvailable does not mean "free for this slot". So we cross-check
- * the day's real bookings (GetBrowseLocationsBookings) and drop any room with a
- * booking overlapping the requested window -- the same data the EMS grid draws.
- * `minCapacity` keeps rooms that seat at least that many.
+ * GetAvailabilityList with RoomId -1 lists the rooms matching the template and
+ * filters, but for *requestable* rooms it includes ones that already have a
+ * booking (EMS lets you submit a request against a taken room; the browse grid
+ * just shows the conflict), so DaysAvailable alone does not mean "free for this
+ * slot". The day's real bookings (GetBrowseLocationsBookings) settle it: a room
+ * with one overlapping the window is not available. `minCapacity` drops rooms
+ * that seat fewer.
  */
-export async function searchAvailableRooms(
+export async function listRoomsForWindow(
   window: NussoTimeWindow,
   profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE,
   minCapacity = 0
-): Promise<NussoAvailability[]> {
+): Promise<(NussoAvailability & { Available: boolean })[]> {
   const day = window.date.slice(0, 10)
   const dayWindow: NussoTimeWindow = {
     date: window.date,
@@ -461,14 +463,24 @@ export async function searchAvailableRooms(
   }
 
   return (availData?.Availability ?? [])
-    .filter(r => r.DaysAvailable > 0 && !busy.has(r.RoomId) && (minCapacity <= 0 || r.Capacity >= minCapacity))
+    .filter(r => minCapacity <= 0 || r.Capacity >= minCapacity)
     .map(r => ({
       ...r,
       RoomCode: decodeEntities(r.RoomCode ?? ''),
       RoomDescription: decodeEntities(r.RoomDescription ?? ''),
       BuildingDescription: decodeEntities(r.BuildingDescription ?? ''),
       Alert: typeof r.Alert === 'string' ? decodeEntities(r.Alert) : r.Alert,
+      Available: r.DaysAvailable > 0 && !busy.has(r.RoomId),
     }))
+}
+
+/** Only the rooms free for the window: the "find a room" query. */
+export async function searchAvailableRooms(
+  window: NussoTimeWindow,
+  profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE,
+  minCapacity = 0
+): Promise<NussoAvailability[]> {
+  return (await listRoomsForWindow(window, profile, minCapacity)).filter(r => r.Available)
 }
 
 /**
