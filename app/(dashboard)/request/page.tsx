@@ -20,6 +20,9 @@ import { WEEKLY_START_TIME_ERROR, invalidWeeklyStartTime } from '@/lib/request-t
 import { LOCATION_REQUIRED_ERROR, MAX_LOCATION, MAX_TABLES, TABLES_ERROR, invalidTableCount } from '@/lib/tabling-request'
 import { canWriteAdmin } from '@/lib/admin-roles'
 import CallForProgramsForm, { type CallState } from './call-for-programs-form'
+import RoomPicker from '../browse/room-picker'
+import { SOURCE_LABEL, type DayRoom, type RoomSource } from '../browse/day-rooms'
+import { readRequestRoomPrefill } from '../browse/request-link'
 
 type RequestType = 'One-Time Room' | 'Weekly Room' | 'Tabling'
 
@@ -87,6 +90,13 @@ interface OneTimeSession {
   start_time: string
   end_time: string
   room_name: string
+  /**
+   * Set when room_name came from the room picker or from Browse/Book Rooms, so
+   * Operational Affairs gets the exact room and not only its name. Typing in
+   * the field clears both: the text no longer names the room they identify.
+   */
+  room_source: RoomSource | null
+  room_ref: number | null
 }
 
 const inputCls = "w-full bg-[#0f2a4a] border border-[#1e5080] rounded-lg px-3 py-2.5 text-sm text-[#f0f6ff] placeholder:text-[#6a96bb] focus:outline-none focus:ring-2 focus:ring-[#c8102e]/30 focus:border-[#c8102e] transition"
@@ -107,7 +117,14 @@ const emptySession = (): TablingSession => ({
   tables: '1',
 })
 
-const emptyOneTimeSession = (): OneTimeSession => ({ session_date: '', start_time: DEFAULT_START_TIME, end_time: DEFAULT_END_TIME, room_name: '' })
+const emptyOneTimeSession = (): OneTimeSession => ({
+  session_date: '',
+  start_time: DEFAULT_START_TIME,
+  end_time: DEFAULT_END_TIME,
+  room_name: '',
+  room_source: null,
+  room_ref: null,
+})
 
 function GuidelinesPanel({ type }: { type: Tab }) {
   const email = 'sgaOperations@northeastern.edu'
@@ -263,6 +280,8 @@ export default function RequestPage() {
 
   const [sessions, setSessions] = useState<TablingSession[]>([emptySession()])
   const [oneTimeSessions, setOneTimeSessions] = useState<OneTimeSession[]>([emptyOneTimeSession()])
+  /** Which one-time session the room picker is open for, if any. */
+  const [pickerFor, setPickerFor] = useState<number | null>(null)
 
   /** Tabling books a table, not a room, so there is no capacity to fit. */
   const needsCapacity = type === 'One-Time Room' || type === 'Weekly Room'
@@ -285,6 +304,19 @@ export default function RequestPage() {
       setAllBodies(data.allBodies || resolved)
       setLeadershipDivisions(data.leadershipDivisions || [])
       setBodiesLoading(false)
+      // Reached from "Request" on Browse/Book Rooms: start a one-time request
+      // for that room on that day. The time is still the requester's to set.
+      const prefill = readRequestRoomPrefill(window.location.search)
+      if (prefill) {
+        setType('One-Time Room')
+        setOneTimeSessions([{
+          ...emptyOneTimeSession(),
+          session_date: prefill.date,
+          room_name: prefill.name,
+          room_source: prefill.source,
+          room_ref: prefill.ref,
+        }])
+      }
     }
     fetchBodies()
     // Opens the tab straight away when the page was reached from the My Rooms
@@ -311,8 +343,17 @@ export default function RequestPage() {
     setSessions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
   }
 
-  const updateOneTimeSession = (index: number, field: keyof OneTimeSession, value: string) => {
-    setOneTimeSessions(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
+  const updateOneTimeSession = (index: number, field: 'session_date' | 'start_time' | 'end_time' | 'room_name', value: string) => {
+    setOneTimeSessions(prev => prev.map((s, i) => {
+      if (i !== index) return s
+      // A hand-edited room is a typed room, whatever was picked before.
+      return field === 'room_name' ? { ...s, room_name: value, room_source: null, room_ref: null } : { ...s, [field]: value }
+    }))
+  }
+
+  const pickRoom = (index: number, room: DayRoom) => {
+    setOneTimeSessions(prev => prev.map((s, i) => i === index ? { ...s, room_name: room.name, room_source: room.source, room_ref: room.ref } : s))
+    setPickerFor(null)
   }
 
   const handleSubmit = async () => {
@@ -758,8 +799,25 @@ export default function RequestPage() {
                       )}
                     </div>
                     <div>
-                      <label className={labelCls}>Preferred Room</label>
-                      <input type="text" placeholder="Optional" value={s.room_name} onChange={e => updateOneTimeSession(i, 'room_name', e.target.value)} className={inputCls} />
+                      <div className="flex items-end justify-between gap-3 mb-1">
+                        <label className={`${labelCls} mb-0`} htmlFor={`ot-room-${i}`}>Preferred Room</label>
+                        <button
+                          type="button"
+                          onClick={() => setPickerFor(i)}
+                          disabled={!s.session_date || s.start_time >= s.end_time}
+                          title={!s.session_date ? 'Pick a date first' : s.start_time >= s.end_time ? 'End time must be after start time' : undefined}
+                          className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium transition-colors disabled:text-[#6a96bb] disabled:cursor-not-allowed"
+                        >
+                          Find a room
+                        </button>
+                      </div>
+                      <input id={`ot-room-${i}`} type="text" placeholder="Optional" value={s.room_name} onChange={e => updateOneTimeSession(i, 'room_name', e.target.value)} className={inputCls} />
+                      {s.room_source && (
+                        <p className="text-[11px] text-[#6a96bb] mt-1">
+                          Picked from {SOURCE_LABEL[s.room_source]}
+                          {s.room_source === 'registrar' ? ' · Operational Affairs will ask the Registrar for it' : ''}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className={labelCls}>Date *</label>
@@ -919,6 +977,16 @@ export default function RequestPage() {
         <GuidelinesPanel type={type} />
       </div>
     </div>
+
+      {pickerFor !== null && oneTimeSessions[pickerFor] && (
+        <RoomPicker
+          date={oneTimeSessions[pickerFor].session_date}
+          start={oneTimeSessions[pickerFor].start_time}
+          end={oneTimeSessions[pickerFor].end_time}
+          onPick={room => pickRoom(pickerFor, room)}
+          onClose={() => setPickerFor(null)}
+        />
+      )}
     </div>
   )
 }
