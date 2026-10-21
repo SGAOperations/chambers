@@ -268,13 +268,21 @@ function browseFilters(window: NussoTimeWindow) {
   }
 }
 
-/** Existing bookings across all rooms in a window (for the calendar). */
+/**
+ * Existing bookings across all rooms in a window (for the calendar). Names come
+ * back HTML-encoded, so "Communications &amp; Events Committee" is decoded here
+ * rather than in every place that shows one.
+ */
 export async function browseBookings(window: NussoTimeWindow): Promise<NussoExistingBooking[]> {
   const data = await serverApi<{ Bookings?: NussoExistingBooking[] }>(
     'GetBrowseLocationsBookings',
     { filterData: browseFilters(window) }
   )
-  return data?.Bookings ?? []
+  return (data?.Bookings ?? []).map(b => ({
+    ...b,
+    GroupName: typeof b.GroupName === 'string' ? decodeEntities(b.GroupName) : b.GroupName,
+    EventName: typeof b.EventName === 'string' ? decodeEntities(b.EventName) : b.EventName,
+  }))
 }
 
 /** A room as the picker needs it. */
@@ -452,9 +460,15 @@ export async function searchAvailableRooms(
     if (bookingOverlaps(b, winStart, winEnd)) busy.add(b.RoomId)
   }
 
-  return (availData?.Availability ?? []).filter(
-    r => r.DaysAvailable > 0 && !busy.has(r.RoomId) && (minCapacity <= 0 || r.Capacity >= minCapacity)
-  )
+  return (availData?.Availability ?? [])
+    .filter(r => r.DaysAvailable > 0 && !busy.has(r.RoomId) && (minCapacity <= 0 || r.Capacity >= minCapacity))
+    .map(r => ({
+      ...r,
+      RoomCode: decodeEntities(r.RoomCode ?? ''),
+      RoomDescription: decodeEntities(r.RoomDescription ?? ''),
+      BuildingDescription: decodeEntities(r.BuildingDescription ?? ''),
+      Alert: typeof r.Alert === 'string' ? decodeEntities(r.Alert) : r.Alert,
+    }))
 }
 
 /**
