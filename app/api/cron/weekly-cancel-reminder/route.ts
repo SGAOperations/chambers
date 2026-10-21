@@ -3,12 +3,11 @@ import { NextResponse } from 'next/server'
 import { postSlackMessage } from '@/lib/slack'
 import { appZoneParts } from '@/lib/meeting-reminders'
 import { getActiveSemesterId } from '@/lib/active-semester'
-import { isBookingScope, isDivision } from '@/lib/booking-scope'
 import {
   CANCEL_REMINDER_HOUR,
   formatCancelReminder,
+  hasHeldRooms,
   isSunday,
-  summarize,
   upcomingWeek,
   type CancelCandidate,
 } from '@/lib/weekly-cancel-reminder'
@@ -39,13 +38,10 @@ import {
 const adminSupabase = db
 
 const SELECT = `
-  occurrence_date, status, hidden,
+  occurrence_date, status,
   weekly_room_bookings!inner(
     status,
-    bookings!inner(
-      hidden, scope, division, semester_id,
-      bodies!inner(name)
-    )
+    bookings!inner(semester_id)
   )
 `
 
@@ -113,23 +109,11 @@ export async function GET(request: Request) {
   const candidates: CancelCandidate[] = []
   for (const row of data ?? []) {
     const series = one(row.weekly_room_bookings)
-    const booking = one(series?.bookings)
-    const body = one(booking?.bodies)
-    if (!series || !booking || !body) continue
-
-    candidates.push({
-      status: row.status,
-      hidden: row.hidden,
-      seriesStatus: series.status,
-      bookingHidden: booking.hidden,
-      bodyName: body.name,
-      scope: isBookingScope(booking.scope) ? booking.scope : 'single',
-      division: isDivision(booking.division) ? booking.division : null,
-    })
+    if (!series) continue
+    candidates.push({ status: row.status, seriesStatus: series.status })
   }
 
-  const summary = summarize(candidates)
-  if (!summary) {
+  if (!hasHeldRooms(candidates)) {
     return NextResponse.json({ ok: true, week, posted: false, reason: 'no held weekly rooms' })
   }
 
@@ -160,7 +144,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, week, posted: false, reason: 'already posted' })
   }
 
-  const result = await postSlackMessage(destination, formatCancelReminder(week, summary))
+  const result = await postSlackMessage(destination, formatCancelReminder(week))
   if (!result.ok) {
     // No row written, so the next run of the afternoon tries again.
     return NextResponse.json({ ok: false, week, error: result.error }, { status: 502 })
@@ -178,5 +162,5 @@ export async function GET(request: Request) {
     )
   }
 
-  return NextResponse.json({ ok: true, week, posted: true, channel: destination, total: summary.total })
+  return NextResponse.json({ ok: true, week, posted: true, channel: destination })
 }
