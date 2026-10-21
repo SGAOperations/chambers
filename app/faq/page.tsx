@@ -43,9 +43,18 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-[#f0f6ff] font-medium text-base">v2.4.0</h2>
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.5.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               We don&apos;t exactly know yet! If there&apos;s anything you&apos;d like to see, send a Slack DM to the Vice President of Operational Affairs ({vpName}) and the Digital Innovation Manager ({dimName}).
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.4.0</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Browse/Book NUSSO is now Browse/Book Rooms, and it draws each room&apos;s day as a timeline, with booked times shaded. Browse is where everyone starts. It can also show the Registrar&apos;s Boston rooms from 25Live next to NUSSO&apos;s, so you can find a free one before asking the Registrar for it. Book, for Leadership and administrators, finds and books NUSSO rooms as before; Registrar rooms are still requested from the Registrar.
             </p>
           </section>
         </div>

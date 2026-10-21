@@ -268,13 +268,21 @@ function browseFilters(window: NussoTimeWindow) {
   }
 }
 
-/** Existing bookings across all rooms in a window (for the calendar). */
+/**
+ * Existing bookings across all rooms in a window (for the calendar). Names come
+ * back HTML-encoded, so "Communications &amp; Events Committee" is decoded here
+ * rather than in every place that shows one.
+ */
 export async function browseBookings(window: NussoTimeWindow): Promise<NussoExistingBooking[]> {
   const data = await serverApi<{ Bookings?: NussoExistingBooking[] }>(
     'GetBrowseLocationsBookings',
     { filterData: browseFilters(window) }
   )
-  return data?.Bookings ?? []
+  return (data?.Bookings ?? []).map(b => ({
+    ...b,
+    GroupName: typeof b.GroupName === 'string' ? decodeEntities(b.GroupName) : b.GroupName,
+    EventName: typeof b.EventName === 'string' ? decodeEntities(b.EventName) : b.EventName,
+  }))
 }
 
 /** A room as the picker needs it. */
@@ -287,39 +295,63 @@ export interface NussoRoomOption {
   DefaultSetupTypeId: number
 }
 
+/** EMS HTML-encodes display text ("Blackman &amp; Fenway Center"). */
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+}
+
+type EmsRecord = Record<string, unknown>
+
+const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+const str = (v: unknown): string => (typeof v === 'string' ? decodeEntities(v).trim() : '')
+
 /**
- * Deep-collect any room-shaped objects from an arbitrary response. The
- * GetBrowseLocationsRooms envelope nests rooms under buildings and its exact
- * shape is only partly known, so rather than hard-code a path we walk the tree
- * and pick out every object that carries a numeric RoomId. De-duplicated by id.
+ * Rooms out of a GetBrowseLocationsRooms response.
+ *
+ * Observed in October 2026: `{ Buildings: [{ Id, Description, Rooms: [{ Id,
+ * Code, Description, Capacity, BuildingID, RecordType, ... }] }] }`. A room's
+ * `Id` is the same number GetBrowseLocationsBookings calls `RoomId`. Nothing in
+ * this envelope is named RoomId, which is what the first version of this parser
+ * looked for -- it returned no rooms at all and nobody noticed, because nothing
+ * rendered the list until Browse/Book Rooms.
+ *
+ * `AvailableBuildings` is the building filter's option list, with empty Rooms,
+ * so only `Buildings` is read.
  */
-function collectRooms(node: unknown, out: Map<number, NussoRoomOption>): void {
-  if (Array.isArray(node)) {
-    for (const item of node) collectRooms(item, out)
-    return
-  }
-  if (node && typeof node === 'object') {
-    const obj = node as Record<string, unknown>
-    if (typeof obj.RoomId === 'number' && !out.has(obj.RoomId)) {
-      out.set(obj.RoomId, {
-        RoomId: obj.RoomId,
-        RoomCode: String(obj.RoomCode ?? obj.RoomDescription ?? obj.RoomId),
-        RoomDescription: String(obj.RoomDescription ?? obj.RoomCode ?? ''),
-        BuildingDescription: String(obj.BuildingDescription ?? obj.BuildingCode ?? ''),
-        Capacity: typeof obj.Capacity === 'number' ? obj.Capacity : 0,
-        DefaultSetupTypeId: typeof obj.DefaultSetupTypeId === 'number' ? obj.DefaultSetupTypeId : 0,
+function parseBrowseRooms(data: unknown): NussoRoomOption[] {
+  const buildings = Array.isArray((data as EmsRecord | null)?.Buildings)
+    ? ((data as EmsRecord).Buildings as EmsRecord[])
+    : []
+  const out = new Map<number, NussoRoomOption>()
+  for (const building of buildings) {
+    const buildingName = str(building.Description) || str(building.DisplayText) || str(building.Code)
+    for (const room of Array.isArray(building.Rooms) ? (building.Rooms as EmsRecord[]) : []) {
+      const id = num(room.Id) ?? num(room.RoomId)
+      if (id === null || out.has(id)) continue
+      const code = str(room.Code) || str(room.DisplayText) || str(room.Description) || String(id)
+      out.set(id, {
+        RoomId: id,
+        RoomCode: code,
+        RoomDescription: str(room.Description) || code,
+        BuildingDescription: buildingName,
+        Capacity: num(room.Capacity) ?? 0,
+        DefaultSetupTypeId: num(room.DefaultSetupTypeId) ?? 0,
       })
     }
-    for (const value of Object.values(obj)) collectRooms(value, out)
   }
+  return [...out.values()]
 }
 
 /** The list of rooms (across buildings) for a window, for the room picker. */
 export async function browseRooms(window: NussoTimeWindow): Promise<NussoRoomOption[]> {
   const data = await serverApi<unknown>('GetBrowseLocationsRooms', { filterData: browseFilters(window) })
-  const out = new Map<number, NussoRoomOption>()
-  collectRooms(data, out)
-  return [...out.values()].sort((a, b) =>
+  return parseBrowseRooms(data).sort((a, b) =>
     a.BuildingDescription.localeCompare(b.BuildingDescription) || a.RoomCode.localeCompare(b.RoomCode)
   )
 }
@@ -391,21 +423,23 @@ function bookingOverlaps(b: NussoExistingBooking, startISO: string, endISO: stri
 }
 
 /**
- * Search every room for availability in a window (the "find a room" query).
+ * Every room a reservation of this kind could use on the window's day, with
+ * whether each is free for the window itself. Book mode draws all of them, so a
+ * taken room shows as taken rather than vanishing.
  *
- * GetAvailabilityList with RoomId -1 lists all rooms matching the filters, but
- * for *requestable* rooms it includes ones that already have a booking (EMS lets
- * you submit a request against a taken room; the browse grid just shows the
- * conflict). DaysAvailable does not mean "free for this slot". So we cross-check
- * the day's real bookings (GetBrowseLocationsBookings) and drop any room with a
- * booking overlapping the requested window -- the same data the EMS grid draws.
- * `minCapacity` keeps rooms that seat at least that many.
+ * GetAvailabilityList with RoomId -1 lists the rooms matching the template and
+ * filters, but for *requestable* rooms it includes ones that already have a
+ * booking (EMS lets you submit a request against a taken room; the browse grid
+ * just shows the conflict), so DaysAvailable alone does not mean "free for this
+ * slot". The day's real bookings (GetBrowseLocationsBookings) settle it: a room
+ * with one overlapping the window is not available. `minCapacity` drops rooms
+ * that seat fewer.
  */
-export async function searchAvailableRooms(
+export async function listRoomsForWindow(
   window: NussoTimeWindow,
   profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE,
   minCapacity = 0
-): Promise<NussoAvailability[]> {
+): Promise<(NussoAvailability & { Available: boolean })[]> {
   const day = window.date.slice(0, 10)
   const dayWindow: NussoTimeWindow = {
     date: window.date,
@@ -428,9 +462,25 @@ export async function searchAvailableRooms(
     if (bookingOverlaps(b, winStart, winEnd)) busy.add(b.RoomId)
   }
 
-  return (availData?.Availability ?? []).filter(
-    r => r.DaysAvailable > 0 && !busy.has(r.RoomId) && (minCapacity <= 0 || r.Capacity >= minCapacity)
-  )
+  return (availData?.Availability ?? [])
+    .filter(r => minCapacity <= 0 || r.Capacity >= minCapacity)
+    .map(r => ({
+      ...r,
+      RoomCode: decodeEntities(r.RoomCode ?? ''),
+      RoomDescription: decodeEntities(r.RoomDescription ?? ''),
+      BuildingDescription: decodeEntities(r.BuildingDescription ?? ''),
+      Alert: typeof r.Alert === 'string' ? decodeEntities(r.Alert) : r.Alert,
+      Available: r.DaysAvailable > 0 && !busy.has(r.RoomId),
+    }))
+}
+
+/** Only the rooms free for the window: the "find a room" query. */
+export async function searchAvailableRooms(
+  window: NussoTimeWindow,
+  profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE,
+  minCapacity = 0
+): Promise<NussoAvailability[]> {
+  return (await listRoomsForWindow(window, profile, minCapacity)).filter(r => r.Available)
 }
 
 /**
