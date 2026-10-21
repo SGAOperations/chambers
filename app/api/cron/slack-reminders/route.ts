@@ -32,8 +32,8 @@ import { isBookingScope, isDivision, type BookingScope, type Division } from '@/
  * over, and the unique (weekly_booking_id, occurrence_date) row written after
  * each post, so the second run of the morning finds the work already done.
  *
- * Set CRON_SECRET to gate it. Unlike /api/cron/warm -- which only does trivial
- * reads and so is safe to leave open -- this one writes and posts to Slack, so
+ * Set CRON_SECRET to gate it. Unlike /api/cron/warm -- which never touches the
+ * database and so is safe to leave open -- this one writes and posts to Slack, so
  * it refuses to run at all without the secret configured.
  */
 

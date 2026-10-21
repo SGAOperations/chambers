@@ -1,9 +1,11 @@
 name: keep-warm
 
 # Pings /api/cron/warm on production so a warm function instance -- with its
-# Supabase pooler + Upstash connections already open -- is sitting ready for real
-# dashboard loads. On a cold path the first load pays a ~870ms first-connection
-# tax (measured on prod).
+# Upstash connection already open -- is sitting ready for real dashboard loads.
+#
+# The route must not query Neon: this schedule is shorter than Neon's 5-minute
+# suspend timeout, so a database ping here keeps the compute awake around the
+# clock and burns the monthly CU-hour allowance (see the route's comment).
 #
 # A Vercel cron would be the natural home for this, but Hobby plans cap crons at
 # once per day. GitHub Actions schedules run about every 5-15 min (they can lag
@@ -11,8 +13,8 @@ name: keep-warm
 # unlimited Actions minutes.
 #
 # Set a CRON_SECRET repo secret matching the CRON_SECRET env var on Vercel so the
-# endpoint is gated. If neither is set the endpoint still answers (trivial reads
-# only); if only one side is set the request 401s.
+# endpoint is gated. If neither is set the endpoint still answers (one rate-limiter
+# call only); if only one side is set the request 401s.
 
 on:
   schedule:
