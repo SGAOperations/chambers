@@ -43,9 +43,18 @@ export default async function FaqPage() {
 
         <div className="space-y-6">
           <section className="space-y-2">
-            <h2 className="text-[#f0f6ff] font-medium text-base">v2.3.0</h2>
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.4.0</h2>
             <p className="text-[#93b8d8] text-sm leading-relaxed">
               We don&apos;t exactly know yet! If there&apos;s anything you&apos;d like to see, send a Slack DM to the Vice President of Operational Affairs ({vpName}) and the Digital Innovation Manager ({dimName}).
+            </p>
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="space-y-2">
+            <h2 className="text-[#f0f6ff] font-medium text-base">v2.3.1</h2>
+            <p className="text-[#93b8d8] text-sm leading-relaxed">
+              Chambers no longer keeps its database awake around the clock just to stay fast. The first page you open after a quiet stretch may take a moment longer while the database wakes up; everything after that is as quick as before.
             </p>
           </section>
         </div>
