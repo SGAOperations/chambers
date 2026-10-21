@@ -92,7 +92,7 @@ export default function SpaceTimeline({
                     </span>
                   ))}
                 </div>
-                {group.rows.some(r => r.action) && <div className="w-20 flex-shrink-0" />}
+                {group.rows.some(r => r.action) && <div className="w-20 flex-shrink-0 sticky right-0 bg-[#0f2a4a]" />}
               </div>
               {group.rows.map(row => (
                 <div key={row.key} className="flex items-center border-b border-[#1e5080]/50 last:border-b-0">
@@ -133,7 +133,14 @@ export default function SpaceTimeline({
                       <span className="absolute -inset-y-0.5 w-0.5 bg-amber-300 z-10" style={{ left: `${pct(nowMinute)}%` }} />
                     )}
                   </div>
-                  {row.action !== undefined && <div className="w-20 flex-shrink-0 pr-3 flex justify-end">{row.action}</div>}
+                  {/*
+                    Pinned to the right edge: in a narrow window the track scrolls
+                    sideways, and the button is the one thing on the row that has
+                    to stay reachable.
+                  */}
+                  {row.action !== undefined && (
+                    <div className="w-20 flex-shrink-0 pr-3 flex justify-end self-stretch items-center sticky right-0 z-10 bg-[#0f2a4a]">{row.action}</div>
+                  )}
                 </div>
               ))}
             </div>
