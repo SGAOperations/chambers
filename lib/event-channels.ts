@@ -454,7 +454,7 @@ export async function noticeCancelledEventChannels(
   }
   for (const { target, dates } of byTarget.values()) {
     const when = [...new Set(dates)].sort().map(formatDate).join(', ')
-    await noticeEventChannel(target, `:x: Cancelled in Chambers: ${when}. The channel stays open.`)
+    await noticeEventChannel(target, `:x: Cancelled in Chambers: ${when}.`)
   }
 }
 
