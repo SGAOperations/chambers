@@ -85,6 +85,37 @@ export async function GET() {
   })
 }
 
+interface OneTimeSessionInput {
+  session_date: string
+  start_time: string
+  end_time: string
+  room_name: string
+  /** Set when the room was picked from the Browse timeline rather than typed. */
+  room_source?: unknown
+  room_ref?: unknown
+}
+
+const ROOM_SOURCES = new Set(['nusso', 'registrar'])
+
+/**
+ * A session's picked room, or null when it was typed by hand. Only meaningful
+ * once invalidPick() has passed: a half-sent pick reads as null here.
+ */
+function pickedRoom(s: OneTimeSessionInput): { source: string; ref: number } | null {
+  if (typeof s.room_source !== 'string' || !ROOM_SOURCES.has(s.room_source)) return null
+  if (!Number.isInteger(s.room_ref) || (s.room_ref as number) <= 0) return null
+  return { source: s.room_source, ref: s.room_ref as number }
+}
+
+/**
+ * True when the client sent part of a pick, or one that is not a room id. A
+ * pick with no name is invalid too: room_name is what every screen shows.
+ */
+function invalidPick(s: OneTimeSessionInput): boolean {
+  if (s.room_source == null && s.room_ref == null) return false
+  return pickedRoom(s) === null || typeof s.room_name !== 'string' || s.room_name.trim() === ''
+}
+
 export async function POST(request: Request) {
   const supabase = db
 
@@ -242,6 +273,12 @@ export async function POST(request: Request) {
     }
   }
 
+  // Checked before anything is written, so a bad pick cannot leave a request
+  // row behind with no sessions under it.
+  if (type === 'One-Time Room' && (sessions as OneTimeSessionInput[]).some(invalidPick)) {
+    return NextResponse.json({ error: 'A picked room is missing its name or id. Pick it again, or type the room instead.' }, { status: 400 })
+  }
+
   // Create the request
   const { data: roomRequest, error: requestError } = await adminSupabase
     .from('room_requests')
@@ -271,18 +308,20 @@ export async function POST(request: Request) {
 
   // Insert type-specific details
   if (type === 'One-Time Room') {
-    const sessionRows = sessions.map((s: {
-      session_date: string
-      start_time: string
-      end_time: string
-      room_name: string
-    }) => ({
+    const picks = (sessions as OneTimeSessionInput[]).map(s => pickedRoom(s))
+    // The picked-room columns (db/neon/0019) are only sent when some session
+    // used the picker. PostgREST wants the same keys on every row of a bulk
+    // insert, and leaving them off otherwise keeps hand-typed requests working
+    // on a database the migration has not reached yet.
+    const anyPicked = picks.some(p => p !== null)
+    const sessionRows = (sessions as OneTimeSessionInput[]).map((s, i) => ({
       request_id: roomRequest.id,
       room_name: s.room_name || null,
       start_date: s.session_date,
       start_time: s.start_time,
       end_time: s.end_time,
       end_date: null,
+      ...(anyPicked ? { room_source: picks[i]?.source ?? null, room_ref: picks[i]?.ref ?? null } : {}),
     }))
 
     const { error: detailError } = await adminSupabase

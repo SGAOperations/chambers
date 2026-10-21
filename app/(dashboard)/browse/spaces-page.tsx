@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
 import DateField from '@/app/_components/date-field'
@@ -17,9 +18,8 @@ import type { AvailableRoom } from './types'
 import { canWriteAdmin } from '@/lib/admin-roles'
 import { todayInAppZone } from '@/lib/app-zone'
 import { bostonWallClockNow } from '@/lib/boston-time'
-import type { NussoRoomOption } from '@/lib/nusso/client'
-import type { NussoExistingBooking } from '@/lib/nusso/types'
-import type { RegistrarReservation, RegistrarSpace } from '@/lib/25live/client'
+import { groupRooms, useDayRooms } from './day-rooms'
+import { requestRoomHref } from './request-link'
 
 type ReservationType = 'room-request' | 'tabling'
 type Mode = 'browse' | 'book'
@@ -42,34 +42,6 @@ function toMinute(hhmm: string): number {
   return h * 60 + m
 }
 
-/**
- * An EMS time ("2026-10-21T08:00:00", Boston wall-clock with no offset) as
- * minutes into `date`, held to that day.
- */
-function emsMinute(value: string, date: string, edge: 'start' | 'end'): number | null {
-  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})/.exec(value || '')
-  if (!m) return null
-  if (m[1] < date) return 0
-  if (m[1] > date) return edge === 'end' ? 24 * 60 : null
-  return Number(m[2]) * 60 + Number(m[3])
-}
-
-/** The day's NUSSO bookings as timeline blocks, keyed by room. */
-function nussoBlocks(bookings: NussoExistingBooking[], date: string) {
-  const byRoom = new Map<number, TimelineGroup['rows'][number]['blocks']>()
-  for (const b of bookings) {
-    // The booked span includes setup and teardown, which is what keeps the room
-    // from being requested -- the same span searchAvailableRooms checks.
-    const start = emsMinute(b.TimeBookingStart || b.EventStart, date, 'start')
-    const end = emsMinute(b.TimeBookingEnd || b.EventEnd, date, 'end')
-    if (start === null || end === null || end <= start) continue
-    const title = b.DisplayDetails ? (b.EventName || b.GroupName || null) : null
-    if (!byRoom.has(b.RoomId)) byRoom.set(b.RoomId, [])
-    byRoom.get(b.RoomId)!.push({ key: `n${b.Id}`, startMinute: start, endMinute: end, title })
-  }
-  return byRoom
-}
-
 function groupBy<T>(items: T[], key: (item: T) => string): [string, T[]][] {
   const map = new Map<string, T[]>()
   for (const item of items) {
@@ -81,23 +53,6 @@ function groupBy<T>(items: T[], key: (item: T) => string): [string, T[]][] {
 }
 
 const byCode = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true })
-
-/** One source's load: data, or why there is none. */
-interface Loaded<T> {
-  data: T | null
-  error: string | null
-}
-
-async function getJsonOrError<T>(url: string, what: string): Promise<Loaded<T>> {
-  try {
-    const res = await fetch(url)
-    const body = await res.json()
-    if (!res.ok) return { data: null, error: body?.error ?? `${what} failed (${res.status})` }
-    return { data: body as T, error: null }
-  } catch {
-    return { data: null, error: `Could not reach ${what}.` }
-  }
-}
 
 function ResultsSkeleton() {
   return (
@@ -134,6 +89,8 @@ export default function SpacesPage({ registrarEnabled }: { registrarEnabled: boo
   // A view-only admin books nothing (#217) -- being an admin stops being the
   // thing that grants it, though Leadership still does.
   const canBook = (isAdmin && canWriteAdmin(adminRole)) || isLeadership
+  // The same people the sidebar shows Request a Booking to.
+  const canRequest = isLeadership || (isAdmin && canWriteAdmin(adminRole))
 
   // What booking through NUSSO makes you responsible for: up once per sign-in,
   // and reopenable from the header at any time.
@@ -180,33 +137,9 @@ export default function SpacesPage({ registrarEnabled }: { registrarEnabled: boo
 
   // --- The day: every room and what is booked in it -------------------------
 
-  const [dayLoading, setDayLoading] = useState(true)
-  const [nussoRooms, setNussoRooms] = useState<Loaded<{ rooms: NussoRoomOption[] }>>({ data: null, error: null })
-  const [nussoBookings, setNussoBookings] = useState<Loaded<{ bookings: NussoExistingBooking[] }>>({ data: null, error: null })
-  const [registrar, setRegistrar] = useState<Loaded<{ spaces: RegistrarSpace[]; reservations: RegistrarReservation[] }>>({ data: null, error: null })
   const showRegistrar = registrarEnabled && mode === 'browse'
-
-  const loadDay = useCallback(async (day: string, withRegistrar: boolean) => {
-    setDayLoading(true)
-    const [rooms, bookings, reg] = await Promise.all([
-      getJsonOrError<{ rooms: NussoRoomOption[] }>(`/api/nusso/rooms?date=${day}`, 'NUSSO'),
-      getJsonOrError<{ bookings: NussoExistingBooking[] }>(`/api/nusso/bookings?date=${day}`, 'NUSSO'),
-      withRegistrar
-        ? getJsonOrError<{ spaces: RegistrarSpace[]; reservations: RegistrarReservation[] }>(`/api/registrar-spaces?date=${day}`, '25Live')
-        : Promise.resolve({ data: null, error: null }),
-    ])
-    setNussoRooms(rooms)
-    setNussoBookings(bookings)
-    setRegistrar(reg)
-    setDayLoading(false)
-  }, [])
-
-  useEffect(() => { loadDay(date, showRegistrar) }, [date, showRegistrar, loadDay])
-
-  const blocksByNussoRoom = useMemo(
-    () => nussoBlocks(nussoBookings.data?.bookings ?? [], date),
-    [nussoBookings, date]
-  )
+  const day = useDayRooms(date, showRegistrar)
+  const blocksByNussoRoom = day.nussoBlocksByRoom
 
   // --- Book: NUSSO's "find a room" search ------------------------------------
 
@@ -253,7 +186,7 @@ export default function SpacesPage({ registrarEnabled }: { registrarEnabled: boo
   const afterBooking = () => {
     setBookRoom(null)
     search()
-    loadDay(date, showRegistrar)
+    day.reload()
   }
 
   // --- What the grid draws ----------------------------------------------------
@@ -261,53 +194,26 @@ export default function SpacesPage({ registrarEnabled }: { registrarEnabled: boo
   const browseGroups = useMemo<TimelineGroup[]>(() => {
     const q = query.trim().toLowerCase()
     const cap = Number(capacity)
-    const matches = (name: string, bldg: string, seats: number | null) =>
-      (!q || name.toLowerCase().includes(q) || bldg.toLowerCase().includes(q)) &&
+    const rooms = day.rooms.filter(r =>
+      (source === 'all' || r.source === source) &&
+      (!q || r.name.toLowerCase().includes(q) || r.building.toLowerCase().includes(q)) &&
       // An unknown capacity is kept: the system not knowing is not the room being small.
-      (!(cap > 0) || seats === null || seats >= cap)
-
-    const groups: TimelineGroup[] = []
-    if (source !== 'registrar') {
-      const rooms = (nussoRooms.data?.rooms ?? []).filter(r =>
-        matches(r.RoomCode, r.BuildingDescription, r.Capacity > 0 ? r.Capacity : null)
-      )
-      for (const [bldg, list] of groupBy(rooms, r => r.BuildingDescription || 'Other locations')) {
-        groups.push({
-          key: `nusso:${bldg}`,
-          heading: bldg,
-          source: 'NUSSO',
-          rows: list.sort((a, b) => byCode(a.RoomCode, b.RoomCode)).map(r => ({
-            key: `n${r.RoomId}`,
-            name: r.RoomCode,
-            detail: r.Capacity > 0 ? `${r.Capacity} seats` : (r.RoomDescription || 'capacity unknown'),
-            blocks: blocksByNussoRoom.get(r.RoomId) ?? [],
-          })),
-        })
-      }
-    }
-    if (source !== 'nusso' && registrar.data) {
-      const blocks = new Map<number, TimelineGroup['rows'][number]['blocks']>()
-      for (const r of registrar.data.reservations) {
-        if (!blocks.has(r.spaceId)) blocks.set(r.spaceId, [])
-        blocks.get(r.spaceId)!.push({ key: `r${r.id}-${r.startMinute}`, startMinute: r.startMinute, endMinute: r.endMinute, title: r.title })
-      }
-      const spaces = registrar.data.spaces.filter(s => matches(s.name, s.building, s.capacity))
-      for (const [bldg, list] of groupBy(spaces, s => s.building.replace(/^Boston - /, ''))) {
-        groups.push({
-          key: `registrar:${bldg}`,
-          heading: bldg,
-          source: 'Registrar',
-          rows: list.sort((a, b) => byCode(a.name, b.name)).map(s => ({
-            key: `r${s.id}`,
-            name: s.name,
-            detail: s.capacity ? `${s.capacity} seats` : 'capacity unknown',
-            blocks: blocks.get(s.id) ?? [],
-          })),
-        })
-      }
-    }
-    return groups
-  }, [nussoRooms, registrar, blocksByNussoRoom, query, capacity, source])
+      (!(cap > 0) || r.capacity === null || r.capacity >= cap)
+    )
+    // Request this room: the form fills in the room and the day, and the
+    // requester sets the time there. Only for people who can submit a request.
+    return groupRooms(rooms, r => canRequest ? {
+      action: (
+        <Link
+          href={requestRoomHref({ date, name: r.name, building: r.building, source: r.source, ref: r.ref })}
+          prefetch={false}
+          className="py-1 px-2.5 border border-[#1e5080] hover:border-[#c8102e] text-[#f0f6ff] text-xs font-medium rounded-lg transition-colors whitespace-nowrap"
+        >
+          Request
+        </Link>
+      ),
+    } : {})
+  }, [day.rooms, query, capacity, source, canRequest, date])
 
   const buildingOptions = useMemo(
     () => browseGroups.map(g => ({ key: g.key, label: `${g.heading} (${g.source})` })).sort((a, b) => a.label.localeCompare(b.label)),
@@ -347,10 +253,10 @@ export default function SpacesPage({ registrarEnabled }: { registrarEnabled: boo
   const nowMinute = date === today ? now.getUTCHours() * 60 + now.getUTCMinutes() : null
 
   const shownRooms = visibleBrowse.reduce((n, g) => n + g.rows.length, 0)
-  const sourceErrors = [
-    source !== 'registrar' && (nussoRooms.error || nussoBookings.error) ? `NUSSO: ${nussoRooms.error || nussoBookings.error}` : null,
-    showRegistrar && source !== 'nusso' && registrar.error ? `Registrar (25Live): ${registrar.error}` : null,
-  ].filter((e): e is string => !!e)
+  const sourceErrors = day.errors
+    .filter(e => source === 'all' || e.source === source || mode === 'book')
+    .filter(e => mode === 'browse' || e.source === 'nusso')
+    .map(e => `${e.source === 'nusso' ? 'NUSSO' : 'Registrar (25Live)'}: ${e.message}`)
 
   const stepDate = (delta: number) => setDate(d => clamp(addDays(d, delta)))
 
@@ -500,7 +406,7 @@ export default function SpacesPage({ registrarEnabled }: { registrarEnabled: boo
               {sourceErrors.map(e => <p key={e} className="text-sm text-[#f0f6ff]">{e}</p>)}
             </div>
             <button
-              onClick={() => loadDay(date, showRegistrar)}
+              onClick={day.reload}
               className="py-1.5 px-3 bg-[#c8102e] hover:bg-[#a50d26] text-white text-sm font-medium rounded-lg transition-colors"
             >
               Try again
@@ -509,17 +415,17 @@ export default function SpacesPage({ registrarEnabled }: { registrarEnabled: boo
         )}
 
         {mode === 'browse' ? (
-          dayLoading && !nussoRooms.data && !registrar.data ? (
+          day.loading && day.rooms.length === 0 ? (
             <ResultsSkeleton />
           ) : shownRooms === 0 ? (
             sourceErrors.length > 0 ? null : <Notice>No rooms match those filters.</Notice>
           ) : (
-            <div className={`space-y-4 transition-opacity ${dayLoading ? 'opacity-50' : ''}`}>
+            <div className={`space-y-4 transition-opacity ${day.loading ? 'opacity-50' : ''}`}>
               <p className="text-sm text-[#93b8d8]">
                 {shownRooms} {shownRooms === 1 ? 'room' : 'rooms'} · shaded blocks are booked
               </p>
               <SpaceTimeline groups={visibleBrowse} nowMinute={nowMinute} />
-              {showRegistrar && source !== 'nusso' && registrar.data && (
+              {showRegistrar && source !== 'nusso' && day.registrarAvailable && (
                 <p className="text-xs text-[#6a96bb] pb-2">
                   Registrar rooms come from 25Live&apos;s public view, refreshed every few minutes. One that looks free can still be held for something 25Live does not show publicly, so confirm with the Registrar before you plan around it.
                 </p>
