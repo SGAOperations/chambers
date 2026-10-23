@@ -78,7 +78,7 @@ After cutover, a user's Chambers memberships are exactly what their positions sa
 
 ## 5. Approval
 
-The Chambers lead and the Primary Admin are the same person: the VP of Operational Affairs. They hold the SGAuth Primary Admin account through `sgaoperations@northeastern.edu`, which is the Information Manager's shared account (Q1–Q10 were decided by them in review).
+The Chambers lead and the Primary Admin are the same person: the VP of Operational Affairs. They hold the SGAuth Primary Admin account through `sgaoperations@northeastern.edu`, which is technically the Information Manager's account. Q1–Q10 were decided by the VP of Operational Affairs in review.
 
 - [ ] Chambers lead: tiers, IEMS, body table, Q1–Q10
 - [ ] Primary Admin: import file, after reviewing a dry-run report. Then set `approvedBy` to `sgaoperations@northeastern.edu` (the production run refuses any other address) and `approvedAt` to the date.
