@@ -3,10 +3,14 @@ import { NextResponse } from 'next/server'
 import { randomBytes, createHash } from 'crypto'
 import { signupRateLimiter } from '@/lib/signup-rate-limit'
 import { sendSignupOtpEmail } from '@/lib/emails/signup-otp'
+import { signupClosedResponse } from '@/lib/signup-closed'
 
 const adminSupabase = db
 
 export async function POST(request: Request) {
+  const closed = signupClosedResponse()
+  if (closed) return closed
+
   const ip = request.headers.get('x-forwarded-for') ?? 'unknown'
   const { success } = await signupRateLimiter.limit(ip)
   if (!success) {
