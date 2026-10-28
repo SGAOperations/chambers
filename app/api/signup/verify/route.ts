@@ -2,10 +2,14 @@ import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { createPasswordUser } from '@/lib/auth-admin'
 import { randomBytes, createHash, timingSafeEqual } from 'crypto'
+import { signupClosedResponse } from '@/lib/signup-closed'
 
 const adminSupabase = db
 
 export async function POST(request: Request) {
+  const closed = signupClosedResponse()
+  if (closed) return closed
+
   const { email, otp } = await request.json()
   if (!email || !otp || typeof email !== 'string' || typeof otp !== 'string') {
     return NextResponse.json({ error: 'Invalid request.' }, { status: 400 })
