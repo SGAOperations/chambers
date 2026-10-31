@@ -13,23 +13,24 @@ All keys come from the curated list in SGAOperations/auth `prisma/seed/positions
 
 ## 1. Admin tiers
 
-Since #151 was written, there are three tiers, not two. Issue #217 added a view-only tier, and `0015` removed `Digital Innovation Project Member`.
+Since #151 was written, there are three tiers, not two. Issue #217 added a view-only tier, and `0015` removed `Digital Innovation Project Member`. `0020` (#266) also removed `Digital Innovation Manager`, so the Management tier is now three offices.
 
 | Chambers `admin_role` (holders today) | Tier | Position key |
 |---|---|---|
 | Executive Vice President (1) | Management | `executive-vice-president` |
 | Vice President of Operational Affairs (1) | Management | `vice-president-of-operational-affairs` |
-| Digital Innovation Manager (1) | Management | `digital-innovation-manager` |
 | Information Manager (1) | Management | `information-manager` |
 | Comptroller (1) | Booking (full Bookings, no Management) | `comptroller` |
 | Student Body President (1) | View-only (reads Bookings) | `student-body-president` |
 
-All six offices already exist as curated keys, so no product role is needed. #151 suggested `chambers-admin` for Digital Innovation Project Member, but that role no longer exists and nobody holds it. **Recommendation: do not create `chambers-admin`** until there is an admin who is not an SGA office.
+All five offices already exist as curated keys, so no product role is needed. #151 suggested `chambers-admin` for Digital Innovation Project Member, but that role no longer exists and nobody holds it. **Recommendation: do not create `chambers-admin`** until there is an admin who is not an SGA office.
+
+`digital-innovation-manager` grants no admin capability. It still makes its holder Leadership of the SenatePortal and Website Creation teams (§3). Once 0020 runs, the import has no `admin_role` to give that position from, so it is assigned by hand in SGAuth like the other Leadership seats.
 
 Two other lists hang off `admin_role` today and get mapped explicitly, not derived from a tier:
 
 - `requestAlerts` (`REQUEST_ALERT_ROLES`): VP of Operational Affairs and Comptroller.
-- `adminEmailPrefs` (`EMAIL_PREF_ADMIN_ROLES`): EVP, VPOA, Comptroller and Information Manager. It does **not** match the Management tier: it leaves out Digital Innovation Manager and includes Comptroller.
+- `adminEmailPrefs` (`EMAIL_PREF_ADMIN_ROLES`): EVP, VPOA, Comptroller and Information Manager. It is the Management tier plus Comptroller.
 
 ## 2. IEMS
 

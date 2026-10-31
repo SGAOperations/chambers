@@ -3,7 +3,6 @@
   "roles": {
     "admin_role:Executive Vice President": ["executive-vice-president"],
     "admin_role:Vice President of Operational Affairs": ["vice-president-of-operational-affairs"],
-    "admin_role:Digital Innovation Manager": ["digital-innovation-manager"],
     "admin_role:Information Manager": ["information-manager"],
     "admin_role:Comptroller": ["comptroller"],
     "admin_role:Student Body President": ["student-body-president"],
