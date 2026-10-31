@@ -1,6 +1,7 @@
 import { db } from '@/lib/db/data-api'
 import { redirect } from 'next/navigation'
 import { getAuthedUser } from '@/lib/auth'
+import { resolveSgauthUser, sgauthEnabled, sgauthLoginHref } from '@/lib/sgauth'
 import SlackConnectForm from './SlackConnectForm'
 
 export default async function SlackConnectPage({
@@ -12,6 +13,13 @@ export default async function SlackConnectPage({
 
   const supabase = db
   const user = await getAuthedUser(supabase)
+
+  if (!user && sgauthEnabled()) {
+    // Signed in to SGAuth but deactivated in Chambers: the landing page says so.
+    // Sending them to sign in would only bring them straight back.
+    if ((await resolveSgauthUser()).status === 'ok') redirect('/')
+    redirect(await sgauthLoginHref(token ? `/slack/connect?token=${encodeURIComponent(token)}` : '/'))
+  }
 
   if (!user) {
     const redirectTo = token

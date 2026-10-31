@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { resolveShellIdentity } from '@/lib/shell-identity'
+import { sgauthEnabled, sgauthLogoutHref } from '@/lib/sgauth'
 import DashboardShell from './dashboard-shell'
 import ForceSignOut from './force-sign-out'
 
@@ -15,6 +16,11 @@ import ForceSignOut from './force-sign-out'
  * Doing it here makes the document dynamic, which costs two in-region Postgres
  * reads on a warm pooled connection. In exchange the browser gets a shell that is
  * already populated and a page it can render the moment React mounts.
+ *
+ * Under SGAuth (SGAUTH_ENABLED) the proxy has already sent anyone without a
+ * session cookie to sign in, so "unauthenticated" here means a cookie SGAuth
+ * rejected; the landing page offers sign-in again. Sign-out is SGAuth's, and is
+ * global, so the shell is given that link rather than ending a session itself.
  */
 export default async function DashboardLayout({
   children,
@@ -22,10 +28,15 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   const result = await resolveShellIdentity()
+  const sgauthSignOutHref = sgauthEnabled() ? await sgauthLogoutHref() : null
 
   if (result.status === 'unauthenticated') redirect('/')
   if (result.status === 'onboarding') redirect('/onboarding')
-  if (result.status === 'deactivated') return <ForceSignOut />
+  if (result.status === 'deactivated') return <ForceSignOut sgauthSignOutHref={sgauthSignOutHref} />
 
-  return <DashboardShell identity={result.identity}>{children}</DashboardShell>
+  return (
+    <DashboardShell identity={result.identity} sgauthSignOutHref={sgauthSignOutHref}>
+      {children}
+    </DashboardShell>
+  )
 }

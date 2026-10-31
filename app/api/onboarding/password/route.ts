@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getAuthedUser } from '@/lib/auth'
 import { pool } from '@/lib/db/pool'
 import { setUserPassword } from '@/lib/auth-admin'
+import { replacedBySgauth, sgauthEnabled } from '@/lib/sgauth'
 
 /**
  * Sets the permanent password at the end of onboarding (issue #136).
@@ -14,6 +15,8 @@ import { setUserPassword } from '@/lib/auth-admin'
  * have, changing a password means knowing the old one, or a reset link.
  */
 export async function POST(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth()
+
   const user = await getAuthedUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
