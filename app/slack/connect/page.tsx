@@ -1,7 +1,8 @@
 import { db } from '@/lib/db/data-api'
 import { redirect } from 'next/navigation'
 import { getAuthedUser } from '@/lib/auth'
-import { resolveSgauthUser, sgauthEnabled, sgauthLoginHref } from '@/lib/sgauth'
+import { sgauthEnabled } from '@/lib/sgauth'
+import { slackAccountHref } from '@/lib/slack-identity'
 import SlackConnectForm from './SlackConnectForm'
 
 export default async function SlackConnectPage({
@@ -9,17 +10,15 @@ export default async function SlackConnectPage({
 }: {
   searchParams: Promise<{ token?: string }>
 }) {
+  // Slack is linked in SGAuth under the flag (#268): the slash command DMs an
+  // SGAuth link instead, and a Chambers token from before the switch is no
+  // longer honoured. This page only points at where the link is managed.
+  if (sgauthEnabled()) redirect(slackAccountHref())
+
   const { token } = await searchParams
 
   const supabase = db
   const user = await getAuthedUser(supabase)
-
-  if (!user && sgauthEnabled()) {
-    // Signed in to SGAuth but deactivated in Chambers: the landing page says so.
-    // Sending them to sign in would only bring them straight back.
-    if ((await resolveSgauthUser()).status === 'ok') redirect('/')
-    redirect(await sgauthLoginHref(token ? `/slack/connect?token=${encodeURIComponent(token)}` : '/'))
-  }
 
   if (!user) {
     const redirectTo = token

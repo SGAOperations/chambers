@@ -56,3 +56,6 @@ supabase/.temp/
 /data.sql
 /roles.sql
 /schema.sql
+
+# Script output with user ids (scripts/sgauth/export-slack-links.mjs). Never commit.
+/.temp/

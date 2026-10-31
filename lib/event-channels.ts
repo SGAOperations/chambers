@@ -1,6 +1,7 @@
 import { waitUntil } from '@vercel/functions'
 import { db } from './db/data-api'
 import { createPrivateSlackChannel, inviteToSlackChannel, postSlackMessage } from './slack'
+import { slackIdsForChambersUsers } from './slack-identity'
 import { formatDate, formatTime } from './emails/changes'
 
 /**
@@ -269,19 +270,8 @@ async function resolveInvitees(bodyIds: string[], bodyName: string): Promise<Inv
   return invitees
 }
 
-async function slackIdsFor(userIds: string[]): Promise<Map<string, string>> {
-  if (!userIds.length) return new Map()
-  const { data } = await db
-    .from('slack_connections')
-    .select('slack_user_id, chambers_user_id')
-    .in('chambers_user_id', userIds)
-  return new Map(
-    ((data ?? []) as { slack_user_id: string; chambers_user_id: string }[]).map(l => [
-      l.chambers_user_id,
-      l.slack_user_id,
-    ])
-  )
-}
+/** SGAuth's Slack links under SGAUTH_ENABLED, slack_connections otherwise (#268). */
+const slackIdsFor = slackIdsForChambersUsers
 
 // ---------------------------------------------------------------------------
 // Creating the channel
