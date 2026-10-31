@@ -12,6 +12,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@nusgaops/sgauth": "0.2.0",
     "@supabase/postgrest-js": "^2.116.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.37.0",

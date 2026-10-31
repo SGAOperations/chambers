@@ -56,9 +56,12 @@ const IDLE_WARNING_SECONDS = 60
 
 export default function DashboardShell({
   identity,
+  sgauthSignOutHref,
   children,
 }: {
   identity: ShellIdentity
+  /** SGAuth's sign-out link when Chambers signs in through SGAuth, else null. See layout.tsx. */
+  sgauthSignOutHref: string | null
   children: React.ReactNode
 }) {
   // Resolved on the server and shipped with the document -- see
@@ -256,6 +259,14 @@ export default function DashboardShell({
 
   const handleLogout = async () => {
     localStorage.removeItem('chambers_last_active')
+    // Under SGAuth there is no local session to end: sign-out is SGAuth's, it
+    // ends the one session every SGA tool shares, and SGAuth sends the browser
+    // back to the landing page afterwards. A location change, not router.push --
+    // it is another origin, and a prefetch of it would sign nobody out.
+    if (sgauthSignOutHref) {
+      window.location.href = sgauthSignOutHref
+      return
+    }
     await signOutThisDevice()
     router.push('/')
   }
@@ -289,6 +300,11 @@ export default function DashboardShell({
   }
 
   useEffect(() => {
+    // Not under SGAuth. Its session has its own lifetime, enforced by SGAuth,
+    // and signing out there signs the person out of every SGA tool -- too much
+    // for a Chambers tab left open over a weekend.
+    if (sgauthSignOutHref) return
+
     const storedLastActive = localStorage.getItem('chambers_last_active')
     if (storedLastActive) {
       const elapsed = Date.now() - parseInt(storedLastActive, 10)

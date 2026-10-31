@@ -10,6 +10,8 @@ type Body = { id: string; name: string; division: string; body_open: boolean }
 export default function OnboardingPage() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
   const [hasMemberships, setHasMemberships] = useState(false)
+  // False under SGAuth, where the password belongs to SGAuth and step 4 is skipped.
+  const [needsPassword, setNeedsPassword] = useState(true)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
@@ -53,9 +55,10 @@ export default function OnboardingPage() {
         return
       }
 
-      const state: { full_name: string; has_memberships: boolean } = await res.json()
+      const state: { full_name: string; has_memberships: boolean; needs_password?: boolean } = await res.json()
       setFullName(state.full_name)
       setHasMemberships(state.has_memberships)
+      setNeedsPassword(state.needs_password !== false)
       setLoading(false)
     }
     init()
@@ -99,7 +102,8 @@ export default function OnboardingPage() {
       setError(data.error ?? 'Something went wrong.')
       return
     }
-    setStep(hasMemberships ? 4 : 3)
+    if (hasMemberships) await nextAfterMemberships()
+    else setStep(3)
   }
 
   const handleSaveMemberships = async () => {
@@ -116,7 +120,24 @@ export default function OnboardingPage() {
       setError(data.error ?? 'Something went wrong.')
       return
     }
-    setStep(4)
+    await nextAfterMemberships()
+  }
+
+  /** On to the password step, or straight to the end when there is none. */
+  const nextAfterMemberships = async () => {
+    if (needsPassword) {
+      setStep(4)
+      return
+    }
+    setSubmitting(true)
+    const res = await fetch('/api/onboarding/complete', { method: 'PATCH' })
+    setSubmitting(false)
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error ?? 'Something went wrong.')
+      return
+    }
+    window.location.href = '/my-rooms'
   }
 
   const handleSetPassword = async () => {
@@ -188,7 +209,7 @@ export default function OnboardingPage() {
         {/* Brand */}
         <div className="text-center">
           <span className="text-[#c8102e] font-bold text-3xl tracking-tight">Chambers</span>
-          <p className="text-[#93b8d8] text-xs mt-1">Step {hasMemberships && step === 4 ? 3 : step} of {hasMemberships ? 3 : 4}</p>
+          <p className="text-[#93b8d8] text-xs mt-1">Step {hasMemberships && step === 4 ? 3 : step} of {(hasMemberships ? 3 : 4) - (needsPassword ? 0 : 1)}</p>
         </div>
 
         {/* Step 1 — Welcome */}
