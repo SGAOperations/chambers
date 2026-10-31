@@ -1,10 +1,15 @@
 import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { getAuthedUser } from '@/lib/auth'
+import { replacedBySgauth, sgauthEnabled } from '@/lib/sgauth'
 
 const adminSupabase = db
 
+// Slack is linked in SGAuth under SGAUTH_ENABLED (#268); this Chambers-side
+// flow answers 410 then, and slack_connections is no longer written.
 export async function GET(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth()
+
   const { searchParams } = new URL(request.url)
   const token = searchParams.get('token')
 
@@ -27,6 +32,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth()
+
   const supabase = db
   const user = await getAuthedUser(supabase)
   if (!user) {

@@ -1,5 +1,6 @@
 import { waitUntil } from '@vercel/functions'
 import { postSlackMessage } from './slack'
+import { slackIdsForChambersUsers } from './slack-identity'
 import { REQUEST_ALERT_ROLES } from './admin-roles'
 import { bostonWallClockNow } from './boston-time'
 import { todayInAppZone } from './app-zone'
@@ -429,10 +430,11 @@ function isProduction(): boolean {
  * Who the alert is sent to: one Slack DM per holder of a REQUEST_ALERT_ROLE who
  * has linked their account.
  *
- * `slack_connections` is already how Chambers knows which Slack account belongs
- * to which user -- the slash command writes it and the quick-request modal reads
- * it -- so this needs no new column and no Slack id in configuration. The cost
- * is that an admin who has never run a Chambers slash command is unreachable,
+ * The Slack link is how Chambers knows which Slack account belongs to which user
+ * -- the slash command makes it and the quick-request modal reads it -- so this
+ * needs no new column and no Slack id in configuration (lib/slack-identity.ts:
+ * SGAuth under SGAUTH_ENABLED, slack_connections otherwise). The cost is that
+ * an admin who has never linked Slack is unreachable,
  * which is what SLACK_ADMIN_ALERT_CHANNEL covers and what the warning below is
  * for.
  *
@@ -469,17 +471,9 @@ async function alertRecipients(
   // what to do with it.
   if (!rows.length) return { slackUserIds: [], unlinked: [] }
 
-  const { data: links } = await adminSupabase
-    .from('slack_connections')
-    .select('slack_user_id, chambers_user_id')
-    .in('chambers_user_id', rows.map(r => r.id))
-
-  const byUser = new Map(
-    ((links ?? []) as { slack_user_id: string; chambers_user_id: string }[]).map(l => [
-      l.chambers_user_id,
-      l.slack_user_id,
-    ])
-  )
+  // An SGAuth outage answers no links, which degrades like everyone being
+  // unlinked: SLACK_ADMIN_ALERT_CHANNEL gets the alert.
+  const byUser = await slackIdsForChambersUsers(rows.map(r => r.id))
 
   return {
     // filter() before the Set, not after: a holder with no link contributes

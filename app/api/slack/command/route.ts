@@ -2,7 +2,8 @@ import { db } from '@/lib/db/data-api'
 import { randomBytes } from 'crypto'
 import { verifySlackRequest } from '@/lib/slack-verify'
 import { checkRateLimit } from '@/lib/check-rate-limit'
-import { ephemeral } from '@/lib/slack'
+import { ephemeral, postSlackMessage } from '@/lib/slack'
+import { resolveSlackUser, slackConnectUrl } from '@/lib/slack-identity'
 import { MAX_LOCATION, MAX_TABLES } from '@/lib/tabling-request'
 import { buildCancelModal, loadCancellableSessions } from '@/lib/slack-cancel'
 
@@ -325,43 +326,56 @@ export async function POST(request: Request) {
   const rateLimitRes = await checkRateLimit(`slack:${slackUserId}`)
   if (rateLimitRes) return rateLimitRes
 
-  const { data: connection } = await adminSupabase
-    .from('slack_connections')
-    .select('chambers_user_id')
-    .eq('slack_user_id', slackUserId)
-    .maybeSingle()
+  // Through SGAuth under SGAUTH_ENABLED, slack_connections otherwise (#268).
+  const teamId = params.get('team_id')
+  const resolved = await resolveSlackUser(slackUserId, teamId)
 
-  if (!connection) {
-    const token = randomBytes(32).toString('hex')
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+  if (resolved.status === 'error') {
+    return ephemeral("Chambers couldn't check your SGA account just now. Please try again in a minute.")
+  }
 
-    await adminSupabase
-      .from('slack_connect_tokens')
-      .delete()
-      .eq('slack_user_id', slackUserId)
-      .lt('expires_at', new Date().toISOString())
+  if (resolved.status === 'no_chambers_account') {
+    return ephemeral(
+      'Your Slack account is linked to your SGA account, but you have not signed in to Chambers yet. Sign in once at https://chambers.northeasternsga.com, then run the command again.'
+    )
+  }
 
-    await adminSupabase
-      .from('slack_connect_tokens')
-      .insert({ token, slack_user_id: slackUserId, expires_at: expiresAt })
+  if (resolved.status === 'unlinked') {
+    const url = await slackConnectUrl(slackUserId, teamId, async () => {
+      const token = randomBytes(32).toString('hex')
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
 
-    await fetch('https://slack.com/api/chat.postMessage', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
-      },
-      body: JSON.stringify({
-        channel: slackUserId,
-        text: `To use Chambers from Slack, link your account here (expires in 15 minutes): https://chambers.northeasternsga.com/slack/connect?token=${token}`,
-      }),
+      await adminSupabase
+        .from('slack_connect_tokens')
+        .delete()
+        .eq('slack_user_id', slackUserId)
+        .lt('expires_at', new Date().toISOString())
+
+      await adminSupabase
+        .from('slack_connect_tokens')
+        .insert({ token, slack_user_id: slackUserId, expires_at: expiresAt })
+
+      return token
     })
+
+    if (!url) {
+      return ephemeral("Chambers couldn't make a link for your account just now. Please try again in a minute.")
+    }
+
+    // The link works for 15 minutes for whoever opens it, so it goes to this
+    // person alone, in a DM, never into the channel the command came from.
+    await postSlackMessage(
+      slackUserId,
+      `To use Chambers from Slack, link your account here (expires in 15 minutes): ${url}`
+    )
 
     return Response.json({
       response_type: 'ephemeral',
       text: "Check your DMs — we've sent you a link to connect your Chambers account.",
     })
   }
+
+  const connection = { chambers_user_id: resolved.chambersUserId }
 
   if (command === '/chambers-reminders') {
     return handleRemindersCommand(

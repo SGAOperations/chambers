@@ -12,6 +12,7 @@ import {
   invalidTableCount,
 } from '@/lib/tabling-request'
 import { fileCancellationRequest } from '@/lib/cancellation-request'
+import { resolveSlackUser, slackAccountHref } from '@/lib/slack-identity'
 import {
   CANCEL_CALLBACK_ID,
   loadCancellableSessions,
@@ -48,19 +49,33 @@ function confirmToUser(slackUserId: string, text: string) {
  * as My Rooms' (lib/cancellation-request.ts); what is Slack's own is finding
  * the session again and proving the caller may cancel it (lib/slack-cancel.ts).
  */
+/**
+ * The Chambers user who submitted a modal, or the message to show them instead.
+ * Through SGAuth under SGAUTH_ENABLED, slack_connections otherwise (#268). They
+ * opened the modal with a linked account, so a miss here means the link went
+ * away in between, or SGAuth could not be asked.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function connectionFor(payload: any): Promise<{ chambers_user_id: string } | string> {
+  const resolved = await resolveSlackUser(payload.user.id, payload.user.team_id ?? payload.team?.id)
+  switch (resolved.status) {
+    case 'linked':
+      return { chambers_user_id: resolved.chambersUserId }
+    case 'error':
+      return "Chambers couldn't check your SGA account just now. Please try again in a minute."
+    case 'no_chambers_account':
+      return 'Sign in to Chambers once at https://chambers.northeasternsga.com, then try again.'
+    case 'unlinked':
+      return `Your Slack account is not linked to Chambers. Run the command again for a new link, or manage it at ${slackAccountHref()}`
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleCancelSubmission(payload: any): Promise<Response> {
   const slackUserId: string = payload.user.id
 
-  const { data: connection } = await adminSupabase
-    .from('slack_connections')
-    .select('chambers_user_id')
-    .eq('slack_user_id', slackUserId)
-    .maybeSingle()
-
-  if (!connection) {
-    return blockError({ session_block: 'Your Slack account is not linked to Chambers. Please connect at https://chambers.northeasternsga.com/slack/connect' })
-  }
+  const connection = await connectionFor(payload)
+  if (typeof connection === 'string') return blockError({ session_block: connection })
 
   const rateLimitRes = await checkRateLimit(connection.chambers_user_id)
   if (rateLimitRes) return rateLimitRes
@@ -134,15 +149,8 @@ export async function POST(request: Request) {
 
   const slackUserId: string = payload.user.id
 
-  const { data: connection } = await adminSupabase
-    .from('slack_connections')
-    .select('chambers_user_id')
-    .eq('slack_user_id', slackUserId)
-    .maybeSingle()
-
-  if (!connection) {
-    return blockError({ purpose_block: 'Your Slack account is not linked to Chambers. Please connect at https://chambers.northeasternsga.com/slack/connect' })
-  }
+  const connection = await connectionFor(payload)
+  if (typeof connection === 'string') return blockError({ purpose_block: connection })
 
   const rateLimitRes = await checkRateLimit(connection.chambers_user_id)
   if (rateLimitRes) return rateLimitRes
