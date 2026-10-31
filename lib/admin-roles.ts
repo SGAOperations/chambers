@@ -11,7 +11,6 @@ export const ADMIN_ROLES = [
   'Executive Vice President',
   'Vice President of Operational Affairs',
   'Comptroller',
-  'Digital Innovation Manager',
   'Information Manager',
   'Student Body President',
 ] as const
@@ -21,14 +20,13 @@ export const ADMIN_ROLES = [
  * the semester archive and the app-wide settings (issue #64).
  *
  * This is the same set that has always been allowed to grant and revoke roles,
- * which is the point: these four already decide who is an admin at all, so
+ * which is the point: these three already decide who is an admin at all, so
  * everything else on that page is downstream of a power they hold anyway. The
  * Comptroller keeps full access to Bookings, which is the day-to-day work.
  */
 export const MANAGEMENT_ROLES = [
   'Executive Vice President',
   'Vice President of Operational Affairs',
-  'Digital Innovation Manager',
   'Information Manager',
 ]
 
@@ -59,7 +57,7 @@ export const VIEW_ONLY_ROLES = ['Student Body President']
  * cancellation filed an hour before a meeting is the case this exists for: it
  * has to be seen before someone next happens to open Chambers.
  *
- * Deliberately not every admin. An alert that reaches all six is an alert nobody
+ * Deliberately not every admin. An alert that reaches all five is an alert nobody
  * owns, and the view-only tier has nothing to do with a request at all.
  * Recipients are resolved from this list by their Slack account link, so a role
  * added here starts receiving alerts as soon as its holder links Slack
