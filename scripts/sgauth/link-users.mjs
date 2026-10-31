@@ -12,6 +12,14 @@
  * changes nothing. A row linked to a *different* id is reported and skipped:
  * that needs a person to look at it.
  *
+ * **Use the id-map from the same SGAuth environment the Chambers database
+ * signs in against.** SGAuth dev and production are separate databases with
+ * different user ids: production Chambers takes the map from the production
+ * import, and dev Chambers the one from the dev import. Linking dev to
+ * production ids makes every linked person a stranger to SGAuth dev, and they
+ * loop between Chambers and sign-in. The import's report.json, written beside
+ * the map, names the SGAuth database it ran against; this prints it.
+ *
  * The id-map holds email addresses. Nothing here prints them -- only ids and
  * counts -- and the file itself stays out of git.
  *
@@ -19,7 +27,8 @@
  * a dry run rolls it back.
  */
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import pg from 'pg'
 
 const args = process.argv.slice(2)
@@ -42,10 +51,17 @@ if (pairs.length !== mappings.length) {
   console.error(`${mappings.length - pairs.length} entries lack a valid chambersId/sgauthId and are ignored.`)
 }
 
+// The SGAuth side of the pairing. report.json is the import's own record of
+// where it ran; without it, say so rather than guess.
+const reportPath = join(dirname(file), 'report.json')
+const sgauthTarget = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, 'utf8')).target : null
+
 const client = new pg.Client({ connectionString: url })
 await client.connect()
 const host = new URL(url).host
 console.log(`Target: ${host}  (${apply ? 'APPLY' : 'dry run'})`)
+console.log(`Id-map: from the SGAuth import against ${sgauthTarget ?? 'an unknown database (no report.json beside it)'}`)
+console.log('        Check that it is the SGAuth environment this Chambers database signs in against.')
 
 const counts = { linked: 0, alreadyLinked: 0, missing: 0, conflict: 0 }
 try {
