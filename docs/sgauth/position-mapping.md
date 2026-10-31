@@ -1,15 +1,15 @@
-# Chambers role-to-position mapping (draft for approval)
+# Chambers role-to-position mapping
 
-Issue #153 (CHAMBERS-C06). **Status: draft.** The Chambers lead and the Primary Admin both need to approve it. Once they do, set `"status": "approved"` in `chambers-position-map.json`, and set `approvedBy` / `approvedAt` in the import file.
+Issue #153 (CHAMBERS-C06). **Status: approved.** The Chambers lead and the Primary Admin (the same person; see §5) approved the mapping, and the import ran on 2026-10-28.
 
 There are two files, because they answer two different questions:
 
 | File | Question | Used by |
 |---|---|---|
 | [`chambers-position-map.json`](chambers-position-map.json) | *Going forward*: what does holding position X let someone do in Chambers? | `lib/permissions.ts` and the membership sync (#151) |
-| [`chambers-positions.draft.json`](chambers-positions.draft.json) | *Once, at import*: which positions should an existing Chambers user be given? | SGAuth `scripts/import-users.ts` (AUTH-T87, SGAOperations/auth#99) |
+| [`chambers-positions.json`](chambers-positions.json) | *Once, at import*: which positions should an existing Chambers user be given? | SGAuth `scripts/import-users.ts` (AUTH-T87, SGAOperations/auth#99). This is the exact file the production run used (sha256 `393dd51d…`, matching the run report). |
 
-All keys come from the curated list in SGAOperations/auth `prisma/seed/positions.json`, and have been checked against it, with two exceptions: `digital-innovation-senateportal-team-lead` and `digital-innovation-website-creation-team-lead` are **not curated yet** (see Q6). `chambers-iems` is the only product role. Body names match `public.bodies` in production (31 active bodies, 2026-10-20).
+All keys come from the curated list in SGAOperations/auth `prisma/seed/positions.json` and have been checked against it, including the two per-team lead keys added for Q6. `chambers-iems` is the only product role. Body names match `public.bodies` in production (31 active bodies, 2026-10-20).
 
 ## 1. Admin tiers
 
@@ -25,7 +25,7 @@ Since #151 was written, there are three tiers, not two. Issue #217 added a view-
 
 All five offices already exist as curated keys, so no product role is needed. #151 suggested `chambers-admin` for Digital Innovation Project Member, but that role no longer exists and nobody holds it. **Recommendation: do not create `chambers-admin`** until there is an admin who is not an SGA office.
 
-`digital-innovation-manager` grants no admin capability. It still makes its holder Leadership of the SenatePortal and Website Creation teams (§3). Once 0020 runs, the import has no `admin_role` to give that position from, so it is assigned by hand in SGAuth like the other Leadership seats.
+`digital-innovation-manager` grants no admin capability. It still makes its holder Leadership of the SenatePortal and Website Creation teams (§3). The import ran before 0020, while the role still existed, so the holder got the position automatically.
 
 Two other lists hang off `admin_role` today and get mapped explicitly, not derived from a tier:
 
@@ -67,21 +67,24 @@ Both are curated offices, so the import gives them those positions directly. The
 
 **Transitional access goes away at cutover.** Memberships are derived only from positions, so the temporary Student Organization Leadership seats held by the EVP and the previous VP of Student Involvement (Q8) disappear when Chambers switches to SGAuth. If they still need that access then, give them the matching position in SGAuth for the transition and take it away afterwards. Chambers has no override of its own.
 
-## 4. The import: what it can and cannot carry
+## 4. The import (ran 2026-10-28)
 
-AUTH-T87 maps **role values to position lists**, and every user with that value gets every listed position. That works for `admin_role` and `iems_role`, where one value means one office. It does not work well for board memberships:
+The merged script keys boards as `board:<body_id>:Leadership` and `board:<body_id>:Member`, using the body's uuid. It gives every listed position to every user with that key.
 
-1. **The planned export key carries no role.** AUTH-T87 plans `board:<id-or-slug>` with no Leadership/Member split, so any positions mapped to a body would go to its Leaders and Members alike. The draft uses `board:<slug>:Leadership` / `board:<slug>:Member`. The key regex already accepts that, but **#98's export and #99's `toImportRow` need to emit it.** Raise this on SGAOperations/auth#98 / #99 before the dry run.
-2. **Leadership cannot be mapped mechanically.** One "Leadership of X" row could be the director, the VP or a chair, so mapping it to all of them would over-grant. The draft maps every `:Leadership` key to `[]`. About 70 Leadership seats across 31 bodies are **assigned by hand in the SGAuth admin UI** before cutover, using a per-body list of current Leaders that Chambers can produce from `board_memberships`.
-3. **Member maps cleanly** to the body's single member key, with one exception: Executive Board's Members are VPs who hold different offices (Q2), so it maps to `[]` and is assigned by hand.
+**What went wrong:** the file that ran gave each `:Leadership` key the whole Leadership list from `chambers-position-map.json`, usually the director plus the division VP. So every Leader of a body got *all* of that body's Leadership positions, for 245 position assignments across 49 users. The Primary Admin then corrected positions by hand on both production and dev. **The positions in SGAuth now are the hand-corrected ones, not what this file implies.** Do not re-run the import with it: the run is idempotent for users, but it would assign the extra positions again.
 
-After cutover, a user's Chambers memberships are exactly what their positions say. So anyone whose positions were not assigned would lose Leadership, and with it the ability to book. Before the Chambers cutover (#154), the checklist must compare each body's Leaders today with the Leaders that the synced positions produce.
+If an import is ever needed again, map each `:Leadership` key to `[]` and assign Leadership by hand. One Leadership row can be any of several offices, so it cannot be mapped mechanically.
+
+`chambers-position-map.json` is unaffected. It answers the opposite question (which positions make someone Leadership), and a list is right there.
+
+After cutover, a user's Chambers memberships are exactly what their positions say. Before the Chambers cutover (#154), the checklist must compare each body's Leaders today with the Leaders that the synced positions produce.
 
 ## 5. Approval
 
 The Chambers lead and the Primary Admin are the same person: the VP of Operational Affairs. They hold the SGAuth Primary Admin account through `sgaoperations@northeastern.edu`, which is technically the Information Manager's account. Q1–Q10 were decided by the VP of Operational Affairs in review.
 
-- [ ] Chambers lead: tiers, IEMS, body table, Q1–Q10
-- [ ] Primary Admin: import file, after reviewing a dry-run report. Then set `approvedBy` to `sgaoperations@northeastern.edu` (the production run refuses any other address) and `approvedAt` to the date.
-- [ ] `board:<slug>:<role>` keys agreed on SGAOperations/auth#98 / #99
-- [ ] Per-team lead keys (Q6) added to the curated list in SGAOperations/auth
+- [x] Chambers lead: tiers, IEMS, body table, Q1–Q10
+- [x] Primary Admin: import file. `approvedBy` `sgaoperations@northeastern.edu`, `approvedAt` 2026-10-28
+- [x] Leadership/Member board keys: the script uses `board:<body_id>:<role>` (SGAOperations/auth#98, #99)
+- [x] Per-team lead keys (Q6) added to the curated list in SGAOperations/auth
+- [x] Positions corrected by hand on production and dev after the over-assignment (§4)

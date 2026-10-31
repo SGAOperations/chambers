@@ -1,6 +1,6 @@
 {
-  "$comment": "DRAFT, pending approval in #153 (CHAMBERS-C06). What each curated SGAuth position key means inside Chambers. lib/permissions.ts (#151) reads this at runtime. Every key must exist in SGAOperations/auth prisma/seed/positions.json; keys starting with 'chambers-' are product roles created in the SGAuth admin UI. Body names must match public.bodies.name exactly. Rationale and open questions: docs/sgauth/position-mapping.md.",
-  "status": "draft",
+  "$comment": "Approved in #153 (CHAMBERS-C06). What each curated SGAuth position key means inside Chambers. lib/permissions.ts (#151) reads this at runtime. Every key must exist in SGAOperations/auth prisma/seed/positions.json; keys starting with 'chambers-' are product roles created in the SGAuth admin UI. Body names must match public.bodies.name exactly. Rationale and open questions: docs/sgauth/position-mapping.md.",
+  "status": "approved",
   "adminTiers": {
     "management": [
       "executive-vice-president",
