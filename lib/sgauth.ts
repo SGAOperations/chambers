@@ -50,7 +50,12 @@ function sgauthClient() {
  */
 export const getSgauthSession = cache(async (): Promise<SgaSession | null> => {
   if (!sgauthEnabled()) return null
-  return sgauthClient().getSession({ headers: await headers() })
+  // headers() first. During `next build` it is what tells Next this page is
+  // per-request and stops the prerender; building the client first would throw
+  // SgauthConfigError instead wherever the flag is on and SGAUTH_URL is not
+  // (a Preview build with only the flag set), failing the whole build.
+  const requestHeaders = await headers()
+  return sgauthClient().getSession({ headers: requestHeaders })
 })
 
 /** The Chambers row an SGAuth session resolves to. */
