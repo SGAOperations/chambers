@@ -2,6 +2,8 @@ import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUser } from '@/lib/auth'
+import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
+import { sgauthEnabled } from '@/lib/sgauth'
 import { findSgaEmailOption, isSpacesEmailDestination, loadSgaEmailOptions } from '@/lib/spaces-email'
 
 const adminSupabase = db
@@ -43,6 +45,28 @@ export async function GET() {
   ])
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Under SGAuth, roles and bodies both come from the user's SGA positions
+  // (#151): the roles are read off the live session, and there is nothing to
+  // join, leave or request here -- board_memberships is synced from positions.
+  if (sgauthEnabled()) {
+    const live = await getAuthedUserWithLiveRoles()
+    return NextResponse.json({
+      full_name: profile.full_name,
+      email_preferences: profile.email_preferences,
+      senate_type_preferences: profile.senate_type_preferences,
+      admin_role: live?.app_metadata.admin_role ?? null,
+      iems_role: live?.app_metadata.iems_role ?? null,
+      personal_email: profile.email,
+      spaces_email_destination: profile.spaces_email_destination ?? 'personal',
+      spaces_sga_email: profile.spaces_sga_email ?? null,
+      sga_email_options: sgaEmailOptions.get(user.id) ?? [],
+      memberships: profile.board_memberships ?? [],
+      memberships_from_positions: true,
+      pending_requests: [],
+      available_bodies: [],
+    })
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const activeMemberBodyIds = new Set((profile.board_memberships ?? []).map((m: any) => (m.bodies as { id: string } | null)?.id).filter(Boolean))

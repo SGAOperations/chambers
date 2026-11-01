@@ -1,5 +1,7 @@
 import type { Db } from './db/data-api'
 import { changed, collectChanges, type BookingChange } from '@/lib/emails/changes'
+import { adminRoleFromPositions } from './permissions'
+import { sgauthEnabled } from './sgauth'
 
 /**
  * Building the Audit tab's entries (issue #120).
@@ -104,15 +106,22 @@ export function cancellationRequestTarget(
 async function currentRoles(db: Db, adminIds: string[]): Promise<Map<string, string | null>> {
   const roles = new Map<string, string | null>()
   if (!adminIds.length) return roles
-  const { data, error } = await db.from('users').select('id, admin_role').in('id', adminIds)
+  // Under SGAuth the office is the author's positions, as recorded by this
+  // request's own sync (lib/position-sync.ts, #151).
+  const sgauth = sgauthEnabled()
+  const { data, error } = await db
+    .from('users')
+    .select(sgauth ? 'id, sgauth_position_keys' : 'id, admin_role')
+    .in('id', adminIds)
   if (error) {
     // Same best-effort posture as the insert below: an unbadged entry beats a
     // lost one, and the tab still falls back to the live role for a null.
     console.error('Audit log role lookup failed:', error)
     return roles
   }
-  for (const u of (data as { id: string; admin_role: string | null }[] | null) ?? []) {
-    roles.set(u.id, u.admin_role ?? null)
+  type Row = { id: string; admin_role?: string | null; sgauth_position_keys?: string[] }
+  for (const u of (data as unknown as Row[] | null) ?? []) {
+    roles.set(u.id, sgauth ? adminRoleFromPositions(u.sgauth_position_keys ?? []) : u.admin_role ?? null)
   }
   return roles
 }

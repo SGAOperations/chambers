@@ -2,6 +2,7 @@ import { waitUntil } from '@vercel/functions'
 import { postSlackMessage } from './slack'
 import { slackIdsForChambersUsers } from './slack-identity'
 import { REQUEST_ALERT_ROLES } from './admin-roles'
+import { officeHolders } from './office-holders'
 import { bostonWallClockNow } from './boston-time'
 import { todayInAppZone } from './app-zone'
 import type { Db } from './db/data-api'
@@ -450,21 +451,13 @@ function isProduction(): boolean {
  * `unlinked` is only ever the holders who exist and have no Slack link, which is
  * the one case worth a warning -- a vacant seat has nobody to warn about.
  */
-async function alertRecipients(
-  adminSupabase: Db
-): Promise<{ slackUserIds: string[]; unlinked: string[] }> {
-  const { data: admins, error } = await adminSupabase
-    .from('users')
-    .select('id, full_name, admin_role')
-    .in('admin_role', REQUEST_ALERT_ROLES)
-    .eq('is_active', true)
-
+async function alertRecipients(): Promise<{ slackUserIds: string[]; unlinked: string[] }> {
   // A failed read is a real failure, unlike an empty one, and the caller logs
   // it. No alert goes out either way, which is why this is the only throw in the
-  // file -- every path below degrades instead.
-  if (error) throw new Error(`could not read the alert roles: ${error.message}`)
-
-  const rows = (admins ?? []) as { id: string; full_name: string; admin_role: string }[]
+  // file -- every path below degrades instead. Under SGAuth the holders are
+  // found by position (lib/office-holders.ts).
+  const holders = await officeHolders(REQUEST_ALERT_ROLES)
+  const rows = holders.map(h => ({ id: h.id, full_name: h.full_name, admin_role: h.office }))
 
   // Every seat vacant or deactivated. Legitimate -- over a transition both can
   // be -- so it returns the empty answer and lets resolveDestinations() decide
@@ -554,7 +547,7 @@ export async function sendAdminRequestAlert(
     return
   }
 
-  const { slackUserIds, unlinked } = await alertRecipients(adminSupabase)
+  const { slackUserIds, unlinked } = await alertRecipients()
   const { destinations, note } = resolveDestinations(slackUserIds, unlinked)
 
   if (!destinations.length) {

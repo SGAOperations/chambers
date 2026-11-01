@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthedUser } from '@/lib/auth'
 import { pool } from '@/lib/db/pool'
-import { resolveSgauthUser, sgauthEnabled } from '@/lib/sgauth'
+import { sgauthEnabled } from '@/lib/sgauth'
 
 /**
  * Where a signed-in user should be sent from the login page (issue #136).
@@ -14,17 +14,6 @@ import { resolveSgauthUser, sgauthEnabled } from '@/lib/sgauth'
  * 401 when there is no session, which the login page treats as "stay here".
  */
 export async function GET() {
-  // Under SGAuth a deactivated row has no getAuthedUser(), but it does have a
-  // session -- one this page cannot end, since every SGA tool shares it. Saying
-  // "deactivated" lets the page explain, instead of offering a sign-in that
-  // would only bring them straight back here.
-  if (sgauthEnabled()) {
-    const result = await resolveSgauthUser()
-    if (result.status === 'ok' && !result.user.is_active) {
-      return NextResponse.json({ is_active: false, has_completed_onboarding: true, otp_expires_at: null })
-    }
-  }
-
   const user = await getAuthedUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -39,7 +28,9 @@ export async function GET() {
   if (!rows[0]) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
 
   return NextResponse.json({
-    is_active: rows[0].is_active !== false,
+    // Under SGAuth, deactivation is SGAuth's and a deactivated account has no
+    // session to get this far (#152), so Chambers' own flag is not consulted.
+    is_active: sgauthEnabled() || rows[0].is_active !== false,
     has_completed_onboarding: rows[0].has_completed_onboarding,
     otp_expires_at: rows[0].otp_expires_at?.toISOString() ?? null,
   })

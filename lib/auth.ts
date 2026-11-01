@@ -10,9 +10,9 @@ export { hasLiveAdmin, type AuthedUser } from './auth-types'
  *
  * Server-only. With SGAUTH_ENABLED on, the session is SGAuth's and `id` is the
  * Chambers users.id it is linked to (lib/sgauth.ts), so every caller keeps
- * working with the id every Chambers table references. A deactivated Chambers
- * row is null here, as it was under Better Auth -- where deactivating deleted
- * the session outright.
+ * working with the id every Chambers table references. Someone deactivated in
+ * SGAuth has no session, so they are null here within the SDK's minute-long
+ * cache; Chambers' own users.is_active is not read under the flag (#152).
  *
  * With the flag off, it reads the Better Auth session cookie and checks the
  * session against auth_sessions, so an expired, signed-out or revoked session

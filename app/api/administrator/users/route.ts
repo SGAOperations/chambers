@@ -6,11 +6,15 @@ import { randomBytes, createHash } from 'crypto'
 import { sendOtpInviteEmail } from '@/lib/emails/otp-invite'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { isManagementRole } from '@/lib/admin-roles'
-import { sgauthEnabled } from '@/lib/sgauth'
+import { replacedBySgauth, sgauthEnabled } from '@/lib/sgauth'
 
 const adminSupabase = db
 
+// Under SGAuth every handler here answers 410: people, their roles and their
+// deactivation are all managed in SGAuth (#152), and Management has no Users tab.
+
 export async function GET() {
+  if (sgauthEnabled()) return replacedBySgauth()
   const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
@@ -42,6 +46,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth()
   const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
@@ -71,26 +76,6 @@ export async function POST(request: Request) {
       { error: 'A deactivated account already exists for this email. Reactivate the account instead of sending a new invite.' },
       { status: 400 }
     )
-  }
-
-  // Under SGAuth there is no Chambers password to send. The row is created with
-  // its roles, and links itself to the person's SGA account by email the first
-  // time they sign in (lib/sgauth.ts). They get no email from Chambers: their
-  // SGA account is how they sign in, and SGAuth sends its own invitations.
-  if (sgauthEnabled()) {
-    const { error: insertError } = await adminSupabase.from('users').insert({
-      email: email.trim().toLowerCase(),
-      full_name,
-      admin_role: admin_role || null,
-      iems_role: iems_role || null,
-    })
-    if (insertError) {
-      return NextResponse.json(
-        { error: insertError.code === '23505' ? 'A Chambers account already exists for this email.' : insertError.message },
-        { status: insertError.code === '23505' ? 409 : 500 }
-      )
-    }
-    return NextResponse.json({ success: true })
   }
 
   const otp = randomBytes(8).toString('base64url').slice(0, 12)
@@ -132,6 +117,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth()
   const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)

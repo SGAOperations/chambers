@@ -3,10 +3,12 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { isManagementRole } from '@/lib/admin-roles'
+import { MEMBERSHIPS_FROM_POSITIONS, replacedBySgauth, sgauthEnabled } from '@/lib/sgauth'
 
 const adminSupabase = db
 
 export async function POST(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth(MEMBERSHIPS_FROM_POSITIONS)
   const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
@@ -34,6 +36,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth(MEMBERSHIPS_FROM_POSITIONS)
   const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
@@ -62,6 +65,7 @@ export async function DELETE(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth(MEMBERSHIPS_FROM_POSITIONS)
   const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)
