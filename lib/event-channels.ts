@@ -2,6 +2,7 @@ import { waitUntil } from '@vercel/functions'
 import { db } from './db/data-api'
 import { createPrivateSlackChannel, inviteToSlackChannel, postSlackMessage } from './slack'
 import { slackIdsForChambersUsers } from './slack-identity'
+import { officeHolders } from './office-holders'
 import { formatDate, formatTime } from './emails/changes'
 
 /**
@@ -13,8 +14,8 @@ import { formatDate, formatTime } from './emails/changes'
  * event-<purpose>, invites the people who run the event and posts who each of
  * them is there as:
  *
- *   VP of Operational Affairs and Comptroller   users.admin_role
- *   VP of External Affairs                      users.iems_role
+ *   VP of Operational Affairs and Comptroller   users.admin_role (or, under
+ *   VP of External Affairs                      users.iems_role  SGAuth, position)
  *   the body's Leadership                       board_memberships.role
  *
  * Anyone who has not linked Slack cannot be invited, so the intro message names
@@ -49,11 +50,11 @@ export type EventTarget =
   | { kind: 'booking'; bookingId: string }
   | { kind: 'occurrence'; occurrenceId: string }
 
-/** The officer seats invited to every event channel, and the column each lives in. */
-const OFFICER_SEATS: { label: string; column: 'admin_role' | 'iems_role'; value: string }[] = [
-  { label: 'VP of Operational Affairs', column: 'admin_role', value: 'Vice President of Operational Affairs' },
-  { label: 'Comptroller', column: 'admin_role', value: 'Comptroller' },
-  { label: 'VP of External Affairs', column: 'iems_role', value: 'Vice President of External Affairs' },
+/** The officer seats invited to every event channel, by the office each holder has. */
+const OFFICER_SEATS: { label: string; value: string }[] = [
+  { label: 'VP of Operational Affairs', value: 'Vice President of Operational Affairs' },
+  { label: 'Comptroller', value: 'Comptroller' },
+  { label: 'VP of External Affairs', value: 'Vice President of External Affairs' },
 ]
 
 /** Postgres unique_violation: the event already has a channel, or one is being made. */
@@ -240,14 +241,10 @@ async function resolveInvitees(bodyIds: string[], bodyName: string): Promise<Inv
     invitees.push({ userId, name, role })
   }
 
+  // Under SGAuth the officers are found by position (lib/office-holders.ts).
+  const officers = await officeHolders(OFFICER_SEATS.map(s => s.value))
   for (const seat of OFFICER_SEATS) {
-    const { data, error } = await db
-      .from('users')
-      .select('id, full_name')
-      .eq(seat.column, seat.value)
-      .eq('is_active', true)
-    if (error) throw new Error(`could not read ${seat.label}: ${error.message}`)
-    for (const u of (data ?? []) as { id: string; full_name: string }[]) add(u.id, u.full_name, seat.label)
+    for (const u of officers.filter(o => o.office === seat.value)) add(u.id, u.full_name, seat.label)
   }
 
   const { data: leaders, error } = await db

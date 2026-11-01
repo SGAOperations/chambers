@@ -36,6 +36,8 @@ export interface Settings {
   spaces_sga_email: string | null
   sga_email_options: SgaEmailOption[]
   memberships: Membership[]
+  /** True under SGAuth, where bodies come from SGA positions and cannot be joined or left here (#151). */
+  memberships_from_positions?: boolean
   pending_requests: PendingRequest[]
   available_bodies: AvailableBody[]
 }
@@ -255,13 +257,15 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
                             {m.role}
                           </span>
                         </div>
-                        <button
-                          onClick={() => removeMembership(m.id)}
-                          disabled={removingId === m.id}
-                          className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium disabled:opacity-50 transition-colors"
-                        >
-                          {removingId === m.id ? 'Removing…' : 'Remove'}
-                        </button>
+                        {!settings.memberships_from_positions && (
+                          <button
+                            onClick={() => removeMembership(m.id)}
+                            disabled={removingId === m.id}
+                            className="text-xs text-[#c8102e] hover:text-[#a00d24] font-medium disabled:opacity-50 transition-colors"
+                          >
+                            {removingId === m.id ? 'Removing…' : 'Remove'}
+                          </button>
+                        )}
                       </div>
                     ))}
                   {settings.pending_requests.map(r => (
@@ -284,6 +288,12 @@ export default function SettingsModal({ onClose, cachedSettings, onSettingsLoade
                 </div>
               ) : (
                 <p className="text-[#6a96bb] text-sm">No body memberships found.</p>
+              )}
+
+              {settings?.memberships_from_positions && (
+                <p className="text-xs text-[#6a96bb]">
+                  Your bodies come from your positions in your SGA account. If one is missing or wrong, ask an SGA account admin to update your positions.
+                </p>
               )}
 
               {/* Add body */}

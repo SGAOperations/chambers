@@ -6,7 +6,7 @@ There are two files, because they answer two different questions:
 
 | File | Question | Used by |
 |---|---|---|
-| [`chambers-position-map.json`](chambers-position-map.json) | *Going forward*: what does holding position X let someone do in Chambers? | `lib/permissions.ts` and the membership sync (#151) |
+| [`chambers-position-map.json`](chambers-position-map.json) | *Going forward*: what does holding position X let someone do in Chambers? | `lib/permissions.ts` reads its admin tiers and IEMS keys. Its `bodies` section seeded `body_position_roles` once (`db/neon/0022_sgauth_positions.sql`); after that, Management edits body seats on the **Bodies** tab, and the database is the source, not this file (#151) |
 | [`chambers-positions.json`](chambers-positions.json) | *Once, at import*: which positions should an existing Chambers user be given? | SGAuth `scripts/import-users.ts` (AUTH-T87, SGAOperations/auth#99). This is the exact file the production run used (sha256 `393dd51d…`, matching the run report). |
 
 All keys come from the curated list in SGAOperations/auth `prisma/seed/positions.json` and have been checked against it, including the two per-team lead keys added for Q6. `chambers-iems` is the only product role. Body names match `public.bodies` in production (31 active bodies, 2026-10-20).

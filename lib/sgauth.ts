@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { createSgauthClient, type SgaSession } from '@nusgaops/sgauth'
 import { loginUrl, logoutUrl } from '@nusgaops/sgauth/urls'
 import { pool } from './db/pool'
+import { syncPositions } from './position-sync'
 
 /**
  * Chambers' sign-in through SGAuth (issues #149, #150), behind SGAUTH_ENABLED.
@@ -13,10 +14,12 @@ import { pool } from './db/pool'
  * signup, reset and invite-password flows step aside. The flag is the rollback:
  * turning it off puts Better Auth back without a deploy of different code.
  *
- * What does not change with the flag: users.id stays the key every row in
- * Chambers points at, and roles still come from users.admin_role / iems_role
- * (lib/authorization.ts) until #151 moves them to positions. SGAuth decides who
- * someone is; Chambers still decides what they may do.
+ * users.id stays the key every row in Chambers points at, with or without the
+ * flag. With it on, everything about the person comes from SGAuth: who they
+ * are, whether they may sign in at all (a deactivated SGAuth account has no
+ * session, so it is signed out of every SGA tool at once -- Chambers keeps no
+ * flag of its own), and what they may do, from their positions (#151,
+ * lib/permissions.ts and lib/position-sync.ts).
  */
 
 /** True when Chambers signs people in through SGAuth. Read per call so a test can flip it. */
@@ -54,29 +57,29 @@ export const getSgauthSession = cache(async (): Promise<SgaSession | null> => {
 export type SgauthUserRow = {
   id: string
   email: string
-  is_active: boolean
 }
 
 export type SgauthUserResult =
   | { status: 'none' }
   | { status: 'ok'; session: SgaSession; user: SgauthUserRow }
 
-const ROW = 'id, email, coalesce(is_active, true) as is_active'
+const ROW = 'id, email'
 
 /**
  * The Chambers user behind this request's SGAuth session, linking or creating
- * the row on first sign-in.
+ * the row on first sign-in, with their positions synced (lib/position-sync.ts)
+ * before anything reads their memberships.
  *
  * In order:
  *   1. the row already linked to this SGAuth id;
  *   2. an unlinked row with the same lower-cased email -- someone who was in
  *      Chambers before SGAuth but whom the import's id-map did not cover
  *      (scripts/sgauth/link-users.mjs links the rest ahead of time);
- *   3. a new row, for someone SGAuth knows and Chambers does not yet. They have
- *      no roles and no memberships, and go through onboarding.
+ *   3. a new row, for someone SGAuth knows and Chambers does not yet. They
+ *      have whatever their positions give them, and go through onboarding.
  *
- * A deactivated Chambers row still resolves, with is_active false: callers
- * decide what that means (getAuthedUser refuses it; the dashboard shows why).
+ * users.is_active is not read. Deactivation is SGAuth's: a deactivated account
+ * gets no session, so it never reaches here (#152).
  *
  * `none` when there is no valid session, or in the one case that needs a person:
  * the email belongs to a row already linked to a *different* SGAuth account.
@@ -86,6 +89,14 @@ export const resolveSgauthUser = cache(async (): Promise<SgauthUserResult> => {
   const session = await getSgauthSession()
   if (!session) return { status: 'none' }
 
+  const user = await findOrLinkUser(session)
+  if (!user) return { status: 'none' }
+
+  await syncPositions(user.id, session.positions)
+  return { status: 'ok', session, user }
+})
+
+async function findOrLinkUser(session: SgaSession): Promise<SgauthUserRow | null> {
   const sgauthId = session.user.id
   const email = session.user.email.trim().toLowerCase()
 
@@ -93,7 +104,7 @@ export const resolveSgauthUser = cache(async (): Promise<SgauthUserResult> => {
     `select ${ROW} from public.users where sgauth_user_id = $1`,
     [sgauthId]
   )
-  if (linked.rows[0]) return { status: 'ok', session, user: linked.rows[0] }
+  if (linked.rows[0]) return linked.rows[0]
 
   const byEmail = await pool.query<SgauthUserRow>(
     `update public.users set sgauth_user_id = $1
@@ -101,7 +112,7 @@ export const resolveSgauthUser = cache(async (): Promise<SgauthUserResult> => {
        returning ${ROW}`,
     [sgauthId, email]
   )
-  if (byEmail.rows[0]) return { status: 'ok', session, user: byEmail.rows[0] }
+  if (byEmail.rows[0]) return byEmail.rows[0]
 
   // Two first requests can race to here. The insert does nothing on either
   // unique key, and the re-read below picks up whichever row won.
@@ -112,35 +123,34 @@ export const resolveSgauthUser = cache(async (): Promise<SgauthUserResult> => {
        returning ${ROW}`,
     [email, session.user.name?.trim() || email.split('@')[0], sgauthId]
   )
-  if (created.rows[0]) return { status: 'ok', session, user: created.rows[0] }
+  if (created.rows[0]) return created.rows[0]
 
   const reread = await pool.query<SgauthUserRow>(
     `select ${ROW} from public.users where sgauth_user_id = $1`,
     [sgauthId]
   )
-  if (reread.rows[0]) return { status: 'ok', session, user: reread.rows[0] }
+  if (reread.rows[0]) return reread.rows[0]
 
   const holder = await pool.query<{ id: string }>('select id from public.users where email = $1', [email])
   console.error('sgauth: email already linked to another SGAuth account', {
     chambersId: holder.rows[0]?.id ?? null,
     sgauthId,
   })
-  return { status: 'none' }
-})
+  return null
+}
 
 /**
- * Whether this session may be used for a Chambers row: the row is active.
+ * Whether this session may be used for a Chambers row. Any session SGAuth
+ * vouches for may: deactivation and revocation are SGAuth's (#152), and a
+ * deactivated or revoked account simply has no session.
  *
- * users.sessions_revoked_at is deliberately not consulted. Chambers cannot end
- * an SGAuth session -- it is shared by every SGA tool -- and Management stamps
- * that column on every role change, so comparing it with the SGAuth session's
- * age would lock out anyone who signed in to SGAuth before their last Chambers
- * role change, with no way back in. Deactivation is what "may not use Chambers"
- * means here, and it is read live; revoking SGAuth sessions is SGAuth's job
- * (#152).
+ * users.is_active and users.sessions_revoked_at are deliberately not consulted.
+ * Both are Chambers' own switches from before SGAuth; under the flag the only
+ * switch is SGAuth's, so a person is either signed in everywhere or nowhere.
+ * They stay in the table for the rollback, and go with #250.
  */
 export function sgauthSessionUsable(result: SgauthUserResult): result is Extract<SgauthUserResult, { status: 'ok' }> {
-  return result.status === 'ok' && result.user.is_active
+  return result.status === 'ok'
 }
 
 /** This deployment's public origin, for SGAuth to send people back to. */
@@ -164,14 +174,21 @@ export async function sgauthLogoutHref(): Promise<string> {
   return logoutUrl(chambersOrigin(await headers()) + '/')
 }
 
+/** Why a membership route answers 410 under SGAuth (#151). */
+export const MEMBERSHIPS_FROM_POSITIONS =
+  'Body memberships come from SGA positions now. Positions are managed in SGA accounts, and Management maps them to bodies on the Bodies tab.'
+
 /**
  * The answer from a Chambers account route that SGAuth replaces under the flag
- * -- signup, invite passwords, resending an invite. 410 rather than 404: the
- * route exists, it is just no longer how this is done.
+ * -- signup, invite passwords, resending an invite, user management (#152), and
+ * joining or assigning bodies (#151). 410 rather than 404: the route exists, it
+ * is just no longer how this is done.
  */
-export function replacedBySgauth(): Response {
+export function replacedBySgauth(
+  message = 'Accounts and passwords are managed in your SGA account now.'
+): Response {
   return Response.json(
-    { error: 'Accounts and passwords are managed in your SGA account now.' },
+    { error: message },
     { status: 410 }
   )
 }

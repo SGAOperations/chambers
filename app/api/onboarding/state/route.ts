@@ -25,7 +25,9 @@ export async function GET() {
   ])
   const profile = profiles[0]
 
-  if (!profile || profile.is_active === false) {
+  // Under SGAuth, deactivation is SGAuth's and ends the session (#152), so
+  // Chambers' own flag is not consulted.
+  if (!profile || (!sgauthEnabled() && profile.is_active === false)) {
     return NextResponse.json({ error: 'Account deactivated' }, { status: 403 })
   }
   if (profile.has_completed_onboarding) {
@@ -34,7 +36,9 @@ export async function GET() {
 
   return NextResponse.json({
     full_name: profile.full_name ?? '',
-    has_memberships: memberships.length > 0,
+    // Under SGAuth bodies come from positions (#151), so there is never a
+    // body-picking step: answering true skips it.
+    has_memberships: sgauthEnabled() || memberships.length > 0,
     // No password step under SGAuth: the password is SGAuth's (issue #149).
     needs_password: !sgauthEnabled(),
   })

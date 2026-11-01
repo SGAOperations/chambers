@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
 import { BODY_TYPES, type BodyType } from '@/lib/body-types'
+import { BodyPositionsEditor, BodyPositionsSummary, UnmappedPositions, type Position, type Seat } from './body-positions'
 
 function BodiesTabSkeleton() {
   return (
@@ -50,9 +51,23 @@ interface Body {
   sga_emails: string[]
 }
 
-export default function BodiesTab() {
+interface PositionMap {
+  positions: Position[]
+  seats: Seat[]
+  office_keys: string[]
+  live: boolean
+}
+
+/**
+ * `sgauth` is whether Chambers signs in through SGAuth. Under it, bodies are
+ * joined only through SGA positions (#151), so there is no self-signup switch;
+ * the position map is shown either way, so it can be checked before cutover.
+ */
+export default function BodiesTab({ sgauth = false }: { sgauth?: boolean }) {
   const [bodies, setBodies] = useState<Body[]>([])
   const [loading, setLoading] = useState(true)
+  const [positionMap, setPositionMap] = useState<PositionMap | null>(null)
+  const [editingPositionsId, setEditingPositionsId] = useState<string | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newBody, setNewBody] = useState<{ name: string; division: string; body_type: BodyType }>(
     { name: '', division: '', body_type: 'Other' }
@@ -77,9 +92,18 @@ export default function BodiesTab() {
     setLoading(false)
   }
 
+  const fetchPositionMap = async () => {
+    const res = await fetch('/api/administrator/bodies/positions')
+    if (res.ok) setPositionMap(await res.json())
+  }
+
   useEffect(() => {
     fetchBodies()
+    fetchPositionMap()
   }, [])
+
+  const positionNames = new Map((positionMap?.positions ?? []).map(p => [p.key, p.name]))
+  const seatsFor = (bodyId: string) => (positionMap?.seats ?? []).filter(s => s.body_id === bodyId)
 
   const createBody = async () => {
     setCreating(true)
@@ -138,6 +162,13 @@ export default function BodiesTab() {
 
   return (
     <div className="space-y-4">
+      {positionMap && !positionMap.live && (
+        <p className="text-xs text-[#93b8d8] border border-[#1e5080] rounded-lg px-3 py-2 bg-[#0f2a4a]">
+          The SGA positions under each body take effect once Chambers signs in through SGA accounts. Until then, body
+          memberships are still set on the Users tab, and this map can be checked ahead of the switch.
+        </p>
+      )}
+
       {/* Create button */}
       <div className="flex justify-end">
         <button
@@ -300,15 +331,17 @@ export default function BodiesTab() {
                     />
                     <label htmlFor={`active-${b.id}`} className="text-sm text-[#f0f6ff]">Active</label>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={editValues.body_open}
-                      onChange={e => setEditValues({ ...editValues, body_open: e.target.checked })}
-                      id={`open-${b.id}`}
-                    />
-                    <label htmlFor={`open-${b.id}`} className="text-sm text-[#f0f6ff]">Open for self-signup</label>
-                  </div>
+                  {!sgauth && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editValues.body_open}
+                        onChange={e => setEditValues({ ...editValues, body_open: e.target.checked })}
+                        id={`open-${b.id}`}
+                      />
+                      <label htmlFor={`open-${b.id}`} className="text-sm text-[#f0f6ff]">Open for self-signup</label>
+                    </div>
+                  )}
                   {saveError && (
                     <p className="text-sm text-[#f87171]">{saveError}</p>
                   )}
@@ -328,15 +361,19 @@ export default function BodiesTab() {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-between">
-                  <div>
+                <div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <p className="font-semibold text-[#f0f6ff]">{b.name}</p>
                     <p className="text-sm text-[#93b8d8]">{b.division} · {b.body_type}</p>
                     {b.sga_emails?.length > 0 && (
                       <p className="text-xs text-[#6a96bb] break-all">{b.sga_emails.join(', ')}</p>
                     )}
+                    {positionMap && editingPositionsId !== b.id && (
+                      <BodyPositionsSummary seats={seatsFor(b.id)} names={positionNames} />
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     {/* Only ever shown for a body that could actually be
                         posted to, so its absence is not ambiguous. */}
                     {b.slack_channel_id && (
@@ -347,9 +384,19 @@ export default function BodiesTab() {
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${b.is_active ? 'bg-[#0f3d20] text-[#4ade80]' : 'bg-[#3d0f0f] text-[#f87171]'}`}>
                       {b.is_active ? 'Active' : 'Inactive'}
                     </span>
-                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${b.body_open ? 'bg-[#0f3d20] text-[#4ade80]' : 'bg-[#1e3a5f] text-[#93b8d8]'}`}>
-                      {b.body_open ? 'Open' : 'Closed'}
-                    </span>
+                    {!sgauth && (
+                      <span className={`text-xs px-2 py-1 rounded-full font-medium ${b.body_open ? 'bg-[#0f3d20] text-[#4ade80]' : 'bg-[#1e3a5f] text-[#93b8d8]'}`}>
+                        {b.body_open ? 'Open' : 'Closed'}
+                      </span>
+                    )}
+                    {positionMap && (
+                      <button
+                        onClick={() => setEditingPositionsId(editingPositionsId === b.id ? null : b.id)}
+                        className="text-sm text-[#93b8d8] hover:text-[#c8102e] font-medium transition-colors"
+                      >
+                        Positions
+                      </button>
+                    )}
                     <button
                       onClick={() => startEdit(b)}
                       className="text-sm text-[#93b8d8] hover:text-[#c8102e] font-medium transition-colors"
@@ -358,10 +405,27 @@ export default function BodiesTab() {
                     </button>
                   </div>
                 </div>
+                {positionMap && editingPositionsId === b.id && (
+                  <BodyPositionsEditor
+                    bodyId={b.id}
+                    seats={seatsFor(b.id)}
+                    positions={positionMap.positions}
+                    onCancel={() => setEditingPositionsId(null)}
+                    onSaved={async () => {
+                      setEditingPositionsId(null)
+                      await fetchPositionMap()
+                    }}
+                  />
+                )}
+                </div>
               )}
             </div>
           ))}
         </div>
+      )}
+
+      {positionMap && (
+        <UnmappedPositions positions={positionMap.positions} seats={positionMap.seats} officeKeys={positionMap.office_keys} />
       )}
     </div>
   )
