@@ -3,10 +3,13 @@ import { NextResponse } from 'next/server'
 import { createPasswordUser } from '@/lib/auth-admin'
 import { randomBytes, createHash, timingSafeEqual } from 'crypto'
 import { signupClosedResponse } from '@/lib/signup-closed'
+import { replacedBySgauth, sgauthEnabled } from '@/lib/sgauth'
 
 const adminSupabase = db
 
 export async function POST(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth()
+
   const closed = signupClosedResponse()
   if (closed) return closed
 

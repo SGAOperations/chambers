@@ -1,5 +1,6 @@
 import { getAuthedUser, type AuthedUser } from './auth'
 import { pool } from './db/pool'
+import { sgauthEnabled } from './sgauth'
 
 /**
  * getAuthedUser(), but with the role fields refreshed from the users table.
@@ -62,7 +63,10 @@ export async function getAuthedUserWithLiveRoles(
   // Whole seconds on both sides, and strict: a session created in the same
   // second as the revocation is let through, so someone signing straight back in
   // is not refused.
-  if (profile.sessions_revoked_at) {
+  //
+  // Not under SGAuth (SGAUTH_ENABLED): Chambers cannot end that session, so the
+  // stamp would only lock people out. See sgauthSessionUsable() in lib/sgauth.ts.
+  if (profile.sessions_revoked_at && !sgauthEnabled()) {
     const revokedAtSeconds = Math.floor(
       new Date(profile.sessions_revoked_at).getTime() / 1000
     )

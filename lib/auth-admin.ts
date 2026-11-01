@@ -1,5 +1,6 @@
 import { auth } from './better-auth'
 import { pool } from './db/pool'
+import { sgauthEnabled } from './sgauth'
 
 /**
  * Account changes made by trusted server code rather than by the user signing in
@@ -75,5 +76,9 @@ export async function setUserPassword(userId: string, password: string): Promise
 export async function revokeUserSessions(userId: string): Promise<void> {
   const ctx = await context()
   await ctx.internalAdapter.deleteUserSessions(userId)
+  // Under SGAuth the session is SGAuth's, and Chambers cannot end it; stamping
+  // the column would do nothing but confuse a later reader. Deactivation still
+  // works, through is_active (lib/sgauth.ts).
+  if (sgauthEnabled()) return
   await pool.query('update public.users set sessions_revoked_at = now() where id = $1', [userId])
 }

@@ -1,5 +1,6 @@
 import { getAuthedUser } from '@/lib/auth'
 import { pool } from '@/lib/db/pool'
+import { resolveSgauthUser, sgauthEnabled } from '@/lib/sgauth'
 
 /**
  * The per-user facts the dashboard shell needs, resolved on the server during the
@@ -47,8 +48,20 @@ export type ShellIdentityResult =
  * try/catch around it) makes the control flow obvious at the call site.
  */
 export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
-  const user = await getAuthedUser()
-  if (!user) return { status: 'unauthenticated' }
+  // Under SGAuth, getAuthedUser() is null for a deactivated row, which would
+  // read here as "signed out" and send them to sign in again -- into an SGAuth
+  // session that is still perfectly good, and round again. Resolving the row
+  // directly keeps "deactivated" its own answer, so the layout can say so.
+  let userId: string
+  if (sgauthEnabled()) {
+    const result = await resolveSgauthUser()
+    if (result.status !== 'ok') return { status: 'unauthenticated' }
+    userId = result.user.id
+  } else {
+    const user = await getAuthedUser()
+    if (!user) return { status: 'unauthenticated' }
+    userId = user.id
+  }
 
   const [{ rows: profiles }, { rows: memberships }] = await Promise.all([
     pool.query<{
@@ -59,9 +72,9 @@ export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
       iems_role: string | null
     }>(
       'select is_active, has_completed_onboarding, full_name, admin_role, iems_role from public.users where id = $1',
-      [user.id]
+      [userId]
     ),
-    pool.query<{ role: string }>('select role from public.board_memberships where user_id = $1', [user.id]),
+    pool.query<{ role: string }>('select role from public.board_memberships where user_id = $1', [userId]),
   ])
   const profile = profiles[0]
 
@@ -72,7 +85,7 @@ export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
   return {
     status: 'ok',
     identity: {
-      userId: user.id,
+      userId,
       fullName: profile.full_name ?? null,
       isLeadership: memberships.some(m => m.role === 'Leadership'),
       // Read from `users`, not from the JWT's app_metadata.

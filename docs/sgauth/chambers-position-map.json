@@ -1,0 +1,160 @@
+{
+  "$comment": "Approved in #153 (CHAMBERS-C06). What each curated SGAuth position key means inside Chambers. lib/permissions.ts (#151) reads this at runtime. Every key must exist in SGAOperations/auth prisma/seed/positions.json; keys starting with 'chambers-' are product roles created in the SGAuth admin UI. Body names must match public.bodies.name exactly. Rationale and open questions: docs/sgauth/position-mapping.md.",
+  "status": "approved",
+  "adminTiers": {
+    "management": [
+      "executive-vice-president",
+      "vice-president-of-operational-affairs",
+      "information-manager"
+    ],
+    "booking": ["comptroller"],
+    "viewOnly": ["student-body-president"]
+  },
+  "iems": ["vice-president-of-external-affairs", "director-of-events", "chambers-iems"],
+  "requestAlerts": ["vice-president-of-operational-affairs", "comptroller"],
+  "adminEmailPrefs": [
+    "executive-vice-president",
+    "vice-president-of-operational-affairs",
+    "comptroller",
+    "information-manager"
+  ],
+  "bodies": {
+    "Appeals Board": { "leadership": ["parliamentarian"], "member": ["appeals-board-justice"] },
+    "Elections Board": {
+      "leadership": ["director-of-elections", "vice-chair-of-elections"],
+      "member": ["elections-board-member"]
+    },
+    "Executive Board": {
+      "leadership": ["student-body-president", "executive-vice-president"],
+      "member": [
+        "vice-president-of-academic-affairs",
+        "vice-president-of-campus-affairs",
+        "vice-president-of-diversity-equity-and-inclusion",
+        "vice-president-of-external-affairs",
+        "vice-president-of-student-involvement",
+        "vice-president-of-student-success",
+        "vice-president-of-operational-affairs",
+        "parliamentarian",
+        "speaker-of-the-senate"
+      ]
+    },
+    "Governmental Relations Team": {
+      "leadership": ["governmental-relations-team-chair", "governmental-relations-team-vice-chair"],
+      "member": ["governmental-relations-team-member"]
+    },
+    "Student-Designed NU Merch Team": {
+      "leadership": ["t-shirt-team-chair"],
+      "member": ["t-shirt-team-member"]
+    },
+
+    "AI Advisory Board": {
+      "leadership": ["chair-of-ai-advisory-board", "vice-president-of-academic-affairs"],
+      "member": ["ai-advisory-board-member"]
+    },
+    "Academic Services Committee": {
+      "leadership": ["director-of-academic-services", "vice-president-of-academic-affairs"],
+      "member": ["academic-services-committee-member"]
+    },
+    "Co-op Working Group": {
+      "leadership": ["director-of-co-op", "vice-president-of-academic-affairs"],
+      "member": ["co-op-working-group-member"]
+    },
+
+    "Campus Planning Advisory Board": {
+      "leadership": ["chair-of-campus-planning-advisory-board", "vice-president-of-campus-affairs"],
+      "member": ["campus-planning-advisory-board-member"]
+    },
+    "Campus Services Committee": {
+      "leadership": ["director-of-campus-services", "vice-president-of-campus-affairs"],
+      "member": ["campus-services-committee-member"]
+    },
+    "Dining Advisory Board": {
+      "leadership": ["chair-of-dining-advisory-board", "vice-president-of-campus-affairs"],
+      "member": ["dining-advisory-board-member"]
+    },
+    "Green Initiatives Board": {
+      "leadership": ["director-of-green-initiatives", "vice-president-of-campus-affairs"],
+      "member": ["green-initiatives-board-member"]
+    },
+    "Sustainability Committee": {
+      "leadership": ["director-of-sustainability", "vice-president-of-campus-affairs"],
+      "member": ["sustainability-committee-member"]
+    },
+
+    "DEI Committee": {
+      "leadership": ["director-of-diversity-equity-and-inclusion", "vice-president-of-diversity-equity-and-inclusion"],
+      "member": ["diversity-equity-and-inclusion-committee-member"]
+    },
+    "Internal Advancement Board": {
+      "leadership": ["director-of-internal-advancement", "vice-president-of-diversity-equity-and-inclusion"],
+      "member": ["internal-advancement-board-member"]
+    },
+
+    "Communications & Events Committee": {
+      "leadership": ["director-of-communications", "director-of-events", "vice-president-of-external-affairs"],
+      "member": ["communications-and-events-committee-member"]
+    },
+
+    "SenatePortal Team": {
+      "leadership": ["digital-innovation-senateportal-team-lead", "digital-innovation-manager", "vice-president-of-operational-affairs"],
+      "member": ["digital-innovation-senateportal-team-member"]
+    },
+    "Website Creation Team": {
+      "leadership": ["digital-innovation-website-creation-team-lead", "digital-innovation-manager", "vice-president-of-operational-affairs"],
+      "member": ["digital-innovation-website-creation-team-member"]
+    },
+    "Website Management Team": {
+      "leadership": ["webmaster", "vice-chair-of-website-management-team"],
+      "member": ["website-management-team-member"]
+    },
+
+    "Senate": {
+      "leadership": ["speaker-of-the-senate", "executive-vice-president"],
+      "member": ["senator"]
+    },
+
+    "Student Organization Approvals Board": {
+      "leadership": ["director-of-student-organization-approvals", "vice-president-of-student-involvement"],
+      "member": ["student-organization-approvals-board-member"]
+    },
+    "Student Organization Compliance Board": {
+      "leadership": ["director-of-student-organization-compliance", "vice-president-of-student-involvement"],
+      "member": ["student-organization-compliance-board-member"]
+    },
+    "Student Organization Finance Board": {
+      "leadership": ["director-of-student-organization-finance", "vice-president-of-student-involvement"],
+      "member": ["student-organization-finance-board-member"]
+    },
+    "Student Organization Governance Board": {
+      "leadership": ["director-of-student-organization-governance", "vice-president-of-student-involvement"],
+      "member": ["student-organization-governance-board-member"]
+    },
+    "Student Organization Operations Committee": {
+      "leadership": ["director-of-student-organization-operations", "vice-president-of-student-involvement"],
+      "member": ["student-organization-operations-committee-member"]
+    },
+
+    "Global Experience Committee": {
+      "leadership": ["director-of-global-experience", "vice-president-of-student-success"],
+      "member": ["global-experience-committee-member"]
+    },
+    "Global Experience Office Working Group": {
+      "leadership": ["director-of-global-experience", "vice-president-of-student-success"],
+      "member": ["global-experience-office-working-group-member"]
+    },
+    "Holistic Wellness Working Group": {
+      "leadership": ["director-of-wellness", "vice-president-of-student-success"],
+      "member": ["holistic-wellness-working-group-member"]
+    },
+    "Student Engagement Committee": {
+      "leadership": ["director-of-student-engagement", "vice-president-of-student-success"],
+      "member": ["student-engagement-committee-member"]
+    },
+    "Wellness Committee": {
+      "leadership": ["director-of-wellness", "vice-president-of-student-success"],
+      "member": ["wellness-committee-member"]
+    },
+
+    "SGA General": { "leadership": ["vice-president-of-operational-affairs"], "member": [] }
+  }
+}

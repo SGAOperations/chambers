@@ -6,10 +6,13 @@ import { randomBytes, createHash } from 'crypto'
 import { sendOtpInviteEmail } from '@/lib/emails/otp-invite'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { isManagementRole } from '@/lib/admin-roles'
+import { replacedBySgauth, sgauthEnabled } from '@/lib/sgauth'
 
 const adminSupabase = db
 
 export async function POST(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth()
+
   const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)

@@ -1,6 +1,8 @@
 import { db } from '@/lib/db/data-api'
 import { redirect } from 'next/navigation'
 import { getAuthedUser } from '@/lib/auth'
+import { sgauthEnabled } from '@/lib/sgauth'
+import { slackAccountHref } from '@/lib/slack-identity'
 import SlackConnectForm from './SlackConnectForm'
 
 export default async function SlackConnectPage({
@@ -8,6 +10,11 @@ export default async function SlackConnectPage({
 }: {
   searchParams: Promise<{ token?: string }>
 }) {
+  // Slack is linked in SGAuth under the flag (#268): the slash command DMs an
+  // SGAuth link instead, and a Chambers token from before the switch is no
+  // longer honoured. This page only points at where the link is managed.
+  if (sgauthEnabled()) redirect(slackAccountHref())
+
   const { token } = await searchParams
 
   const supabase = db

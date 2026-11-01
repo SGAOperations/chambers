@@ -4,10 +4,13 @@ import { randomBytes, createHash } from 'crypto'
 import { signupRateLimiter } from '@/lib/signup-rate-limit'
 import { sendSignupOtpEmail } from '@/lib/emails/signup-otp'
 import { signupClosedResponse } from '@/lib/signup-closed'
+import { replacedBySgauth, sgauthEnabled } from '@/lib/sgauth'
 
 const adminSupabase = db
 
 export async function POST(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth()
+
   const closed = signupClosedResponse()
   if (closed) return closed
 

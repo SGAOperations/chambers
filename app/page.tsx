@@ -1,5 +1,7 @@
 import { db as anonSupabase } from '@/lib/db/data-api'
 import LoginCard from '@/app/_components/LoginCard'
+import SgaSignInCard from '@/app/_components/SgaSignInCard'
+import { sgauthEnabled } from '@/lib/sgauth'
 
 /**
  * Regenerate at most once a minute.
@@ -132,7 +134,8 @@ export default async function LoginPage() {
 
       {/* Left column: login card — always visible, vertically centered */}
       <div className="flex items-center justify-center lg:justify-end min-h-screen lg:min-h-0 relative z-10 px-4 lg:pr-2">
-        <LoginCard />
+        {/* SGAuth's sign-in under SGAUTH_ENABLED (issue #149), Better Auth's form otherwise. */}
+        {sgauthEnabled() && process.env.SGAUTH_URL ? <SgaSignInCard sgauthUrl={process.env.SGAUTH_URL} /> : <LoginCard />}
       </div>
 
       {/* Right column: fact — desktop only */}

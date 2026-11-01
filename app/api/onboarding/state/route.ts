@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthedUser } from '@/lib/auth'
 import { pool } from '@/lib/db/pool'
+import { sgauthEnabled } from '@/lib/sgauth'
 
 /**
  * What the onboarding wizard needs to start (issue #136): the caller's name so
@@ -34,5 +35,7 @@ export async function GET() {
   return NextResponse.json({
     full_name: profile.full_name ?? '',
     has_memberships: memberships.length > 0,
+    // No password step under SGAuth: the password is SGAuth's (issue #149).
+    needs_password: !sgauthEnabled(),
   })
 }
