@@ -3,10 +3,12 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { isManagementRole } from '@/lib/admin-roles'
+import { MEMBERSHIPS_FROM_POSITIONS, replacedBySgauth, sgauthEnabled } from '@/lib/sgauth'
 
 const adminSupabase = db
 
 export async function GET() {
+  if (sgauthEnabled()) return replacedBySgauth(MEMBERSHIPS_FROM_POSITIONS)
   const supabase = db
 
   const user = await getAuthedUserWithLiveRoles(supabase)

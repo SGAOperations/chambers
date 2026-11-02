@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { db } from '@/lib/db/data-api'
+import { sgauthEnabled } from '@/lib/sgauth'
 
 type RoleHolder = { full_name: string; admin_role: string }
 
@@ -10,6 +11,21 @@ type RoleHolder = { full_name: string; admin_role: string }
  */
 async function loadRoleHolders(): Promise<RoleHolder[]> {
   try {
+    // Under SGAuth, by position (#151). Digital Innovation Manager is no longer
+    // an admin office (0020), only a position, so this asks for both by key.
+    if (sgauthEnabled()) {
+      const keys: Record<string, string> = {
+        'vice-president-of-operational-affairs': 'Vice President of Operational Affairs',
+        'digital-innovation-manager': 'Digital Innovation Manager',
+      }
+      const { data } = await db
+        .from('users')
+        .select('full_name, sgauth_position_keys')
+        .overlaps('sgauth_position_keys', Object.keys(keys))
+      return ((data as { full_name: string; sgauth_position_keys: string[] }[] | null) ?? []).flatMap(u =>
+        u.sgauth_position_keys.filter(k => k in keys).map(k => ({ full_name: u.full_name, admin_role: keys[k] }))
+      )
+    }
     const { data } = await db
       .from('users')
       .select('full_name, admin_role')

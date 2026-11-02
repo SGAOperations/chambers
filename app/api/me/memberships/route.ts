@@ -2,10 +2,12 @@ import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUser } from '@/lib/auth'
+import { MEMBERSHIPS_FROM_POSITIONS, replacedBySgauth, sgauthEnabled } from '@/lib/sgauth'
 
 const adminSupabase = db
 
 export async function POST(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth(MEMBERSHIPS_FROM_POSITIONS)
   const supabase = db
 
   const user = await getAuthedUser(supabase)
@@ -41,6 +43,7 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth(MEMBERSHIPS_FROM_POSITIONS)
   const supabase = db
 
   const user = await getAuthedUser(supabase)

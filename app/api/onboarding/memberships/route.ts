@@ -1,10 +1,12 @@
 import { db } from '@/lib/db/data-api'
 import { NextResponse } from 'next/server'
 import { getAuthedUser } from '@/lib/auth'
+import { MEMBERSHIPS_FROM_POSITIONS, replacedBySgauth, sgauthEnabled } from '@/lib/sgauth'
 
 const adminSupabase = db
 
 export async function POST(request: Request) {
+  if (sgauthEnabled()) return replacedBySgauth(MEMBERSHIPS_FROM_POSITIONS)
   const supabase = db
 
   const user = await getAuthedUser(supabase)

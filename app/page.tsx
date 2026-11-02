@@ -2,6 +2,7 @@ import { db as anonSupabase } from '@/lib/db/data-api'
 import LoginCard from '@/app/_components/LoginCard'
 import SgaSignInCard from '@/app/_components/SgaSignInCard'
 import { sgauthEnabled } from '@/lib/sgauth'
+import { officeHolders } from '@/lib/office-holders'
 
 /**
  * Regenerate at most once a minute.
@@ -47,14 +48,15 @@ export default async function LoginPage() {
   // semester" means all of them -- and every visitor sees the same numbers. The
   // queries name exactly the columns the page shows.
   const [comptrollerResult, semResult] = await Promise.allSettled([
-    anonSupabase.from('users').select('full_name').eq('admin_role', 'Comptroller').eq('is_active', true).limit(1).single(),
+    // By position under SGAuth (lib/office-holders.ts).
+    officeHolders(['Comptroller']),
     anonSupabase.from('semesters').select('id').eq('is_active', true).single(),
   ])
 
   // Comptroller name (for static fact #8)
   let comptrollerName: string | null = null
-  if (comptrollerResult.status === 'fulfilled' && comptrollerResult.value.data?.full_name) {
-    comptrollerName = comptrollerResult.value.data.full_name
+  if (comptrollerResult.status === 'fulfilled' && comptrollerResult.value[0]?.full_name) {
+    comptrollerName = comptrollerResult.value[0].full_name
   }
 
   // Bookings this semester (depends on sem.id — second wave)

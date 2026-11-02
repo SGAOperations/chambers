@@ -1,6 +1,7 @@
 import { getAuthedUser, type AuthedUser } from './auth'
 import { pool } from './db/pool'
-import { sgauthEnabled } from './sgauth'
+import { adminRoleFromPositions, iemsRoleFromPositions } from './permissions'
+import { resolveSgauthUser, sgauthEnabled, sgauthSessionUsable } from './sgauth'
 
 /**
  * getAuthedUser(), but with the role fields refreshed from the users table.
@@ -33,6 +34,13 @@ import { sgauthEnabled } from './sgauth'
  * Cost is one primary-key lookup. Use it on routes that make an authorization
  * decision, not on hot read paths that merely need the caller's id -- /api/my-rooms
  * keeps plain getAuthedUser() for that reason.
+ *
+ * Under SGAuth (SGAUTH_ENABLED) the roles come from the positions on the
+ * caller's SGAuth session instead, translated to the same office names
+ * (lib/permissions.ts, #151) -- no users-row read, and no is_active or
+ * sessions_revoked_at: a deactivated or revoked SGAuth account has no session
+ * at all (#152). A position removed in SGAuth stops counting within the SDK's
+ * minute-long session cache.
  */
 export async function getAuthedUserWithLiveRoles(
   // Ignored; see getAuthedUser(). Kept so call sites did not change with #136.
@@ -40,6 +48,24 @@ export async function getAuthedUserWithLiveRoles(
 ): Promise<AuthedUser | null> {
   const user = await getAuthedUser()
   if (!user) return null
+
+  if (sgauthEnabled()) {
+    const result = await resolveSgauthUser()
+    if (!sgauthSessionUsable(result)) return null
+    const keys = result.session.positions.map(p => p.key)
+    const adminRole = adminRoleFromPositions(keys)
+    const iemsRole = iemsRoleFromPositions(keys)
+    return {
+      ...user,
+      rolesVerifiedLive: true,
+      app_metadata: {
+        ...user.app_metadata,
+        is_admin: !!adminRole,
+        admin_role: adminRole ?? undefined,
+        iems_role: iemsRole ?? undefined,
+      },
+    }
+  }
 
   const { rows } = await pool.query<{
     admin_role: string | null
@@ -63,10 +89,7 @@ export async function getAuthedUserWithLiveRoles(
   // Whole seconds on both sides, and strict: a session created in the same
   // second as the revocation is let through, so someone signing straight back in
   // is not refused.
-  //
-  // Not under SGAuth (SGAUTH_ENABLED): Chambers cannot end that session, so the
-  // stamp would only lock people out. See sgauthSessionUsable() in lib/sgauth.ts.
-  if (profile.sessions_revoked_at && !sgauthEnabled()) {
+  if (profile.sessions_revoked_at) {
     const revokedAtSeconds = Math.floor(
       new Date(profile.sessions_revoked_at).getTime() / 1000
     )

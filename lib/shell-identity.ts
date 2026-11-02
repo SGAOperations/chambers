@@ -1,5 +1,6 @@
 import { getAuthedUser } from '@/lib/auth'
 import { pool } from '@/lib/db/pool'
+import { adminRoleFromPositions, iemsRoleFromPositions } from '@/lib/permissions'
 import { resolveSgauthUser, sgauthEnabled } from '@/lib/sgauth'
 
 /**
@@ -48,15 +49,16 @@ export type ShellIdentityResult =
  * try/catch around it) makes the control flow obvious at the call site.
  */
 export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
-  // Under SGAuth, getAuthedUser() is null for a deactivated row, which would
-  // read here as "signed out" and send them to sign in again -- into an SGAuth
-  // session that is still perfectly good, and round again. Resolving the row
-  // directly keeps "deactivated" its own answer, so the layout can say so.
+  // Under SGAuth the roles are the session's positions (#151), and there is no
+  // "deactivated" answer: SGAuth deactivation ends the session itself, so that
+  // person is simply unauthenticated (#152).
   let userId: string
+  let positionKeys: string[] | null = null
   if (sgauthEnabled()) {
     const result = await resolveSgauthUser()
     if (result.status !== 'ok') return { status: 'unauthenticated' }
     userId = result.user.id
+    positionKeys = result.session.positions.map(p => p.key)
   } else {
     const user = await getAuthedUser()
     if (!user) return { status: 'unauthenticated' }
@@ -79,8 +81,11 @@ export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
   const profile = profiles[0]
 
   if (!profile) return { status: 'unauthenticated' }
-  if (!profile.is_active) return { status: 'deactivated' }
+  if (!positionKeys && !profile.is_active) return { status: 'deactivated' }
   if (!profile.has_completed_onboarding) return { status: 'onboarding' }
+
+  const adminRole = positionKeys ? adminRoleFromPositions(positionKeys) : profile.admin_role ?? null
+  const iemsRole = positionKeys ? iemsRoleFromPositions(positionKeys) : profile.iems_role ?? null
 
   return {
     status: 'ok',
@@ -98,11 +103,12 @@ export async function resolveShellIdentity(): Promise<ShellIdentityResult> {
       // they signed out. The users row is the fact itself, and this query is
       // already being made, so consulting it costs nothing.
       //
-      // Since #136 there is no token copy at all: roles only ever come from here.
+      // Since #136 there is no token copy at all: roles only ever come from here
+      // -- or, under SGAuth, from the session's positions.
       //
-      isAdmin: !!profile.admin_role,
-      isIEMS: !!profile.iems_role,
-      adminRole: profile.admin_role ?? null,
+      isAdmin: !!adminRole,
+      isIEMS: !!iemsRole,
+      adminRole,
     },
   }
 }

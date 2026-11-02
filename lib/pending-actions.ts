@@ -372,7 +372,11 @@ export async function fetchPendingActions(
           'event_tracking_items(id, label, due_days, completed, occurrence_date)'
       )
       .eq('is_event', true),
-    isManagementRole(adminRole)
+    // Not under SGAuth, where bodies come from positions and there are no
+    // membership requests to act on (#151). Read from the environment directly,
+    // as proxy.ts does: lib/sgauth.ts is server-only and this module is also
+    // bundled for the browser, for its types and helpers.
+    isManagementRole(adminRole) && process.env.SGAUTH_ENABLED !== 'true'
       ? adminSupabase
           .from('membership_requests')
           .select('id, bodies(name)')
