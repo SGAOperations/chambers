@@ -29,9 +29,14 @@ import { SpacesCard } from './spaces-card'
  * one. From the kiosk it keeps only the plumbing -- a client component behind
  * ?key=, polling every 50s and only while the tab is actually on screen.
  *
- * ?key= is the only parameter. The arrows come from a bearing table in
- * lib/committee-display.ts, given for this one screen rather than derived, since
- * no room number can say which way to turn on the floor you are already on.
+ * The arrows come from a bearing table in lib/committee-display.ts, given for
+ * this one screen rather than derived, since no room number can say which way to
+ * turn on the floor you are already on.
+ *
+ * ?mode=info is the same board for anywhere that is not that screen -- the SGA
+ * website, another hallway. The bearings are only true standing in front of the
+ * kiosk, so it drops the arrows and their wording, and the SGA Spaces card,
+ * leaving the committee meetings and their rooms.
  *
  * Everything here is read while walking past, which is why there is no smallest
  * tier of type below ~20px except the footer chrome, why nothing is revealed by
@@ -387,6 +392,7 @@ type Card = { kind: 'meeting'; meeting: CommitteeMeeting } | { kind: 'spaces' }
 function CommitteeDisplayContent() {
   const searchParams = useSearchParams()
   const key = searchParams.get('key')
+  const infoOnly = searchParams.get('mode') === 'info'
 
   const [meetings, setMeetings] = useState<CommitteeMeeting[]>([])
   // Null until the spaces route has answered once. Distinct from an empty
@@ -440,6 +446,7 @@ function CommitteeDisplayContent() {
     // must not take the meetings board down with it, and vice versa -- so this
     // keeps whatever was last on the card and lets the next tick try again.
     async function fetchSpaces() {
+      if (infoOnly) return
       try {
         const res = await fetch(
           `/api/display/all-spaces?key=${encodeURIComponent(key!)}&date=${localDateString()}`
@@ -478,7 +485,7 @@ function CommitteeDisplayContent() {
       clearInterval(interval)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [key, keyRejected])
+  }, [key, keyRejected, infoOnly])
 
   const nowHm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
@@ -606,7 +613,7 @@ function CommitteeDisplayContent() {
             <MeetingCard
               meeting={current.meeting}
               label={label}
-              pointTheWay={shouldPointAt(current.meeting, board!.daysAhead, nowHm)}
+              pointTheWay={!infoOnly && shouldPointAt(current.meeting, board!.daysAhead, nowHm)}
             />
           )}
         </div>
