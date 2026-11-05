@@ -12,7 +12,7 @@ vi.mock('@/lib/db/pool', () => ({
 }))
 
 type Sent = {
-  to: string
+  to: string[]
   removedBodies: string[]
   summary: string
   sessions: { date: string }[]
@@ -122,7 +122,7 @@ describe('notifyRemovedSeats', () => {
     await moveFrom('ex-director@northeastern.edu', ['director-of-student-organization-finance'], [])
 
     expect(sent).toHaveLength(1)
-    expect(sent[0].to).toBe('ex-director@northeastern.edu')
+    expect(sent[0].to).toEqual(['ex-director@northeastern.edu'])
     expect(sent[0].removedBodies).toEqual(['Student Organization Finance Board'])
     expect(sent[0].summary).toBe('Weekly Meeting (Student Organization Finance Board)')
     expect(sent[0].sessions.map(s => s.date)).toEqual(['2026-11-11'])
@@ -187,7 +187,7 @@ describe('notifyRemovedSeats', () => {
     expect(sent).toEqual([])
 
     await moveFrom('ex-parliamentarian@northeastern.edu', ['parliamentarian'], [])
-    expect(sent.map(s => s.to)).toEqual(['ex-parliamentarian@northeastern.edu'])
+    expect(sent.map(s => s.to)).toEqual([['ex-parliamentarian@northeastern.edu']])
   })
 
   it('skips Senate weeks the person does not follow', async () => {
@@ -200,7 +200,12 @@ describe('notifyRemovedSeats', () => {
     expect(sent).toEqual([])
   })
 
-  it('sends nothing to someone whose invites went only to a shared SGA inbox', async () => {
+  async function inbox(body: string, address: string) {
+    await db.pg.query('update public.bodies set sga_emails = $2 where id = $1', [db.bodyIds.get(body), [address]])
+  }
+
+  it('leaves alone the inbox of the body they left', async () => {
+    await inbox('Appeals Board', 'appeals@northeastern.edu')
     const b = await booking('Appeals Board', 'Weekly Room')
     await weekly(b, [{ date: '2026-11-11' }])
 
@@ -208,6 +213,41 @@ describe('notifyRemovedSeats', () => {
       spaces_email_destination: 'sga',
       spaces_sga_email: 'appeals@northeastern.edu',
     })
+    expect(sent).toEqual([])
+  })
+
+  it('clears an inbox they still hold through a body they still lead', async () => {
+    // An EVP-style office inbox, held through Senate Leadership, that a
+    // committee they have now left was also sending its invites into.
+    await inbox('Senate', 'office@northeastern.edu')
+    const b = await booking('Student Organization Finance Board', 'Weekly Room')
+    await weekly(b, [{ date: '2026-11-11' }])
+
+    await moveFrom(
+      'officer@northeastern.edu',
+      ['speaker-of-the-senate', 'director-of-student-organization-finance'],
+      ['speaker-of-the-senate'],
+      { spaces_email_destination: 'both', spaces_sga_email: 'office@northeastern.edu' }
+    )
+    expect(sent.map(s => s.to)).toEqual([['officer@northeastern.edu', 'office@northeastern.edu']])
+  })
+
+  it('leaves an inbox alone while someone still on the body routes there', async () => {
+    await inbox('Senate', 'office@northeastern.edu')
+    const b = await booking('Student Organization Finance Board', 'Weekly Room')
+    await weekly(b, [{ date: '2026-11-11' }])
+    const colleague = await db.addUser('colleague@northeastern.edu', {
+      spaces_email_destination: 'sga',
+      spaces_sga_email: 'office@northeastern.edu',
+    })
+    await syncPositions(colleague, pos('vice-president-of-student-involvement'))
+
+    await moveFrom(
+      'officer@northeastern.edu',
+      ['speaker-of-the-senate', 'director-of-student-organization-finance'],
+      ['speaker-of-the-senate'],
+      { spaces_email_destination: 'sga', spaces_sga_email: 'office@northeastern.edu' }
+    )
     expect(sent).toEqual([])
   })
 

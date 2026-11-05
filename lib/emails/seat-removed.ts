@@ -21,7 +21,8 @@ export interface CalendarAttachment {
 }
 
 interface SeatRemovedEmailParams {
-  to: string
+  /** One person's addresses: personal, their SGA inbox, or both. */
+  to: string[]
   /** The bodies they left that reached this booking. */
   removedBodies: string[]
   /** The calendar event's name, as the invite gave it. */
@@ -41,7 +42,7 @@ function listOf(names: string[]): string {
 
 export async function sendSeatRemovedEmail(params: SeatRemovedEmailParams) {
   const { to, removedBodies, summary, sessions, attachments } = params
-  if (!attachments.length) return
+  if (!attachments.length || !to.length) return
 
   const bodies = listOf(removedBodies.map(sanitize))
   const sSummary = sanitize(summary)

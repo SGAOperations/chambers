@@ -92,6 +92,7 @@ interface Person {
   is_active: boolean | null
   senate_type_preferences: Record<string, boolean> | null
   spaces_email_destination: string
+  spaces_sga_email: string | null
 }
 
 /** A session still on someone's calendar: anything not already taken off. */
@@ -185,15 +186,49 @@ function summaryOf(booking: LostBooking): string {
 }
 
 /**
- * The address their booking emails reached, so the cancellation lands where
- * the invite did. Someone who sent their invites only to a shared SGA inbox
- * gets nothing: that inbox belongs to the body, and its next leader still
- * wants the events in it.
+ * Where the cancellation goes: wherever the person's invites went that is
+ * still theirs to clear.
+ *
+ *   - Their personal address, if they chose personal or both.
+ *   - Their chosen SGA inbox, if they chose sga or both, but only while they
+ *     can still choose it -- an inbox of a body they still lead, like the EVP
+ *     office inbox for an EVP who has left a committee. The committee's events
+ *     are in that inbox only because of them.
+ *
+ * An inbox they can no longer choose belongs to the body they left, and its
+ * next leader still wants the events in it, so it is left alone. So is any
+ * inbox someone else still routes this booking's invites to.
  */
-function personalAddress(person: Person): string | null {
-  if (!person.email || person.is_active === false) return null
-  if (person.spaces_email_destination === 'sga') return null
-  return person.email
+async function addressesFor(person: Person, booking: LostBooking): Promise<string[]> {
+  if (!person.email || person.is_active === false) return []
+  const destination = person.spaces_email_destination
+  const addresses = destination === 'sga' ? [] : [person.email]
+
+  const inbox = person.spaces_sga_email
+  if (inbox && (destination === 'sga' || destination === 'both')) {
+    const { rows } = await pool.query<{ still_theirs: boolean; shared: boolean }>(
+      `select
+         exists (
+           select 1 from public.board_memberships m
+             join public.bodies b on b.id = m.body_id
+            where m.user_id = $1 and m.role = 'Leadership' and b.is_active is not false
+              and exists (select 1 from unnest(b.sga_emails) e where lower(e) = lower($2))
+         ) as still_theirs,
+         exists (
+           select 1 from public.users u
+             join public.board_memberships m on m.user_id = u.id
+            where u.id <> $1
+              and lower(u.spaces_sga_email) = lower($2)
+              and u.spaces_email_destination in ('sga', 'both')
+              and (m.body_id = (select body_id from public.bookings where id = $3)
+                   or m.body_id in (select body_id from public.booking_bodies where booking_id = $3))
+         ) as shared`,
+      [person.id, inbox, booking.booking_id]
+    )
+    if (rows[0]?.still_theirs && !rows[0]?.shared) addresses.push(inbox)
+  }
+
+  return addresses
 }
 
 /** Which bookings `seats` take away from their holders, for a dry run. */
@@ -239,7 +274,7 @@ export async function notifyRemovedSeats(
     if (!lost.length) return
 
     const { rows: people } = await pool.query<Person>(
-      `select id, email, is_active, senate_type_preferences, spaces_email_destination
+      `select id, email, is_active, senate_type_preferences, spaces_email_destination, spaces_sga_email
          from public.users where id = any($1::uuid[])`,
       [[...new Set(lost.map(l => l.user_id))]]
     )
@@ -247,9 +282,10 @@ export async function notifyRemovedSeats(
 
     for (const booking of lost) {
       const person = byId.get(booking.user_id)
-      const to = person && personalAddress(person)
-      if (!person || !to) continue
+      if (!person) continue
       try {
+        const to = await addressesFor(person, booking)
+        if (!to.length) continue
         const cancellation = await cancellationsFor(booking, person, today, icsSequenceNow())
         if (!cancellation) continue
         await sendSeatRemovedEmail({
