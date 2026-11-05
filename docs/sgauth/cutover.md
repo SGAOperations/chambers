@@ -75,6 +75,9 @@ Watch Vercel runtime logs for:
 - `position-sync: could not sync a user`: someone's memberships did not update. Their old ones stay until the next try.
 - `sgauth: email already linked to another SGAuth account`: one Chambers row, two SGAuth accounts. Needs a person.
 - `slack-identity:` errors, usually a missing `SGAUTH_PRODUCT_API_KEY`.
+- `seat-removal:` errors: someone left a body but its bookings could not be taken off their calendar.
+
+Someone who loses a body seat is emailed once per booking of that body, with a calendar cancellation and wording that says they left the body (`lib/seat-removal.ts`). Seats lost at the cutover itself, before that existed, are caught up once from the snapshot: as Management, open `/api/administrator/sgauth/cutover-removals` for a dry run, then `POST` to it to send. Run it once.
 
 People who cannot sign in are almost always the **no account** rows from `verify-links.mjs`. An SGAuth admin creates or invites their account. Anyone missing a body needs the position in SGAuth, or a change to the map on the Bodies tab.
 

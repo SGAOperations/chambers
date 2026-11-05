@@ -51,7 +51,7 @@ const MEMBERSHIPS_FROM_KEYS = `
      using targets t
      where bm.user_id = t.user_id
        and not exists (select 1 from desired d where d.user_id = bm.user_id and d.body_id = bm.body_id)
-    returning 1
+    returning bm.user_id, bm.body_id, bm.role
   ), upserted as (
     insert into public.board_memberships (user_id, body_id, role)
     select user_id, body_id, role from desired
@@ -59,22 +59,38 @@ const MEMBERSHIPS_FROM_KEYS = `
       where public.board_memberships.role is distinct from excluded.role
     returning 1
   )
-  select (select count(*) from removed)::int as removed, (select count(*) from upserted)::int as upserted
+  select (select count(*) from removed)::int as removed,
+         (select count(*) from upserted)::int as upserted,
+         (select coalesce(json_agg(json_build_object('userId', user_id, 'bodyId', body_id, 'role', role)), '[]'::json)
+            from removed) as seats
 `
+
+/** A body seat a sync took away, with the role it was held in. */
+export interface RemovedSeat {
+  userId: string
+  bodyId: string
+  role: string
+}
+
+type SyncResult = { removed: number; upserted: number; seats: RemovedSeat[] }
 
 /**
  * Brings one user's recorded positions and body memberships up to date with
  * their session. Failures are logged and swallowed: a sync that cannot run
  * leaves yesterday's memberships in place rather than signing anyone out, and
  * is retried on the next request.
+ *
+ * Returns the seats it took away, so the caller can take those bodies' bookings
+ * off the person's calendar (lib/seat-removal.ts). Empty when nothing was
+ * removed, including when the sync was skipped or failed.
  */
-export async function syncPositions(userId: string, positions: readonly SgaPosition[]): Promise<void> {
+export async function syncPositions(userId: string, positions: readonly SgaPosition[]): Promise<RemovedSeat[]> {
   const valid = positions.filter(p => isPositionKey(p.key))
   const keys = [...new Set(valid.map(p => p.key))].sort()
   const signature = keys.join(',')
 
   const last = memo.get(userId)
-  if (last && last.signature === signature && Date.now() - last.at < MEMO_TTL_MS) return
+  if (last && last.signature === signature && Date.now() - last.at < MEMO_TTL_MS) return []
 
   const client = await pool.connect()
   try {
@@ -98,15 +114,17 @@ export async function syncPositions(userId: string, positions: readonly SgaPosit
                or sgauth_positions_synced_at < now() - interval '1 day')`,
       [userId, keys]
     )
-    await client.query(MEMBERSHIPS_FROM_KEYS, [[userId]])
+    const { rows } = await client.query<SyncResult>(MEMBERSHIPS_FROM_KEYS, [[userId]])
     await client.query('commit')
     memo.set(userId, { signature, at: Date.now() })
+    return rows[0]?.seats ?? []
   } catch (e) {
     await client.query('rollback').catch(() => {})
     console.error('position-sync: could not sync a user', {
       userId,
       error: e instanceof Error ? e.message : 'unknown',
     })
+    return []
   } finally {
     client.release()
   }
@@ -118,12 +136,12 @@ export async function syncPositions(userId: string, positions: readonly SgaPosit
  * through SGAuth have no recorded positions and are left alone; they sync on
  * their first sign-in.
  */
-export async function resyncAllMemberships(): Promise<{ removed: number; upserted: number }> {
+export async function resyncAllMemberships(): Promise<SyncResult> {
   const { rows: users } = await pool.query<{ id: string }>(
     'select id from public.users where sgauth_positions_synced_at is not null'
   )
   clearPositionSyncMemo()
-  if (!users.length) return { removed: 0, upserted: 0 }
-  const { rows } = await pool.query<{ removed: number; upserted: number }>(MEMBERSHIPS_FROM_KEYS, [users.map(u => u.id)])
-  return rows[0] ?? { removed: 0, upserted: 0 }
+  if (!users.length) return { removed: 0, upserted: 0, seats: [] }
+  const { rows } = await pool.query<SyncResult>(MEMBERSHIPS_FROM_KEYS, [users.map(u => u.id)])
+  return rows[0] ?? { removed: 0, upserted: 0, seats: [] }
 }
