@@ -1,10 +1,11 @@
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { getAuthedUserWithLiveRoles } from '@/lib/authorization'
 import { isManagementRole } from '@/lib/admin-roles'
 import { pool } from '@/lib/db/pool'
 import { ADMIN_POSITION_KEYS, IEMS_POSITION_KEYS, isPositionKey } from '@/lib/permissions'
 import { resyncAllMemberships } from '@/lib/position-sync'
+import { notifyRemovedSeats } from '@/lib/seat-removal'
 import { sgauthEnabled } from '@/lib/sgauth'
 
 /**
@@ -123,7 +124,11 @@ export async function PUT(request: Request) {
   let resynced: { removed: number; upserted: number } | null = null
   if (sgauthEnabled()) {
     try {
-      resynced = await resyncAllMemberships()
+      const { removed, upserted, seats } = await resyncAllMemberships()
+      resynced = { removed, upserted }
+      // After the response: anyone the change took off a body has that body's
+      // bookings taken off their calendar.
+      if (seats.length) after(() => notifyRemovedSeats(seats))
     } catch (e) {
       console.error('bodies/positions: resync failed', e instanceof Error ? e.message : e)
     }

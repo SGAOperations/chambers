@@ -1,9 +1,11 @@
 import { cache } from 'react'
 import { headers } from 'next/headers'
+import { after } from 'next/server'
 import { createSgauthClient, type SgaSession } from '@nusgaops/sgauth'
 import { loginUrl, logoutUrl } from '@nusgaops/sgauth/urls'
 import { pool } from './db/pool'
 import { syncPositions } from './position-sync'
+import { notifyRemovedSeats } from './seat-removal'
 
 /**
  * Chambers' sign-in through SGAuth (issues #149, #150), behind SGAUTH_ENABLED.
@@ -97,7 +99,16 @@ export const resolveSgauthUser = cache(async (): Promise<SgauthUserResult> => {
   const user = await findOrLinkUser(session)
   if (!user) return { status: 'none' }
 
-  await syncPositions(user.id, session.positions)
+  const removedSeats = await syncPositions(user.id, session.positions)
+  // After the response, so a sign-in never waits on email: a seat that went
+  // takes that body's bookings off their calendar (lib/seat-removal.ts).
+  if (removedSeats.length) {
+    try {
+      after(() => notifyRemovedSeats(removedSeats))
+    } catch {
+      void notifyRemovedSeats(removedSeats)
+    }
+  }
   return { status: 'ok', session, user }
 })
 
