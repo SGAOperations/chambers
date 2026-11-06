@@ -130,6 +130,22 @@ describe('notifyRemovedSeats', () => {
     const ics = sent[0].attachments[0].content.toString()
     expect(ics).toContain('METHOD:CANCEL')
     expect(ics).toContain(`UID:weekly-series-${seriesId}@chambers.northeasternsga.com`)
+    // The series' own first start, which iTIP requires on a CANCEL.
+    expect(ics).toContain('DTSTART;TZID=America/New_York:20261028T180000')
+    expect(ics).toContain('DTEND;TZID=America/New_York:20261028T190000')
+  })
+
+  it('never sends a calendar event without a DTSTART', async () => {
+    const w = await booking('Appeals Board', 'Weekly Room')
+    await weekly(w, [{ date: '2026-11-11' }])
+    const o = await booking('Appeals Board', 'One-Time Room')
+    await oneTime(o, ['2026-11-20'])
+
+    await moveFrom('ex-parliamentarian@northeastern.edu', ['parliamentarian'], [])
+
+    const events = sent.flatMap(s => s.attachments.flatMap(a => a.content.toString().split('BEGIN:VEVENT').slice(1)))
+    expect(events).toHaveLength(2)
+    for (const event of events) expect(event).toMatch(/\r\nDTSTART[;:]/)
   })
 
   it('cancels each upcoming one-time session, and leaves past ones alone', async () => {

@@ -192,16 +192,33 @@ export function buildRoomSeriesIcs(
   return buildCalendar('REQUEST', blocks)
 }
 
+/** The parts of a series its cancellation has to name. */
+export interface SeriesCancelRef {
+  /** weekly_room_bookings.id */
+  id: string
+  /** The series' first pattern date, 'YYYY-MM-DD'. */
+  startDate: string
+  startTime: string
+  endTime: string
+}
+
 /**
  * Cancels an entire weekly series in one VEVENT: no RRULE and no RECURRENCE-ID
  * are needed to cancel by UID alone, matching how a one-off session is
  * cancelled. Used when nothing of the series is a meeting any more.
+ *
+ * DTSTART is required all the same. iTIP (RFC 5546 §3.2.5) makes it mandatory
+ * on a CANCEL, and clients refuse the file without it -- "Invalid ical
+ * element: dt_start" -- leaving the series on the calendar. It is the master's
+ * own start, the first pattern date, so it names the event the calendar holds.
  */
-export function buildRoomSeriesCancelIcs(seriesId: string, sequence: number): Buffer {
+export function buildRoomSeriesCancelIcs(series: SeriesCancelRef, sequence: number): Buffer {
   return buildCalendar('CANCEL', [[
     'BEGIN:VEVENT',
-    `UID:${weeklySeriesUid(seriesId)}`,
+    `UID:${weeklySeriesUid(series.id)}`,
     `DTSTAMP:${icsUtcStamp()}`,
+    `DTSTART;TZID=America/New_York:${toIcsLocal(series.startDate, series.startTime)}`,
+    `DTEND;TZID=America/New_York:${toIcsLocal(endDateFor(series.startDate, series.startTime, series.endTime), series.endTime)}`,
     'STATUS:CANCELLED',
     `SEQUENCE:${sequence}`,
     'END:VEVENT',
@@ -239,7 +256,7 @@ export function roomIcsAttachments(
     if (!series.meetingDates.length) {
       return [{
         filename: 'cancel.ics',
-        content: buildRoomSeriesCancelIcs(series.id, sequence),
+        content: buildRoomSeriesCancelIcs(series, sequence),
         contentType: 'text/calendar; method=CANCEL',
       }]
     }
