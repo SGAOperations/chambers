@@ -142,10 +142,13 @@ async function cancellationsFor(
   // the series is cancelled whole, by its UID, once any week of it is still
   // ahead. The person is off the body; no week of it belongs on their calendar.
   const { rows } = await pool.query<{
-    series_id: string; occurrence_id: string; occurrence_date: string
+    series_id: string; series_start_date: string; series_start_time: string; series_end_time: string
+    occurrence_id: string; occurrence_date: string
     start_time: string; end_time: string; room_name: string; status: string | null; senate_type: string | null
   }>(
-    `select w.id as series_id, o.id as occurrence_id, o.occurrence_date::text,
+    `select w.id as series_id, w.start_date::text as series_start_date,
+            w.start_time::text as series_start_time, w.end_time::text as series_end_time,
+            o.id as occurrence_id, o.occurrence_date::text,
             coalesce(o.start_time, w.start_time)::text as start_time,
             coalesce(o.end_time, w.end_time)::text as end_time,
             coalesce(o.room_name, w.room_name) as room_name,
@@ -159,7 +162,16 @@ async function cancellationsFor(
   const weeks = rows.filter(r => onCalendar(r.status) && follows(r.senate_type))
   if (!weeks.length) return null
 
-  const series = [...new Set(weeks.map(w => w.series_id))]
+  const series = [
+    ...new Map(
+      weeks.map(w => [w.series_id, {
+        id: w.series_id,
+        startDate: w.series_start_date,
+        startTime: w.series_start_time,
+        endTime: w.series_end_time,
+      }])
+    ).values(),
+  ]
   const sessions: RoomSession[] = weeks.map(w => ({
     uid: occurrenceUid(w.occurrence_id),
     date: w.occurrence_date,
@@ -171,9 +183,9 @@ async function cancellationsFor(
     senateType: w.senate_type,
   }))
   return {
-    attachments: series.map(id => ({
-      filename: series.length > 1 ? `cancel-${id}.ics` : 'cancel.ics',
-      content: buildRoomSeriesCancelIcs(id, sequence),
+    attachments: series.map(s => ({
+      filename: series.length > 1 ? `cancel-${s.id}.ics` : 'cancel.ics',
+      content: buildRoomSeriesCancelIcs(s, sequence),
       contentType: 'text/calendar; method=CANCEL',
     })),
     sessions,
