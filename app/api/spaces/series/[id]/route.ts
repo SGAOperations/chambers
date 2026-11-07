@@ -431,6 +431,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             title: cleanTitle,
             spaceName,
             frequency: cadence,
+            patternStart: sample.start,
+            patternEnd: sample.end,
             weeks: [...finalWeeks, ...removedWeeks],
             to: [process.env.RESEND_FROM_EMAIL!],
             bcc: dropped,
@@ -496,11 +498,15 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
           ])
           const { to, bcc } = cancellationAddressing(addresses, series.creator_id, attendees)
 
+          // The master's first slot, as the series' invite named it.
+          const pattern = intervalFor(series.starts_on, series.start_time, series.end_time)
           await sendSpaceSeriesCancelledEmail({
             seriesId: id,
             title: series.title,
             spaceName: space?.name ?? 'SGA Space',
             frequency: cadenceOf(series),
+            patternStart: pattern.start,
+            patternEnd: pattern.end,
             weeks: upcoming.map(toWeek),
             to,
             bcc,

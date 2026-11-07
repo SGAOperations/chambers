@@ -197,13 +197,23 @@ export function buildSpaceSeriesIcs(plan: SpaceSeriesIcsPlan, sequence?: number)
  * needed to cancel by UID alone, matching how buildSpaceIcs cancels a one-off
  * booking. Used both to end a series outright and to take one person off all
  * of it -- the same VEVENT, addressed to fewer people.
+ *
+ * DTSTART is required all the same. iTIP (RFC 5546 §3.2.5) makes it mandatory
+ * on a CANCEL, and clients refuse the file without it -- "Invalid ical
+ * element: dt_start" -- leaving the series on the calendar. It is the master's
+ * own start, the pattern's first slot, as buildSpaceSeriesIcs sent it.
  */
-export function buildSpaceSeriesCancelIcs(seriesId: string, sequence: number): Buffer {
+export function buildSpaceSeriesCancelIcs(
+  series: { seriesId: string; patternStart: string; patternEnd: string },
+  sequence: number
+): Buffer {
   const stamp = icsUtcStamp()
   const lines = [
     'BEGIN:VEVENT',
-    `UID:${seriesIcsUid(seriesId)}`,
+    `UID:${seriesIcsUid(series.seriesId)}`,
     `DTSTAMP:${stamp}`,
+    `DTSTART;TZID=America/New_York:${toIcsLocal(series.patternStart)}`,
+    `DTEND;TZID=America/New_York:${toIcsLocal(series.patternEnd)}`,
     'STATUS:CANCELLED',
     `SEQUENCE:${sequence}`,
     'END:VEVENT',

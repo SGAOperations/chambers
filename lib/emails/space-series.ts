@@ -247,6 +247,9 @@ export async function sendSpaceSeriesUpdatedEmail(params: SeriesBase & {
 }
 
 export async function sendSpaceSeriesCancelledEmail(params: SeriesBase & {
+  /** The master event's first slot, which the cancellation must name. */
+  patternStart: string
+  patternEnd: string
   weeks: SeriesWeek[]
   to: string[]
   bcc?: string[]
@@ -274,7 +277,7 @@ export async function sendSpaceSeriesCancelledEmail(params: SeriesBase & {
       // Cancels the whole series by its master UID -- no need to name a week,
       // since ending the series or removing one person from all of it both
       // mean "take every occurrence off this calendar" (issue #184).
-      content: buildSpaceSeriesCancelIcs(params.seriesId, icsSequenceNow()),
+      content: buildSpaceSeriesCancelIcs(params, icsSequenceNow()),
       contentType: 'text/calendar; method=CANCEL',
     }],
   })
