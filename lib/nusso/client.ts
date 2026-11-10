@@ -39,6 +39,7 @@ import {
   NussoApiError,
   NussoAuthError,
   NussoConfigError,
+  NussoUnreachableError,
   type NussoAvailability,
   type NussoBookingRequest,
   type NussoExistingBooking,
@@ -111,6 +112,24 @@ function hiddenField(html: string, name: string): string {
 }
 
 /**
+ * fetch() against EMS, with transport failures turned into NussoUnreachableError.
+ * undici reports them all as `TypeError: fetch failed` with the real reason
+ * (ENOTFOUND, UND_ERR_CONNECT_TIMEOUT, ECONNRESET, a TLS code, ...) on `cause`.
+ * An HTTP response of any status is returned as usual.
+ */
+async function emsFetch(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init)
+  } catch (err) {
+    const cause = (err as { cause?: { code?: string; message?: string } })?.cause
+    const code = cause?.code
+    const detail = code || cause?.message || (err as Error)?.message || String(err)
+    console.error(`NUSSO unreachable (${new URL(url).pathname}):`, detail)
+    throw new NussoUnreachableError(`Could not reach ${new URL(url).host} (${detail}).`, code)
+  }
+}
+
+/**
  * Authenticate and return a fresh session. Reproduces the browser's login form
  * post exactly (see the module header and docs/nusso-api.md).
  */
@@ -119,7 +138,7 @@ async function login(): Promise<NussoSession> {
   const jar = new Map<string, string>()
 
   // 1. GET the login page: seed cookies + the WebForms hidden fields.
-  const loginPageRes = await fetch(`${NUSSO_BASE_URL}/`, {
+  const loginPageRes = await emsFetch(`${NUSSO_BASE_URL}/`, {
     headers: { Accept: 'text/html', 'User-Agent': 'Chambers/NUSSO' },
     redirect: 'manual',
   })
@@ -147,7 +166,7 @@ async function login(): Promise<NussoSession> {
 
   // 2. POST the credentials. Do not follow the redirect -- the 302 carries the
   //    EMSCookie we need, and following it would drop it on some runtimes.
-  const postRes = await fetch(`${NUSSO_BASE_URL}/`, {
+  const postRes = await emsFetch(`${NUSSO_BASE_URL}/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -174,7 +193,7 @@ async function login(): Promise<NussoSession> {
 
   // 3. Load an authenticated page to read the CSRF token the ServerApi calls
   //    need. The login page's token is a different, pre-auth value.
-  const appRes = await fetch(`${NUSSO_BASE_URL}/BrowseForSpace.aspx`, {
+  const appRes = await emsFetch(`${NUSSO_BASE_URL}/BrowseForSpace.aspx`, {
     headers: { Accept: 'text/html', Cookie: cookieHeader(jar), 'User-Agent': 'Chambers/NUSSO' },
     redirect: 'manual',
   })
@@ -224,7 +243,7 @@ async function serverApi<T = unknown>(
   _retried = false
 ): Promise<T> {
   const session = await getSession()
-  const res = await fetch(`${NUSSO_BASE_URL}/ServerApi.aspx/${method}`, {
+  const res = await emsFetch(`${NUSSO_BASE_URL}/ServerApi.aspx/${method}`, {
     method: 'POST',
     headers: apiHeaders(session, referer),
     body: JSON.stringify(body),

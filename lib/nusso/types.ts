@@ -139,6 +139,20 @@ export class NussoAuthError extends Error {
   }
 }
 
+/**
+ * Raised when nuevents.neu.edu cannot be reached at all: DNS, connect, TLS or a
+ * reset before any HTTP response. Since Northeastern put EMS behind the campus
+ * network / VPN, this is what every call from Vercel's servers hits.
+ */
+export class NussoUnreachableError extends Error {
+  code?: string
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = 'NussoUnreachableError'
+    this.code = code
+  }
+}
+
 /** Raised when a ServerApi call fails or returns an error envelope. */
 export class NussoApiError extends Error {
   status?: number
