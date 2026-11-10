@@ -21,9 +21,11 @@ export const NUSSO_BASE_URL = (process.env.NUSSO_BASE_URL || 'https://nuevents.n
 
 /**
  * The NUSSO relays on the CSC office Raspberry Pis (relay/README.md), tried in
- * order. EMS only accepts connections from the Northeastern network, so from
- * Vercel every EMS request goes through one of them. Unset means Chambers talks
- * to EMS directly, which works on campus / the VPN (local development).
+ * order. EMS only accepts connections from the Northeastern network; these
+ * would carry Vercel's EMS requests through it. DORMANT: Northeastern Policy
+ * 700 disallows the relay without written ITS approval, so these stay unset in
+ * every deployment. Unset means Chambers talks to EMS directly, which works on
+ * campus / the VPN and answers 503 from Vercel.
  *
  *   NUSSO_RELAY_URLS    comma-separated, e.g. https://chambers-relay-1.tail1234.ts.net,https://chambers-relay-2.tail1234.ts.net
  *   NUSSO_RELAY_SECRET  the shared secret each Pi checks (X-Relay-Secret)

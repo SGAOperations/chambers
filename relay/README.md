@@ -1,17 +1,42 @@
 # NUSSO relay (CSC office Raspberry Pis)
 
-Northeastern now accepts connections to nuevents.neu.edu (EMS, "NUSSO") only
-from the campus network or the VPN. Chambers runs on Vercel, outside both, so
-it reaches EMS through this relay running on the CSC office Pis:
+> **Status: dormant. Do not deploy.** Running this relay is not allowed under
+> [Northeastern Policy 700](https://policies.northeastern.edu/policy700)
+> (Appropriate Use of Computer and Network Resources), which requires the VPN
+> for remote access to university resources. It would give an off-campus
+> server standing access to a system Northeastern restricted to the campus
+> network, without the VPN's sign-in. The code stays in the repository but does
+> nothing unless `NUSSO_RELAY_URLS` and `NUSSO_RELAY_SECRET` are set, and they
+> must stay unset unless Northeastern ITS approves this setup in writing.
+
+## Background
+
+Wiring NUSSO (nuevents.neu.edu, Northeastern's EMS) directly into Chambers is a
+longstanding project of pataniaeli's. The direct integration shipped in v2.0.0
+(September 2026): Chambers signed in to EMS as SGA's account, searched rooms
+and placed and cancelled reservations itself (see
+[docs/nusso-api.md](../docs/nusso-api.md)). It worked from Vercel for a time.
+
+Then, in November 2026, Northeastern blocked connections to nuevents.neu.edu
+from off-campus IP addresses unless they come through the Northeastern VPN.
+Vercel's servers are off campus, so every NUSSO route began to fail. Chambers
+now answers that with a 503 telling people to book on nuevents.neu.edu from
+campus or the VPN. The VPN is no way around it for a server: its sign-in is a
+Microsoft SAML redirect with MFA.
+
+This relay is the design for reaching EMS from inside the campus network
+instead: a small forwarder on the two Raspberry Pis in the CSC office, which
+already run a Chambers display. It is built and tested against a stand-in for
+EMS, and was never deployed, because of Policy 700 above. If ITS ever approves
+it (or an equivalent they run), the setup below is ready to follow.
+
+## Design
 
 ```
 Chambers on Vercel ──HTTPS──▶ Tailscale Funnel ──▶ Pi: nusso_relay.py ──HTTPS──▶ nuevents.neu.edu
    (holds the EMS login,        (https://chambers-relay-N.<tailnet>.ts.net)     (campus network)
     cookies, secret)
 ```
-
-The VPN cannot be used instead: its sign-in is a Microsoft SSO redirect with
-MFA, which a server cannot complete.
 
 ## What the relay does and does not do
 
@@ -35,7 +60,9 @@ Sudden power loss can corrupt a Pi's SD card over time. If outages are
 frequent, a small UPS HAT or a power bank with pass-through charging is
 cheap insurance.
 
-## One-time setup (Tailscale admin, from any browser)
+## One-time setup (only with written ITS approval)
+
+Tailscale admin, from any browser:
 
 1. Create a Tailscale account owned by SGA (an operations address, not a
    personal one).

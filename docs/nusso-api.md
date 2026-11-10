@@ -184,11 +184,15 @@ default (`NUSSO_REQUIRED_UDFS`):
 
 ## Configuration
 
-> **Network access (Nov 2026).** nuevents.neu.edu now accepts connections only
-> from the Northeastern network or VPN. In production every EMS request goes
-> through the CSC office Pi relays (`NUSSO_RELAY_URLS` / `NUSSO_RELAY_SECRET`);
-> see [relay/README.md](../relay/README.md). The VPN is not an option for a
-> server: its sign-in is a Microsoft SAML redirect with MFA.
+> **Network access (Nov 2026).** The direct integration worked from Vercel
+> until Northeastern blocked off-campus IPs from nuevents.neu.edu without a
+> Northeastern VPN connection. Since then every NUSSO route from Vercel answers
+> 503 ("unreachable"). A relay through the CSC office Raspberry Pis is built
+> (`NUSSO_RELAY_URLS` / `NUSSO_RELAY_SECRET`, [relay/README.md](../relay/README.md))
+> but stays **dormant**: [Policy 700](https://policies.northeastern.edu/policy700)
+> disallows it, so those variables must stay unset without written ITS
+> approval. The VPN is not an option for a server: its sign-in is a Microsoft
+> SAML redirect with MFA.
 
 Set `NUSSO_USERNAME` / `NUSSO_PASSWORD` (a shared SGA EMS web-user account) in
 the environment. See `.env.example` for the full list. Without them, the

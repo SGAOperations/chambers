@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Install the NUSSO relay on a CSC office Raspberry Pi. Run from the USB stick:
+# Install the NUSSO relay on a CSC office Raspberry Pi.
+#
+# DORMANT: do not run without written Northeastern ITS approval -- Policy 700
+# disallows this relay (see README.md). Run from the USB stick:
 #
 #   sudo bash /media/$USER/<stick>/relay/install.sh 1      # on the first Pi
 #   sudo bash /media/$USER/<stick>/relay/install.sh 2      # on the second
