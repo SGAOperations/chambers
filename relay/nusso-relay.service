@@ -1,0 +1,21 @@
+[Unit]
+Description=NUSSO relay for Chambers (forwards to nuevents.neu.edu)
+Documentation=file:///opt/nusso-relay/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/nusso-relay.env
+ExecStart=/usr/bin/python3 /opt/nusso-relay/nusso_relay.py
+# Power cuts and flaky Wi-Fi: always come back.
+Restart=always
+RestartSec=5
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

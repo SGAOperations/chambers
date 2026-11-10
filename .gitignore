@@ -59,3 +59,6 @@ supabase/.temp/
 
 # Script output with user ids (scripts/sgauth/export-slack-links.mjs). Never commit.
 /.temp/
+
+# NUSSO relay secrets (USB stick only)
+relay/relay.env

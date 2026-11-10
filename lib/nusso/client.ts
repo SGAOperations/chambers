@@ -33,6 +33,7 @@ import {
   isFirstContactConfigured,
   DEFAULT_RESERVATION_PROFILE,
   getNussoCredentials,
+  getNussoRelays,
   type NussoReservationProfile,
 } from './config'
 import {
@@ -111,22 +112,95 @@ function hiddenField(html: string, name: string): string {
   return valueFirst ? valueFirst[1] : ''
 }
 
+/** undici's transport failure, unpacked from `TypeError: fetch failed`. */
+function transportDetail(err: unknown): { code?: string; detail: string } {
+  const cause = (err as { cause?: { code?: string; message?: string } })?.cause
+  const code = cause?.code
+  return { code, detail: code || cause?.message || (err as Error)?.message || String(err) }
+}
+
 /**
- * fetch() against EMS, with transport failures turned into NussoUnreachableError.
- * undici reports them all as `TypeError: fetch failed` with the real reason
- * (ENOTFOUND, UND_ERR_CONNECT_TIMEOUT, ECONNRESET, a TLS code, ...) on `cause`.
- * An HTTP response of any status is returned as usual.
+ * Failures that happen before a single byte of the request is sent, so the
+ * request can safely be tried again elsewhere -- even SaveReservation.
+ */
+const CONNECT_PHASE_CODES = new Set([
+  'ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'EHOSTUNREACH', 'ENETUNREACH', 'UND_ERR_CONNECT_TIMEOUT',
+])
+
+/** Index of the relay that last worked; tried first next time. */
+let preferredRelay = 0
+
+/**
+ * fetch() against EMS. An HTTP response of any status is returned as usual;
+ * failing to get one becomes NussoUnreachableError.
+ *
+ * With NUSSO_RELAY_URLS set (production: EMS only accepts the Northeastern
+ * network, and Vercel is outside it) the request goes to a CSC office Pi
+ * instead, which forwards it to EMS -- see relay/README.md. `url` and every
+ * header still name nuevents.neu.edu; only the host we connect to changes.
+ *
+ * Relays are tried in turn, but only when the request certainly did not reach
+ * EMS: a connect-phase failure, a response that did not come from our relay
+ * (Tailscale Funnel's own error when that Pi is offline), or the relay saying
+ * it could not connect to EMS. Anything ambiguous after the request may have
+ * been delivered is not retried, so a booking is never sent twice.
  */
 async function emsFetch(url: string, init: RequestInit): Promise<Response> {
-  try {
-    return await fetch(url, init)
-  } catch (err) {
-    const cause = (err as { cause?: { code?: string; message?: string } })?.cause
-    const code = cause?.code
-    const detail = code || cause?.message || (err as Error)?.message || String(err)
-    console.error(`NUSSO unreachable (${new URL(url).pathname}):`, detail)
-    throw new NussoUnreachableError(`Could not reach ${new URL(url).host} (${detail}).`, code)
+  const relays = getNussoRelays()
+  const target = new URL(url)
+
+  if (!relays) {
+    try {
+      return await fetch(url, init)
+    } catch (err) {
+      const { code, detail } = transportDetail(err)
+      console.error(`NUSSO unreachable (${target.pathname}):`, detail)
+      throw new NussoUnreachableError(`Could not reach ${target.host} (${detail}).`, code)
+    }
   }
+
+  const headers = new Headers(init.headers)
+  headers.set('X-Relay-Secret', relays.secret)
+  const n = relays.urls.length
+  const failures: string[] = []
+  let lastCode: string | undefined
+
+  for (let k = 0; k < n; k++) {
+    const i = (preferredRelay + k) % n
+    const relay = relays.urls[i]
+    let res: Response
+    try {
+      res = await fetch(`${relay}${target.pathname}${target.search}`, { ...init, headers })
+    } catch (err) {
+      const { code, detail } = transportDetail(err)
+      lastCode = code
+      failures.push(`${new URL(relay).host}: ${detail}`)
+      if ((code && CONNECT_PHASE_CODES.has(code)) || (init.method ?? 'GET') === 'GET') continue
+      // Lost mid-request: EMS may have acted on it. Do not send it again.
+      console.error(`NUSSO relay lost ${target.pathname} mid-request:`, failures.join('; '))
+      throw new NussoUnreachableError(`Lost the connection to NUSSO mid-request (${detail}).`, code)
+    }
+
+    const fromRelay = res.headers.get('x-nusso-relay') === '1'
+    const relayError = fromRelay ? res.headers.get('x-relay-error') : null
+    if (relayError === 'auth') {
+      throw new NussoConfigError(`The NUSSO relay at ${new URL(relay).host} rejected NUSSO_RELAY_SECRET.`)
+    }
+    if (!fromRelay || relayError === 'connect') {
+      failures.push(`${new URL(relay).host}: ${fromRelay ? 'relay could not connect to EMS' : `HTTP ${res.status} not from the relay`}`)
+      await res.body?.cancel()
+      continue
+    }
+    if (relayError === 'upstream') {
+      throw new NussoUnreachableError(`The NUSSO relay lost its connection to EMS mid-request.`)
+    }
+
+    preferredRelay = i
+    return res
+  }
+
+  console.error(`NUSSO unreachable through every relay (${target.pathname}):`, failures.join('; '))
+  throw new NussoUnreachableError(`No NUSSO relay could reach EMS (${failures.join('; ')}).`, lastCode)
 }
 
 /**

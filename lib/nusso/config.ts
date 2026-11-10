@@ -20,6 +20,28 @@ import { NussoConfigError, type NussoUdfAnswer } from './types'
 export const NUSSO_BASE_URL = (process.env.NUSSO_BASE_URL || 'https://nuevents.neu.edu').replace(/\/+$/, '')
 
 /**
+ * The NUSSO relays on the CSC office Raspberry Pis (relay/README.md), tried in
+ * order. EMS only accepts connections from the Northeastern network, so from
+ * Vercel every EMS request goes through one of them. Unset means Chambers talks
+ * to EMS directly, which works on campus / the VPN (local development).
+ *
+ *   NUSSO_RELAY_URLS    comma-separated, e.g. https://chambers-relay-1.tail1234.ts.net,https://chambers-relay-2.tail1234.ts.net
+ *   NUSSO_RELAY_SECRET  the shared secret each Pi checks (X-Relay-Secret)
+ */
+export function getNussoRelays(): { urls: string[]; secret: string } | null {
+  const urls = (process.env.NUSSO_RELAY_URLS || '')
+    .split(',')
+    .map(u => u.trim().replace(/\/+$/, ''))
+    .filter(Boolean)
+  if (urls.length === 0) return null
+  const secret = process.env.NUSSO_RELAY_SECRET || ''
+  if (!secret) {
+    throw new NussoConfigError('NUSSO_RELAY_URLS is set but NUSSO_RELAY_SECRET is not.')
+  }
+  return { urls, secret }
+}
+
+/**
  * The EMS web-user credentials Chambers logs in as. This is the SGA operations
  * account, entered into EMS's built-in login form (no external SSO, no MFA --
  * see docs/nusso-api.md). Read lazily so importing this module never throws;

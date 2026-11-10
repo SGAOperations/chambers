@@ -184,6 +184,12 @@ default (`NUSSO_REQUIRED_UDFS`):
 
 ## Configuration
 
+> **Network access (Nov 2026).** nuevents.neu.edu now accepts connections only
+> from the Northeastern network or VPN. In production every EMS request goes
+> through the CSC office Pi relays (`NUSSO_RELAY_URLS` / `NUSSO_RELAY_SECRET`);
+> see [relay/README.md](../relay/README.md). The VPN is not an option for a
+> server: its sign-in is a Microsoft SAML redirect with MFA.
+
 Set `NUSSO_USERNAME` / `NUSSO_PASSWORD` (a shared SGA EMS web-user account) in
 the environment. See `.env.example` for the full list. Without them, the
 Browse/Book NUSSO tab returns 503 ("not configured") rather than failing loudly.
