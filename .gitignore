@@ -62,3 +62,4 @@ supabase/.temp/
 
 # NUSSO relay secrets (USB stick only)
 relay/relay.env
+chambers-nusso-extension.zip

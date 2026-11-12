@@ -5,6 +5,7 @@ import type { NussoRoomOption } from '@/lib/nusso/client'
 import type { NussoExistingBooking } from '@/lib/nusso/types'
 import type { RegistrarReservation, RegistrarSpace } from '@/lib/25live/client'
 import type { TimelineBlock, TimelineGroup, TimelineRow } from './space-timeline'
+import { nussoFetch } from '@/lib/nusso/local'
 
 /**
  * Every room Chambers can show for one Boston day, from both systems, with what
@@ -93,7 +94,7 @@ interface Loaded<T> {
 
 async function getJsonOrError<T>(url: string, what: string): Promise<Loaded<T>> {
   try {
-    const res = await fetch(url)
+    const res = await nussoFetch(url)
     const body = await res.json().catch(() => null)
     if (!res.ok) return { data: null, error: body?.error ?? `${what} failed (${res.status})`, status: res.status }
     return { data: body as T, error: null, status: res.status }

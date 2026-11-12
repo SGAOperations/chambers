@@ -194,6 +194,13 @@ default (`NUSSO_REQUIRED_UDFS`):
 > approval. The VPN is not an option for a server: its sign-in is a Microsoft
 > SAML redirect with MFA.
 
+> **The way NUSSO works now: the browser extension.** Browsers with the
+> Chambers for NUSSO extension ([extension/nusso](../extension/nusso/README.md))
+> run this client in the page and send each ServerApi call from the booker's
+> own browser, with their own NUSSO sign-in, on campus or the VPN. Booking is
+> `/api/nusso/book/prepare` (server checks) -> the reservation (browser) ->
+> `/api/nusso/book/record` (server records). The server never contacts EMS.
+
 Set `NUSSO_USERNAME` / `NUSSO_PASSWORD` (a shared SGA EMS web-user account) in
 the environment. See `.env.example` for the full list. Without them, the
 Browse/Book NUSSO tab returns 503 ("not configured") rather than failing loudly.

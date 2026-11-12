@@ -20,6 +20,7 @@ import { todayInAppZone } from '@/lib/app-zone'
 import { bostonWallClockNow } from '@/lib/boston-time'
 import { groupRooms, useDayRooms } from './day-rooms'
 import { requestRoomHref } from './request-link'
+import { nussoFetch } from '@/lib/nusso/local'
 
 type ReservationType = 'room-request' | 'tabling'
 type Mode = 'browse' | 'book'
@@ -170,7 +171,7 @@ export default function SpacesPage({ registrarEnabled }: { registrarEnabled: boo
     setSearchError(null)
     const cap = Number(capacity)
     try {
-      const res = await fetch('/api/nusso/search', {
+      const res = await nussoFetch('/api/nusso/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

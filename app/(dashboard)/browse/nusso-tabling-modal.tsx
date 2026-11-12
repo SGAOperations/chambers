@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { AvailableRoom } from './types'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import { useScopeContext, EMPTY_SCOPE, isScopeComplete } from './use-scope-context'
+import { nussoFetch } from '@/lib/nusso/local'
 
 /**
  * Confirm-and-book modal for a NUSSO **tabling** reservation. Opened from a
@@ -63,7 +64,7 @@ export default function NussoTablingModal({ room, date, start, end, onClose, onS
     setSubmitting(true)
     setError(null)
     try {
-      const res = await fetch('/api/nusso/book', {
+      const res = await nussoFetch('/api/nusso/book', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Chambers for NUSSO",
+  "version": "1.0.0",
+  "description": "Lets Chambers search and book NUSSO (nuevents.neu.edu) rooms from your own browser, with your own NUSSO sign-in, while you are on campus or the Northeastern VPN.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA265e7J0TJJ2x1DVTtbNjjjIQ2Q9m3Afa1DjpPzr7OLjPBEr/4akfgeY+F2Fria0y5n2rviQrOEMR11iYHZ1g9YrWdTRbQiZ8axyqxZI+CbRD/EzJqXjM/IG6y+DS8aIyTRUJNK0KiTxzE/mpIE95izNZJrFSSApZj+yu3B/EbpVig5V9DntFCB6V4fsh1GbKWFeW/zqn8NW3VINgLv61//iR3zxmMgTMi0A1k8fkhUn8j+gjFRRaFs1JG8j3rNK8zDeMOY7x67xzwX8/5MwR2vipcF3wbnwU4yzaJE4oFpPTqyjTXV+QWllBt1OSWy515LkR/g8FvpWdwFdVwXG2PwIDAQAB",
+  "minimum_chrome_version": "116",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "host_permissions": [
+    "https://nuevents.neu.edu/*"
+  ],
+  "externally_connectable": {
+    "matches": [
+      "https://chambers.northeasternsga.com/*",
+      "http://localhost/*"
+    ]
+  },
+  "action": {
+    "default_title": "Chambers for NUSSO"
+  }
+}

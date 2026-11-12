@@ -18,10 +18,10 @@ export function handleNussoError(err: unknown): NextResponse {
   }
   if (err instanceof NussoUnreachableError) {
     // Not a Chambers bug and not a bad request: EMS is only reachable from the
-    // Northeastern network, through the CSC office relays (relay/README.md),
-    // and none of them got through -- a power cut in the office, usually.
+    // Northeastern network, and this server is outside it. Browsers with the
+    // Chambers for NUSSO extension never get here (lib/nusso/local.ts).
     return NextResponse.json(
-      { error: 'NUSSO is unreachable from Chambers right now (it only accepts connections from the Northeastern network, and the campus relay is offline). Book through nuevents.neu.edu on campus or the VPN.' },
+      { error: 'NUSSO only accepts connections from the Northeastern network, so Chambers cannot reach it directly. Install the Chambers for NUSSO browser extension and use Chambers on campus or the Northeastern VPN, or book on nuevents.neu.edu.' },
       { status: 503 }
     )
   }

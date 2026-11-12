@@ -38,7 +38,7 @@ describe('EMS unreachable', () => {
     const { NussoUnreachableError } = await import('@/lib/nusso/types')
     const res = handleNussoError(new NussoUnreachableError('Could not reach nuevents.neu.edu', 'ECONNRESET'))
     expect(res.status).toBe(503)
-    expect((await res.json()).error).toMatch(/Northeastern network/)
+    expect((await res.json()).error).toMatch(/Northeastern network.*extension/)
   })
 })
 

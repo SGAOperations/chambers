@@ -30,7 +30,6 @@ import {
   NUSSO_ORG,
   NUSSO_CONTACT,
   NUSSO_REQUESTOR,
-  isFirstContactConfigured,
   DEFAULT_RESERVATION_PROFILE,
   getNussoCredentials,
   getNussoRelays,
@@ -307,6 +306,25 @@ function unwrapD(payload: unknown): unknown {
 }
 
 /**
+ * One ServerApi call made somewhere other than this server: the Chambers NUSSO
+ * browser extension (lib/nusso/extension.ts), which sends it from the booker's
+ * own browser with their own nuevents.neu.edu session. Returns the raw parsed
+ * JSON (the `{ "d": ... }` envelope), or throws a Nusso* error.
+ */
+export type EmsCall = (method: string, body: unknown, referer: string) => Promise<unknown>
+
+let emsTransport: EmsCall | null = null
+
+/**
+ * Route every ServerApi call through `call` instead of this server's own EMS
+ * login. Only ever set in the browser, where EMS is reached from the person's
+ * own campus / VPN connection; on the server it stays null.
+ */
+export function setEmsTransport(call: EmsCall | null): void {
+  emsTransport = call
+}
+
+/**
  * Call one ServerApi method. Re-logs in once and retries if the session has
  * lapsed (EMS answers a dead session by serving the login HTML, not an error).
  */
@@ -316,6 +334,8 @@ async function serverApi<T = unknown>(
   referer = `${NUSSO_BASE_URL}/BrowseForSpace.aspx`,
   _retried = false
 ): Promise<T> {
+  if (emsTransport) return unwrapD(await emsTransport(method, body, referer)) as T
+
   const session = await getSession()
   const res = await emsFetch(`${NUSSO_BASE_URL}/ServerApi.aspx/${method}`, {
     method: 'POST',
@@ -616,14 +636,36 @@ function bostonOffsetMinutes(at: Date): number {
  * validate the slot (AddToCartCheck), fetch the services/UDF context
  * (GetServicesForBooking), then SaveReservation. Returns the new reservation id.
  */
+/**
+ * The SGA-side values a reservation carries: its EMS group, the group's 1st
+ * contact and the optional requestor. On the server they come from config; in
+ * the browser the server hands them over (POST /api/nusso/book/prepare), since
+ * the browser cannot read Chambers' environment.
+ */
+export interface NussoBookingSettings {
+  org: { groupId: number; timeZoneId: number }
+  contact: { firstContactName: string; firstContactEmail: string; firstContactPhone: string }
+  requestor: { id: number; name: string; email: string; phone: string }
+}
+
+export function serverBookingSettings(): NussoBookingSettings {
+  return {
+    org: { groupId: NUSSO_ORG.groupId, timeZoneId: NUSSO_ORG.timeZoneId },
+    contact: { ...NUSSO_CONTACT },
+    requestor: { ...NUSSO_REQUESTOR },
+  }
+}
+
 export async function createBooking(
   req: NussoBookingRequest,
-  profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE
+  profile: NussoReservationProfile = DEFAULT_RESERVATION_PROFILE,
+  settings: NussoBookingSettings = serverBookingSettings()
 ): Promise<NussoReservationResult> {
+  const { org, contact, requestor } = settings
   // EMS requires the 1st-contact fields, including the phone (which has no safe
   // default). Fail with a clear message rather than letting EMS reject it with a
   // generic "complete the required fields".
-  if (!isFirstContactConfigured()) {
+  if (!contact.firstContactName || !contact.firstContactEmail || !contact.firstContactPhone) {
     throw new NussoConfigError(
       'NUSSO 1st-contact phone is required: set NUSSO_CONTACT_PHONE (NUSSO_CONTACT_NAME and NUSSO_CONTACT_EMAIL default to SGA operations).'
     )
@@ -637,7 +679,7 @@ export async function createBooking(
     Date: req.window.date,
     Start: req.window.start,
     End: req.window.end,
-    TimeZoneId: String(NUSSO_ORG.timeZoneId),
+    TimeZoneId: String(org.timeZoneId),
     SetupCount: String(req.attendance),
     SetupTypeId: req.setupTypeId,
     RoomType: 1,
@@ -659,7 +701,7 @@ export async function createBooking(
       End: req.window.end,
       Dates: [req.window.date],
       DatesGmt: [req.window.date],
-      TimeZoneId: NUSSO_ORG.timeZoneId,
+      TimeZoneId: org.timeZoneId,
       FilterType: 2,
       IsPam: false,
       BookingId: -1,
@@ -691,23 +733,23 @@ export async function createBooking(
       reservationDetails: {
         EventName: req.eventName,
         EventTypeId: profile.eventTypeId,
-        GroupId: NUSSO_ORG.groupId,
+        GroupId: org.groupId,
         FirstContactId: -1,
-        FirstContactName: NUSSO_CONTACT.firstContactName,
-        FirstPhoneOne: NUSSO_CONTACT.firstContactPhone,
+        FirstContactName: contact.firstContactName,
+        FirstPhoneOne: contact.firstContactPhone,
         FirstPhoneTwo: '',
-        FirstEmail: NUSSO_CONTACT.firstContactEmail,
+        FirstEmail: contact.firstContactEmail,
         // The requestor (EMS 2nd contact) -- a required field.
-        SecondContactId: NUSSO_REQUESTOR.id,
-        SecondContactName: NUSSO_REQUESTOR.name,
-        SecondContactPhoneOne: NUSSO_REQUESTOR.phone,
+        SecondContactId: requestor.id,
+        SecondContactName: requestor.name,
+        SecondContactPhoneOne: requestor.phone,
         SecondContactPhoneTwo: '',
-        SecondContactEmail: NUSSO_REQUESTOR.email,
+        SecondContactEmail: requestor.email,
         BillingReference: '',
         PoNumber: '',
         SendInvitation: false,
         AddConferencing: false,
-        TimezoneId: NUSSO_ORG.timeZoneId,
+        TimezoneId: org.timeZoneId,
         PamMessage: '',
         PamPrivate: false,
         PamReminderMinutes: -1,
