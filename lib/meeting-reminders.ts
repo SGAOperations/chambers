@@ -2,6 +2,7 @@ import { APP_TIME_ZONE } from '@/lib/app-zone'
 import { resolveMeetingTime } from '@/lib/meeting-time'
 import { scopedBodyName, type BookingScope, type Division } from '@/lib/booking-scope'
 import { SENATE_BODY_NAME } from '@/lib/senate-types'
+import { hasAlternateRoom, hasAlternateTime, isCancelled, isReminded, isVirtual, resolveOccurrenceStatus } from '@/lib/booking-status'
 
 /**
  * Working out which meetings the Slack bot should remind a channel about, and
@@ -17,27 +18,6 @@ import { SENATE_BODY_NAME } from '@/lib/senate-types'
 
 /** The local hour, in APP_TIME_ZONE, at or after which the day-before reminder posts. */
 export const REMINDER_HOUR = 9
-
-/**
- * The statuses a reminder is written for, and which lines of it each one calls
- * out as alternate (issue #104).
- *
- * An allow-list rather than a block-list: anything not named here -- Waitlisted,
- * Tentative, Pending Cancellation, Unavailable, Missed, Repurposed, and any
- * status added later -- posts nothing, because none of them says plainly whether
- * or where the body is meeting.
- */
-const REMINDED_STATUSES = new Set([
-  'Reserved',
-  'Alternate Room',
-  'Alternate Time',
-  'Alternate Room and Time',
-  'Virtual',
-  'Cancelled',
-])
-
-const ALTERNATE_ROOM = new Set(['Alternate Room', 'Alternate Room and Time'])
-const ALTERNATE_TIME = new Set(['Alternate Time', 'Alternate Room and Time'])
 
 /** 'YYYY-MM-DD' and the hour, in APP_TIME_ZONE, for an instant. */
 export function appZoneParts(now: Date = new Date()): { date: string; hour: number } {
@@ -211,8 +191,9 @@ export function resolveMeeting(c: ReminderCandidate): ResolvedMeeting | null {
   // `?? booking.hidden` is the inheritance: a visible series can hide one week.
   if (c.hidden ?? c.booking.hidden) return null
 
-  const status = c.status ?? c.series.status
-  if (!status || !REMINDED_STATUSES.has(status)) return null
+  // Which statuses get a reminder, and why it is an allow-list: isReminded.
+  const status = resolveOccurrenceStatus(c.status, c.series.status)
+  if (!status || !isReminded(status)) return null
 
   const startTime = c.start_time ?? c.series.start_time
 
@@ -324,11 +305,11 @@ export function formatReminder(m: ResolvedMeeting): string {
   const sharing = sharingLine(m)
   const lines = (...rest: string[]) => [...rest, ...(sharing ? [sharing] : [])].join('\n')
 
-  if (m.status === 'Cancelled') return lines(`${body} has no meeting tomorrow.`)
+  if (isCancelled(m.status)) return lines(`${body} has no meeting tomorrow.`)
 
   const opening = `${body} meets tomorrow! Join us on ${formatDate(m.date)}.`
 
-  if (m.status === 'Virtual') {
+  if (isVirtual(m.status)) {
     return lines(opening, 'Check with your Chair/Director for virtual meeting information.')
   }
 
@@ -340,8 +321,8 @@ export function formatReminder(m: ResolvedMeeting): string {
   const when = formatTime(m.meetingTime) ?? 'to be confirmed'
   const room = m.roomName ? esc(m.roomName) : 'not yet confirmed'
 
-  const roomLabel = ALTERNATE_ROOM.has(m.status) ? '*Alternate* Room' : 'Room'
-  const timeLabel = ALTERNATE_TIME.has(m.status) ? '*Alternate* Time' : 'Time'
+  const roomLabel = hasAlternateRoom(m.status) ? '*Alternate* Room' : 'Room'
+  const timeLabel = hasAlternateTime(m.status) ? '*Alternate* Time' : 'Time'
 
   return lines(opening, `${roomLabel}: ${room}`, `${timeLabel}: ${when}`)
 }

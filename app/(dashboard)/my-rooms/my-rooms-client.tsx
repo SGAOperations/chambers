@@ -16,14 +16,12 @@ import {
   bookingTitle,
   flattenMyRooms,
   isWithinDays,
-  statusColors,
-  statusBarColors,
-  statusTextColors,
   senateTypeBadgeColors,
   DEFAULT_SENATE_BADGE,
   formatTime,
   formatDate,
 } from './shared'
+import { statusBarClasses, statusCardClasses, statusTextClasses } from '@/lib/booking-status'
 import { meetingTimeMatchesStart } from '@/lib/meeting-time'
 
 function MyRoomsSkeleton() {
@@ -223,11 +221,11 @@ export default function MyRoomsClient({
                     }
                   }}
                   aria-label={`${bookingTitle(b)}, ${formatDate(b.date)}`}
-                  className={`rounded-xl p-5 shadow-sm border cursor-pointer transition hover:ring-2 hover:ring-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${statusColors[b.status] || 'bg-[#184073] border-[#1e5080]'}`}
+                  className={`rounded-xl p-5 shadow-sm border cursor-pointer transition hover:ring-2 hover:ring-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${statusCardClasses[b.status] || 'bg-[#184073] border-[#1e5080]'}`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6a96bb]">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
-                    <span className={`text-xs font-semibold ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
+                    <span className={`text-xs font-semibold ${statusTextClasses[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
                   </div>
 
                   {/*
@@ -407,7 +405,7 @@ export default function MyRoomsClient({
                       <div className="divide-y divide-[#1e5080] border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073]">
                         {group.bookings.map(b => (
                           <div key={b.id} onClick={() => setDetailBooking(b)} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a4d8a] transition-colors cursor-pointer">
-                            <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
+                            <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarClasses[b.status] || 'bg-[#1e5080]'}`} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 min-w-0">
                                 <p className="font-semibold text-[#f0f6ff] truncate">{bookingTitle(b)}</p>
@@ -426,7 +424,7 @@ export default function MyRoomsClient({
                               </p>
                             </div>
                             <span className="hidden md:inline text-xs text-[#6a96bb] flex-shrink-0">{b.type === 'One-Time Room' ? 'One-Time/Multiple Room' : b.type}</span>
-                            <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
+                            <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextClasses[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
                           </div>
                         ))}
                       </div>

@@ -11,6 +11,7 @@ import {
   cancellationAuditRows,
   collectPending,
 } from '@/lib/pending-cancellations'
+import { PENDING_CANCELLATION } from '@/lib/booking-status'
 
 const adminSupabase = db
 
@@ -176,7 +177,7 @@ export async function PATCH(request: Request) {
       await insertAuditRows(adminSupabase, [{
         booking_id: req.booking_id,
         admin_id: user.id,
-        new_status: 'Pending Cancellation',
+        new_status: PENDING_CANCELLATION,
         // The same words the 'requested' entry used for this request, so the
         // pair reads as a pair (issue #211).
         target: cancellationRequestTarget(bookingType, req.scope),

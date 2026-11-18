@@ -7,22 +7,9 @@ import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import ScopeLabel from '@/app/_components/scope-label'
 import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
+import { BOOKING_STATUSES, DEFAULT_STATUS } from '@/lib/booking-status'
 import { isOpenRequestStatus } from '@/lib/request-status'
 
-const STATUSES = [
-  'Reserved',
-  'Alternate Room',
-  'Alternate Time',
-  'Alternate Room and Time',
-  'Waitlisted',
-  'Unavailable',
-  'Pending Cancellation',
-  'Cancelled',
-  'Virtual',
-  'Missed',
-  'Repurposed',
-  'Tentative',
-]
 
 interface Body {
   id: string
@@ -89,7 +76,7 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
     end_time: '',
     meeting_time: '',
     reservation_code: '',
-    status: 'Reserved',
+    status: DEFAULT_STATUS,
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -265,7 +252,7 @@ export default function WeeklyForm({ bodies, semesters, onClose, onSuccess }: We
           onChange={e => setForm({ ...form, status: e.target.value })}
           className={inputCls}
         >
-          {STATUSES.map(s => (
+          {BOOKING_STATUSES.map(s => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>

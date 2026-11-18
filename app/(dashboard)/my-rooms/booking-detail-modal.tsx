@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import BookingModal from '../bookings/booking-modal'
-import { type FlatBooking, statusTextColors, senateTypeBadgeColors, DEFAULT_SENATE_BADGE, openRequestStatusStyles } from './shared'
+import { type FlatBooking, senateTypeBadgeColors, DEFAULT_SENATE_BADGE, openRequestStatusStyles } from './shared'
+import { isCancellable, isRevisable, statusTextClasses } from '@/lib/booking-status'
 import { OPEN_STATUS_DESCRIPTIONS, type OpenRequestStatus } from '@/lib/request-status'
 
 interface BookingDetailModalProps {
@@ -28,8 +29,8 @@ function formatDate(date: string) {
 }
 
 export default function BookingDetailModal({ booking, isLeadership, onClose, onCancelClick, onRevisionClick }: BookingDetailModalProps) {
-  const canCancel = isLeadership && !['Pending Cancellation', 'Cancelled', 'Virtual'].includes(booking.status)
-  const canRevise = isLeadership && !['Cancelled', 'Missed', 'Repurposed'].includes(booking.status)
+  const canCancel = isLeadership && isCancellable(booking.status)
+  const canRevise = isLeadership && isRevisable(booking.status)
 
   // A multi-body booking collapses to "Owner + N others". There is no hover on
   // touch, so the field has to be tap-to-expand to reveal the peer bodies (#28).
@@ -58,7 +59,7 @@ export default function BookingDetailModal({ booking, isLeadership, onClose, onC
           <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6a96bb]">
             {booking.type === 'One-Time Room' ? 'One-Time/Multiple Room' : booking.type}
           </span>
-          <span className={`text-sm font-semibold ${statusTextColors[booking.status] || 'text-[#93b8d8]'}`}>
+          <span className={`text-sm font-semibold ${statusTextClasses[booking.status] || 'text-[#93b8d8]'}`}>
             {booking.status}
           </span>
         </div>

@@ -10,7 +10,8 @@ import EditOneTimeForm from './edit-one-time-form'
 import EditWeeklyForm from './edit-weekly-form'
 import EditTablingForm from './edit-tabling-form'
 import WeeklyBookingGrid from './weekly-booking-grid'
-import BookingDetails, { statusColors, type BookingDetailsTarget } from './booking-details'
+import BookingDetails, { type BookingDetailsTarget } from './booking-details'
+import { statusPillClasses } from '@/lib/booking-status'
 import { Skeleton } from '@/app/_components/skeleton'
 import ScopeLabel from '@/app/_components/scope-label'
 import { useIdentity } from '../identity-context'
@@ -559,7 +560,7 @@ export default function BookingsTab() {
                         the one fact an audit is after.
                       */}
                       <NussoBadge bookedViaNusso={b.booked_via_nusso} />
-                      <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
+                      <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusPillClasses[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {firstSession.status}
                       </span>
                       {!viewOnly && (
@@ -666,7 +667,7 @@ export default function BookingsTab() {
                         the thing that is true and unshown if that changes.
                       */}
                       <NussoBadge bookedViaNusso={b.booked_via_nusso} />
-                      <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
+                      <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusPillClasses[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {w.status}
                       </span>
                       {!viewOnly && (
@@ -774,7 +775,7 @@ export default function BookingsTab() {
                   <div className="space-y-2">
                     {t.tabling_sessions.map((s, i) => (
                       <div key={i} className="flex items-center gap-3 text-sm text-[#93b8d8] bg-[#0f2a4a] rounded-lg px-3 py-2">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusColors[s.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusPillClasses[s.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                           {s.status}
                         </span>
                         <span>{s.location}</span>

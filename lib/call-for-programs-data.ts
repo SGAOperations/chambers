@@ -1,5 +1,6 @@
 import type { Db } from './db/data-api'
 import { dayOfWeek, type PriorWeeklyBooking, type ProgramCall } from './call-for-programs'
+import { isGone } from './booking-status'
 
 /**
  * The database side of the call for programs (lib/call-for-programs.ts has the
@@ -41,9 +42,6 @@ async function renewalSemester(db: Db): Promise<{ id: string; name: string } | n
   return candidates.find(isRegular) ?? null
 }
 
-/** Statuses that mean the series is not a booking the body still has. */
-const GONE_STATUSES = new Set(['Cancelled', 'Unavailable'])
-
 /**
  * Each body's weekly bookings in the renewal semester, keyed by body id.
  *
@@ -83,7 +81,7 @@ export async function loadPriorWeeklyBookings(
     }[] | null
   }[]) {
     for (const w of b.weekly_room_bookings ?? []) {
-      if (w.status && GONE_STATUSES.has(w.status)) continue
+      if (isGone(w.status)) continue
       result[b.body_id]?.push({
         weekly_booking_id: w.id,
         semester_name: semester.name,

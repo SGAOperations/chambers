@@ -5,21 +5,8 @@ import TimePicker from './time-picker'
 import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
+import { BOOKING_STATUSES, DEFAULT_STATUS } from '@/lib/booking-status'
 
-const STATUSES = [
-  'Reserved',
-  'Alternate Room',
-  'Alternate Time',
-  'Alternate Room and Time',
-  'Waitlisted',
-  'Unavailable',
-  'Pending Cancellation',
-  'Cancelled',
-  'Virtual',
-  'Missed',
-  'Repurposed',
-  'Tentative',
-]
 
 interface Body {
   id: string
@@ -68,7 +55,7 @@ const emptySession = (): Session => ({
   start_time: '09:00',
   end_time: '10:00',
   meeting_time: '',
-  status: 'Reserved',
+  status: DEFAULT_STATUS,
   reservation_code: null,
   isNew: true,
 })
@@ -258,7 +245,7 @@ export default function EditTablingForm({ booking, bodies, onClose, onSuccess }:
                 onChange={e => updateSession(i, 'status', e.target.value)}
                 className={inputCls}
               >
-                {STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
+                {BOOKING_STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
               </select>
             </div>
           </div>

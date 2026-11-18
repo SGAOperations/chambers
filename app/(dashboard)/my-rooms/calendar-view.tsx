@@ -4,10 +4,9 @@ import { useMemo, useState } from 'react'
 import {
   type FlatBooking,
   bookingTitle,
-  statusBarColors,
-  statusTextColors,
   formatTime,
 } from './shared'
+import { statusBarClasses, statusTextClasses } from '@/lib/booking-status'
 import { meetingTimeMatchesStart } from '@/lib/meeting-time'
 
 interface CalendarViewProps {
@@ -137,7 +136,7 @@ export default function CalendarView({ bookings, onSelect, today }: CalendarView
               <div className="flex-1 space-y-0.5 overflow-hidden">
                 {dayBookings.slice(0, MAX_VISIBLE_PER_DAY).map(b => (
                   <div key={b.id} className="flex items-center gap-1 text-[10px] text-[#f0f6ff] truncate">
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusBarClasses[b.status] || 'bg-[#1e5080]'}`} />
                     <span className="truncate">{b.scopeLabel}</span>
                   </div>
                 ))}
@@ -161,7 +160,7 @@ export default function CalendarView({ bookings, onSelect, today }: CalendarView
             <div className="divide-y divide-[#1e5080] border border-[#1e5080] rounded-xl overflow-hidden bg-[#184073]">
               {selectedBookings.map(b => (
                 <div key={b.id} onClick={() => onSelect(b)} className="flex items-center gap-4 px-5 py-3.5 hover:bg-[#1a4d8a] transition-colors cursor-pointer">
-                  <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarColors[b.status] || 'bg-[#1e5080]'}`} />
+                  <div className={`w-1.5 h-8 rounded-full flex-shrink-0 ${statusBarClasses[b.status] || 'bg-[#1e5080]'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-baseline gap-2 min-w-0">
                       <p className="font-semibold text-[#f0f6ff] truncate">{bookingTitle(b)}</p>
@@ -180,7 +179,7 @@ export default function CalendarView({ bookings, onSelect, today }: CalendarView
                       )}
                     </p>
                   </div>
-                  <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextColors[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
+                  <span className={`hidden md:inline text-xs font-semibold flex-shrink-0 ${statusTextClasses[b.status] || 'text-[#93b8d8]'}`}>{b.status}</span>
                 </div>
               ))}
             </div>
