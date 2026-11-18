@@ -9,18 +9,24 @@ import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto'
  * production, not against a hand-written fake.
  *
  * `bodies` are inserted before 0022, which seeds the position map by body name.
+ * `statusSplit: false` stops before 0023, for testing its backfill over rows
+ * that existed before it.
  */
 
 const MIGRATIONS = ['0001_baseline.sql', '0003_data_api_server_role.sql', '0021_users_sgauth_user_id.sql']
 const POSITIONS_MIGRATION = '0022_sgauth_positions.sql'
+export const STATUS_SPLIT_MIGRATION = '0023_status_split.sql'
 
-function migration(name: string): string {
+export function migration(name: string): string {
   return readFileSync(join(process.cwd(), 'db', 'neon', name), 'utf8')
 }
 
 export type TestDb = Awaited<ReturnType<typeof createTestDb>>
 
-export async function createTestDb(bodies: { name: string; division: string }[] = []) {
+export async function createTestDb(
+  bodies: { name: string; division: string }[] = [],
+  { statusSplit = true }: { statusSplit?: boolean } = {}
+) {
   // The baseline creates pgcrypto, as Neon has it.
   const pg = await PGlite.create({ extensions: { pgcrypto } })
   for (const name of MIGRATIONS) await pg.exec(migration(name))
@@ -33,6 +39,7 @@ export async function createTestDb(bodies: { name: string; division: string }[] 
     bodyIds.set(b.name, rows[0].id)
   }
   await pg.exec(migration(POSITIONS_MIGRATION))
+  if (statusSplit) await pg.exec(migration(STATUS_SPLIT_MIGRATION))
 
   /**
    * The parts of pg's Pool that Chambers uses: query(), and connect() for a
