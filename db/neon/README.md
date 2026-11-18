@@ -65,17 +65,48 @@ So previews point at one long-lived Neon branch, set up once, rather than a bran
 
 **Per PR**
 
-Nothing, unless the PR changes the schema. If it does, apply its file to the preview branch and refresh the cache:
+Nothing. A PR that adds a schema file has it applied to the preview branch by its own preview build (see "Migrations" below).
+
+## Migrations
+
+Every Vercel build starts with `scripts/neon/migrate.mjs` (`npm run build`), so a deploy brings the database it deploys against up to date before the new code goes live. Preview builds migrate the shared `preview` branch, and Production builds migrate production.
+
+- **What it applies:** every numbered `db/neon/NNNN_*.sql` file not yet in `public.schema_migrations`, in filename order. Each file runs in its own transaction with its record row, so a file that fails rolls back, fails the build, and leaves the live deployment as it was.
+- **Then it refreshes** the branch's Data API schema cache through the Neon API. This runs on every migrating build, so a build that failed after migrating is put right by the next one.
+- **First run on an existing database:** there's no record yet, so it works out which files are already applied from the schema itself (`BASELINE_PROBES` in `scripts/neon/migrate-core.mjs`) and records those as `baseline`. If an earlier file is missing under a later one, it stops instead of guessing.
+- **Only on Vercel.** CI's build and a local `npm run build` skip it.
+- **Never edit an applied file.** It will not run again, and the runner warns that its checksum changed. Write a new file instead.
+- **A new file needs no probe.** Probes exist only for files that predate the record (0001–0023).
+
+Set these on Vercel, separately for **Production** and **Preview**:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL_UNPOOLED` | the branch's **direct** string (already set where the Neon integration wrote it). The advisory lock that keeps two builds from migrating at once needs a session of its own, so not the pooled string. |
+| `NEON_API_KEY` | a Neon API key |
+| `NEON_PROJECT_ID` | the Neon project id |
+| `NEON_BRANCH_ID` | the id (`br-...`) of the branch that environment's `DATABASE_URL_UNPOOLED` points at |
+| `NEON_DATA_API_DATABASE` | only if the database isn't `neondb` |
+
+Without the `NEON_*` values, a build that applied a file fails at the refresh step. The migration is already in, so refresh the cache in the console or set the values and redeploy.
+
+To check or migrate from a laptop:
 
 ```bash
-TARGET_DATABASE_URL="$NEON_PREVIEW_UNPOOLED" node scripts/neon/apply-file.mjs db/neon/000N_whatever.sql
+MIGRATE_DATABASE_URL="$NEON_UNPOOLED_URL" npm run migrate:status
 ```
+
+```bash
+MIGRATE_DATABASE_URL="$NEON_UNPOOLED_URL" npm run migrate
+```
+
+`apply-file.mjs` still works for one-off SQL, but anything it applies by hand is not recorded. Use it only for files outside the numbered sequence, such as `after-data-api.sql`.
 
 Every command in this file is bash. On Windows, PowerShell has no inline `VAR=value command` form -- it reads the whole thing as a command name -- so set the variable first, and quote the connection string singly or its `&` is parsed as the call operator:
 
 ```powershell
-$env:TARGET_DATABASE_URL = '<connection string>'
-node scripts/neon/apply-file.mjs db/neon/000N_whatever.sql
+$env:MIGRATE_DATABASE_URL = '<connection string>'
+npm run migrate:status
 ```
 
 Every preview shares this one database, so two PRs with conflicting migrations can tread on each other, and data one PR writes is visible to the next. When a PR genuinely needs isolation, branch by hand and override `DATABASE_URL`, `DATABASE_URL_UNPOOLED` and `NEON_DATA_API_URL` for that deployment alone.

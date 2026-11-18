@@ -7,7 +7,9 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "node scripts/neon/migrate.mjs && next build --webpack",
+    "migrate": "node scripts/neon/migrate.mjs --apply",
+    "migrate:status": "node scripts/neon/migrate.mjs --status",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run"

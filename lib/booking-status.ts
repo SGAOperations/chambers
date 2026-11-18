@@ -52,6 +52,86 @@ export const PENDING_CANCELLATION = 'Pending Cancellation' satisfies BookingStat
 /** What a status cell, pill, card or bar falls back to is the caller's choice. */
 type StatusMap = Record<string, string>
 
+// ─── The split (epic #279) ───────────────────────────────────────────────────
+//
+// `status` is being split into a meeting status the body owns, a virtual flag,
+// and an ops status Operational Affairs owns (db/neon/0023_status_split.sql).
+// Until the writers set them (#282) the database derives all three from
+// `status`; nothing reads them yet (#284).
+
+/** Whether and how the body is meeting. Matches the meeting_status CHECK constraints. */
+export const MEETING_STATUSES = [
+  'Scheduled',
+  'Alternate Room',
+  'Alternate Time',
+  'Alternate Room and Time',
+  'Cancelled',
+  'Tentative',
+] as const
+export type MeetingStatus = typeof MEETING_STATUSES[number]
+
+/** What Operational Affairs has done with the room. Matches the ops_status CHECK constraints. */
+export const OPS_STATUSES = [
+  'Reserved',
+  'Tentative',
+  'Waitlisted',
+  'Unavailable',
+  'Pending Cancellation',
+  'Cancelled',
+  'Missed',
+  'Repurposed',
+] as const
+export type OpsStatus = typeof OPS_STATUSES[number]
+
+export interface SplitStatus {
+  /** Null where the meeting was never recorded (Unavailable, Missed, Repurposed). */
+  meetingStatus: MeetingStatus | null
+  /** Null only for a row with no status at all (an occurrence inheriting its series). */
+  isVirtual: boolean | null
+  opsStatus: OpsStatus | null
+}
+
+/**
+ * The three new values one old status maps to: public.status_split_of() in
+ * db/neon/0023_status_split.sql, in TypeScript. tests/status-split.test.ts
+ * checks the two agree on every status.
+ *
+ * `requestType` is the cancellation_type of the request behind a Pending
+ * Cancellation row; with none, it reads as a cancellation, the same default
+ * Auto-Cancel applies. Going virtual keeps the meeting Scheduled and releases
+ * the room, so a Virtual row's room is Cancelled.
+ */
+export function splitStatus(status: string | null | undefined, requestType?: string | null): SplitStatus {
+  if (status == null) return { meetingStatus: null, isVirtual: null, opsStatus: null }
+  switch (status) {
+    case 'Reserved':
+      return { meetingStatus: 'Scheduled', isVirtual: false, opsStatus: 'Reserved' }
+    case 'Alternate Room':
+    case 'Alternate Time':
+    case 'Alternate Room and Time':
+      return { meetingStatus: status, isVirtual: false, opsStatus: 'Reserved' }
+    case 'Waitlisted':
+      return { meetingStatus: 'Scheduled', isVirtual: false, opsStatus: 'Waitlisted' }
+    case 'Tentative':
+      return { meetingStatus: 'Tentative', isVirtual: false, opsStatus: 'Tentative' }
+    case PENDING_CANCELLATION:
+      return requestType === 'Virtual'
+        ? { meetingStatus: 'Scheduled', isVirtual: true, opsStatus: PENDING_CANCELLATION }
+        : { meetingStatus: 'Cancelled', isVirtual: false, opsStatus: PENDING_CANCELLATION }
+    case 'Cancelled':
+      return { meetingStatus: 'Cancelled', isVirtual: false, opsStatus: 'Cancelled' }
+    case 'Virtual':
+      return { meetingStatus: 'Scheduled', isVirtual: true, opsStatus: 'Cancelled' }
+    case 'Unavailable':
+    case 'Missed':
+    case 'Repurposed':
+      return { meetingStatus: null, isVirtual: false, opsStatus: status }
+    default:
+      // Not a status the CHECK constraint allows; the database would refuse it.
+      return { meetingStatus: null, isVirtual: false, opsStatus: null }
+  }
+}
+
 // ─── Occurrence inheritance ──────────────────────────────────────────────────
 
 /**

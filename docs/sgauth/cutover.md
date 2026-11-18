@@ -17,9 +17,7 @@ Run through the whole list on **dev** first (`chambers-dev.northeasternsga.com`,
 - [ ] Positions are correct for the people who book: every body's Leaders (see "Check the map" below).
 
 **Database** (production branch, unpooled string; PowerShell users see `db/neon/README.md`)
-- [ ] `0021_users_sgauth_user_id.sql` is applied.
-- [ ] `0022_sgauth_positions.sql` is applied: `node scripts/neon/apply-file.mjs db/neon/0022_sgauth_positions.sql`. Its notice should report seats across 31 bodies.
-- [ ] **Refresh the Data API schema cache** in the Neon console.
+- [ ] `0021_users_sgauth_user_id.sql` and `0022_sgauth_positions.sql` are applied. Production deploys now apply pending files automatically and refresh the Data API schema cache (`db/neon/README.md`, "Migrations"), so check with `MIGRATE_DATABASE_URL=<prod unpooled> npm run migrate:status`: neither should be listed under "would apply". 0022's notice, in that deploy's build log, should report seats across 31 bodies.
 - [ ] Users are linked with the **production** id-map: `node scripts/sgauth/link-users.mjs <prod id-map>` (dry run), then with `--apply`.
 - [ ] `node scripts/sgauth/verify-links.mjs` (with `SGAUTH_DATABASE_URL` set to SGAuth production) shows **0 dangling**. Anyone listed as **no account** cannot sign in until SGAuth gives them one. Those are the expected stragglers.
 
