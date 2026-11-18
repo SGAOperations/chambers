@@ -47,9 +47,9 @@
 -- matched the way Auto-Cancel matches it (lib/pending-cancellations.ts
 -- collectPending): public.status_split_request_type().
 --
--- Apply with scripts/neon/apply-file.mjs, then **refresh the Data API schema
--- cache** (db/neon/README.md). Preview what the backfill will write first with
--- scripts/neon/status-split-preview.mjs.
+-- Applied by the deploy (scripts/neon/migrate.mjs, db/neon/README.md
+-- "Migrations"), which also refreshes the Data API schema cache. Preview what
+-- the backfill will write first with scripts/neon/status-split-preview.mjs.
 --
 -- To undo:
 --   drop trigger if exists status_split on public.one_time_room_bookings;
