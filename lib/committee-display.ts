@@ -1,5 +1,6 @@
 import { resolveMeetingTime } from '@/lib/meeting-time'
 import { scopedBodyName, type BookingScope, type Division } from '@/lib/booking-scope'
+import { isCancelled, isDisplayed, isVirtual, resolveOccurrenceStatus } from '@/lib/booking-status'
 
 /**
  * What the committee display shows, and how it works out which way to point
@@ -10,36 +11,9 @@ import { scopedBodyName, type BookingScope, type Division } from '@/lib/booking-
  * read and exercised without a database or a browser.
  */
 
-/**
- * The statuses the display draws, matching the allow-list Slack reminders use
- * (lib/meeting-reminders.ts).
- *
- * An allow-list rather than a block-list: Waitlisted, Tentative, Pending
- * Cancellation, Unavailable, Missed, Repurposed and anything added later say
- * nothing plain about whether or where the committee is meeting, and a screen
- * in a corridor is the wrong place to be equivocal.
- *
- * Cancelled is included deliberately. Someone walking to a meeting that is not
- * happening is exactly who this screen exists to catch, so it is drawn -- called
- * out as cancelled, and without a direction to walk in.
- */
-const DISPLAYED_STATUSES = new Set([
-  'Reserved',
-  'Alternate Room',
-  'Alternate Time',
-  'Alternate Room and Time',
-  'Virtual',
-  'Cancelled',
-])
-
-/** A meeting moved online has no room to point at. */
-export function isVirtual(status: string): boolean {
-  return status === 'Virtual'
-}
-
-export function isCancelled(status: string): boolean {
-  return status === 'Cancelled'
-}
+// Which statuses the display draws, and why Cancelled is one: isDisplayed.
+// isVirtual and isCancelled are re-exported for the page.
+export { isCancelled, isVirtual } from '@/lib/booking-status'
 
 /**
  * The floor a room is on, read off its number.
@@ -328,8 +302,8 @@ export function resolveWeekly(c: WeeklyCandidate): CommitteeMeeting | null {
   // can hide one week, and a hidden one can expose one.
   if (c.hidden ?? c.booking.hidden) return null
 
-  const status = c.status ?? c.series.status
-  if (!status || !DISPLAYED_STATUSES.has(status)) return null
+  const status = resolveOccurrenceStatus(c.status, c.series.status)
+  if (!status || !isDisplayed(status)) return null
 
   const startTime = c.start_time ?? c.series.start_time
   const endTime = c.end_time ?? c.series.end_time
@@ -371,7 +345,7 @@ export interface OneTimeCandidate {
 
 export function resolveOneTime(c: OneTimeCandidate): CommitteeMeeting | null {
   if (c.booking.hidden) return null
-  if (!c.status || !DISPLAYED_STATUSES.has(c.status)) return null
+  if (!c.status || !isDisplayed(c.status)) return null
 
   return {
     id: c.id,

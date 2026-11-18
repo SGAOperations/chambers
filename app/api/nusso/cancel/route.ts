@@ -4,6 +4,7 @@ import { getNussoCaller } from '@/lib/nusso/authorize'
 import { checkRateLimit } from '@/lib/check-rate-limit'
 import { requireBookingManager } from '@/lib/booking-scope'
 import { insertAuditRows } from '@/lib/audit'
+import { isNussoSettled, PENDING_CANCELLATION } from '@/lib/booking-status'
 import {
   applyReleasedStatus,
   emsEventName,
@@ -229,7 +230,7 @@ async function loadTargets(
     if (occurrenceId) query = query.eq('id', occurrenceId)
     const { data } = await query
     return (data ?? [])
-      .filter(r => !isSettled(r.status))
+      .filter(r => !isNussoSettled(r.status))
       .map(r => ({
         table: 'one_time_room_bookings' as const,
         id: r.id,
@@ -251,7 +252,7 @@ async function loadTargets(
   if (occurrenceId) query = query.eq('id', occurrenceId)
   const { data } = await query
   return (data ?? [])
-    .filter(r => !isSettled(r.status))
+    .filter(r => !isNussoSettled(r.status))
     .map(r => ({
       table: 'tabling_sessions' as const,
       id: r.id,
@@ -260,11 +261,6 @@ async function loadTargets(
       startTime: r.start_time,
       endTime: r.end_time,
     }))
-}
-
-/** Already cancelled or already virtual: nothing left in EMS to release. */
-function isSettled(status: string | null): boolean {
-  return status === 'Cancelled' || status === 'Virtual'
 }
 
 /**
@@ -302,7 +298,7 @@ async function placeFallbackRequest(
   for (const { target } of failed) {
     const { error } = await db
       .from(bookingType === 'One-Time Room' ? 'one_time_room_bookings' : 'tabling_sessions')
-      .update({ status: 'Pending Cancellation' })
+      .update({ status: PENDING_CANCELLATION })
       .eq('id', target.id)
     if (error) return error.message
     pending.push(target)
@@ -322,7 +318,7 @@ async function placeFallbackRequest(
     pending.map(target => ({
       booking_id: bookingId,
       admin_id: userId,
-      new_status: 'Pending Cancellation',
+      new_status: PENDING_CANCELLATION,
       target: 'session' as const,
       target_date: target.date,
       action: 'requested' as const,

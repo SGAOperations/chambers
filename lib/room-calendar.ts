@@ -1,4 +1,5 @@
 import { mergeSenatePreferences, wantsSenateSession } from './senate-types'
+import { calendarStateOf } from './booking-status'
 
 /**
  * Which room sessions belong on a calendar, and what an edit has to send to keep
@@ -14,52 +15,9 @@ import { mergeSenatePreferences, wantsSenateSession } from './senate-types'
  * database. The routes gather the rows; this decides what they mean.
  */
 
-/** What a status says about whether a session is on a calendar. */
-export type CalendarState =
-  /** On the calendar, as a meeting that is happening. */
-  | 'confirmed'
-  /** On the calendar, marked tentative -- Outlook hatches it. */
-  | 'tentative'
-  /** Not on the calendar; taken off if it was. */
-  | 'off'
-  /** Left exactly as it is, neither added nor removed. */
-  | 'leave'
-
-/**
- * The statuses that put a session on a calendar, matching the allow-list Slack
- * reminders use (lib/meeting-reminders.ts): a status is only on the calendar
- * when it says plainly that the body is meeting.
- *
- * Virtual is included. The meeting still happens, so it stays on the calendar --
- * its location says so rather than a room.
- */
-const CONFIRMED_STATUSES = new Set([
-  'Reserved',
-  'Alternate Room',
-  'Alternate Time',
-  'Alternate Room and Time',
-  'Virtual',
-])
-
-/**
- * What each status does to a calendar.
- *
- *   Tentative             goes on hatched: it is a real plan, not yet settled.
- *   Waitlisted            stays off until an administrator settles it, since
- *                         there is no room to go to yet.
- *   Pending Cancellation  leaves the calendar alone. The request has not been
- *                         decided, and removing the event now would mean putting
- *                         it back if the request is denied.
- *   Cancelled, Unavailable, Missed, Repurposed, and anything added later
- *                         come off: none of them is a meeting in that room.
- */
-export function calendarStateOf(status: string | null | undefined): CalendarState {
-  if (!status) return 'off'
-  if (CONFIRMED_STATUSES.has(status)) return 'confirmed'
-  if (status === 'Tentative') return 'tentative'
-  if (status === 'Pending Cancellation') return 'leave'
-  return 'off'
-}
+// The rule itself lives with every other status rule (issue #280); re-exported
+// so the calendar code keeps one import.
+export { calendarStateOf, type CalendarState } from './booking-status'
 
 /** One dated session of a room booking, as a calendar sees it. */
 export interface RoomSession {

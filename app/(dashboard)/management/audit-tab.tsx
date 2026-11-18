@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Skeleton } from '@/app/_components/skeleton'
+import { statusPillClasses } from '@/lib/booking-status'
 
 interface BookingOption {
   id: string
@@ -108,21 +109,6 @@ function formatTimestamp(ts: string) {
     month: 'short', day: 'numeric', year: 'numeric',
     hour: 'numeric', minute: '2-digit'
   })
-}
-
-const statusColors: Record<string, string> = {
-  'Reserved': 'bg-[#0f3d20] text-[#4ade80]',
-  'Alternate Room': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Alternate Time': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Alternate Room and Time': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Waitlisted': 'bg-[#3d0f0f] text-[#f87171]',
-  'Unavailable': 'bg-[#3d0f0f] text-[#f87171]',
-  'Pending Cancellation': 'bg-[#3d2200] text-[#fb923c]',
-  'Cancelled': 'bg-[#2a1042] text-[#c084fc]',
-  'Virtual': 'bg-[#062f3b] text-[#22d3ee]',
-  'Missed': 'bg-[#1a1a2e] text-[#a78bfa]',
-  'Repurposed': 'bg-[#1a1a1a] text-white',
-  'Tentative': 'bg-[#2d2800] text-[#fef08a]',
 }
 
 function AdminRoleBadge({ role }: { role: string | null | undefined }) {
@@ -418,7 +404,7 @@ export default function AuditTab() {
                         {entry.source === 'nusso' && (
                           <NussoBadge title="Written by the Browse/Book NUSSO integration: Chambers acted in EMS on SGA's shared account." />
                         )}
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[entry.new_status] ?? 'bg-[#0f2a4a] text-[#93b8d8]'}`}>
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusPillClasses[entry.new_status] ?? 'bg-[#0f2a4a] text-[#93b8d8]'}`}>
                           {entry.new_status}
                         </span>
                       </div>

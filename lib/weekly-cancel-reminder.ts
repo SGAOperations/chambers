@@ -18,6 +18,8 @@
  * without a database or a Slack workspace.
  */
 
+import { holdsRoom, resolveOccurrenceStatus } from './booking-status'
+
 /**
  * What a Slack channel id looks like: C for a public channel, G for an older
  * private one. Checked when the setting is saved, so a channel *name* pasted by
@@ -32,22 +34,6 @@ export const CANCEL_REMINDER_HOUR = 12
 const SUNDAY = 0
 
 const CHAMBERS_URL = 'https://chambers.northeasternsga.com'
-
-/**
- * The statuses that mean a room is actually being held for the body that week,
- * and so could be released: the booking as made, or as moved.
- *
- * An allow-list, for the same reason as REMINDED_STATUSES: Cancelled and Pending
- * Cancellation are already on their way out, Virtual and Unavailable hold no
- * room, Waitlisted and Tentative are not yet held, and Missed and Repurposed are
- * settled. None of those is something to remind anyone to cancel.
- */
-const HELD_STATUSES = new Set([
-  'Reserved',
-  'Alternate Room',
-  'Alternate Time',
-  'Alternate Room and Time',
-])
 
 /** Calendar arithmetic on 'YYYY-MM-DD', at UTC noon so DST cannot move the day. */
 export function addDays(date: string, days: number): string {
@@ -80,8 +66,8 @@ export interface CancelCandidate {
 
 /** Whether a week is a room held for someone, with the occurrence-over-series precedence. */
 export function isHeld(c: CancelCandidate): boolean {
-  const status = c.status ?? c.seriesStatus
-  return !!status && HELD_STATUSES.has(status)
+  // Which statuses hold a room, and why it is an allow-list: holdsRoom.
+  return holdsRoom(resolveOccurrenceStatus(c.status, c.seriesStatus))
 }
 
 /**

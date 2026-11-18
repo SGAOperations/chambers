@@ -10,6 +10,7 @@ import {
   type MyRoomsResponse,
 } from '@/app/(dashboard)/my-rooms/shared'
 import type { CancellationScope, CancellationType } from './cancellation-request'
+import { isCancellable } from './booking-status'
 
 /**
  * /chambers-cancel: requesting a cancellation from Slack.
@@ -27,9 +28,6 @@ import type { CancellationScope, CancellationType } from './cancellation-request
  */
 
 export const CANCEL_CALLBACK_ID = 'chambers_cancel_request'
-
-/** Statuses My Rooms does not offer a cancellation for. */
-const NOT_CANCELLABLE = ['Pending Cancellation', 'Cancelled', 'Virtual']
 
 /** Slack's limits on a static_select: 100 options, 75 characters of text each. */
 const MAX_OPTIONS = 100
@@ -69,7 +67,7 @@ export async function loadCancellableSessions(
   for (const b of flat) counts.set(b.bookingId, (counts.get(b.bookingId) ?? 0) + 1)
 
   return flat
-    .filter(b => b.canManage && !NOT_CANCELLABLE.includes(b.status))
+    .filter(b => b.canManage && isCancellable(b.status))
     .map(b => ({ ...b, sessionCount: counts.get(b.bookingId) ?? 1 }))
 }
 

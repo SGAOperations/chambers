@@ -1,6 +1,7 @@
 import { db } from './db/data-api'
 import type { CancellationLine } from './emails/csc-cancellation-request'
 import type { AuditRow } from './audit'
+import { PENDING_CANCELLATION, resolveOccurrenceStatus } from './booking-status'
 
 const adminSupabase = db
 
@@ -31,7 +32,7 @@ export function resolveOccurrence(
   } | null
 ) {
   return {
-    status: occ.status ?? series?.status ?? null,
+    status: resolveOccurrenceStatus(occ.status, series?.status ?? null),
     startTime: occ.start_time ?? series?.start_time ?? '',
     endTime: occ.end_time ?? series?.end_time ?? '',
     roomOrTable: occ.room_name ?? series?.room_name ?? 'Not recorded',
@@ -39,7 +40,7 @@ export function resolveOccurrence(
   }
 }
 
-const PENDING = 'Pending Cancellation'
+const PENDING = PENDING_CANCELLATION
 
 interface BodyRef { name: string }
 interface BookingRef { id: string; type: string; purpose: string; bodies: BodyRef | BodyRef[] | null }

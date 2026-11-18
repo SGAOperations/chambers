@@ -6,21 +6,8 @@ import { resolveMeetingTime } from '@/lib/meeting-time'
 import DateField from '@/app/_components/date-field'
 import BookingScopeSelector, { type BookingScopeValue } from '@/app/_components/booking-scope-selector'
 import { DIVISIONS, type Division, type BookingScope } from '@/lib/booking-scope'
+import { BOOKING_STATUSES, DEFAULT_STATUS } from '@/lib/booking-status'
 
-const STATUSES = [
-  'Reserved',
-  'Alternate Room',
-  'Alternate Time',
-  'Alternate Room and Time',
-  'Waitlisted',
-  'Unavailable',
-  'Pending Cancellation',
-  'Cancelled',
-  'Virtual',
-  'Missed',
-  'Repurposed',
-  'Tentative',
-]
 
 interface Body {
   id: string
@@ -126,7 +113,7 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
     // start_time for display, and the server collapses it back (issue #126).
     meeting_time: w?.meeting_time?.slice(0, 5) ?? '',
     reservation_code: w?.reservation_code ?? '',
-    status: w?.status ?? 'Reserved',
+    status: w?.status ?? DEFAULT_STATUS,
   })
 
   const [occurrences, setOccurrences] = useState<Occurrence[]>(
@@ -279,7 +266,7 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
       <div>
         <label className={labelCls}>Status</label>
         <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} className={inputCls}>
-          {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+          {BOOKING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
@@ -377,7 +364,7 @@ export default function EditWeeklyForm({ booking, bodies, initialExpandedOcc, on
                       className={inputCls}
                     >
                       <option value="">Default: {form.status}</option>
-                      {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                      {BOOKING_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
 

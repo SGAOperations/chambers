@@ -3,6 +3,7 @@ import { appZoneParts } from './meeting-reminders'
 import { resolveBookingRecipients, type Recipient, type ScopedRow } from './booking-scope'
 import { calendarRecipientsFor, calendarStateOf, occurrenceUid, sessionUid, splitByAudience, type RoomSeries, type RoomSession } from './room-calendar'
 import { sendBookingCancelledEmail } from './emails/booking-cancelled'
+import { isVirtual, resolveOccurrenceStatus } from './booking-status'
 import { noticeCancelledEventChannels } from './event-channels'
 
 /**
@@ -24,7 +25,7 @@ export function appToday(): string {
 
 /** A meeting that moved online keeps its place on the calendar, without a room. */
 export function locationOf(status: string | null | undefined, roomOrTable: string | null | undefined): string {
-  if (status === 'Virtual') return 'Virtual'
+  if (isVirtual(status)) return 'Virtual'
   return roomOrTable || 'Room to be confirmed'
 }
 
@@ -64,7 +65,7 @@ export function weeklyRoomSessions(
   bodyName: string
 ): RoomSession[] {
   return occurrences.map(o => {
-    const status = o.status ?? series.status
+    const status = resolveOccurrenceStatus(o.status, series.status)
     return {
       uid: occurrenceUid(o.id),
       date: o.occurrence_date,

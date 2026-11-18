@@ -1,13 +1,13 @@
 'use client'
 
 import BookingModal from '../bookings/booking-modal'
+import { openRequestStatusStyles } from './shared'
 import {
   BOOKING_STATUSES,
   STATUS_DEFINITIONS,
-  statusColors,
-  statusTextColors,
-  openRequestStatusStyles,
-} from './shared'
+  statusCardClasses,
+  statusTextClasses,
+} from '@/lib/booking-status'
 import { OPEN_REQUEST_STATUSES, OPEN_STATUS_DESCRIPTIONS } from '@/lib/request-status'
 
 /**
@@ -29,7 +29,7 @@ export default function StatusGlossaryModal({ onClose }: { onClose: () => void }
         {BOOKING_STATUSES.map(status => (
           <div key={status} className="rounded-xl border border-[#1e5080] bg-[#0e2f4f] p-4 space-y-2">
             <dt>
-              <span className={`inline-block rounded-md border px-2 py-0.5 text-xs font-semibold ${statusColors[status]} ${statusTextColors[status]}`}>
+              <span className={`inline-block rounded-md border px-2 py-0.5 text-xs font-semibold ${statusCardClasses[status]} ${statusTextClasses[status]}`}>
                 {status}
               </span>
             </dt>

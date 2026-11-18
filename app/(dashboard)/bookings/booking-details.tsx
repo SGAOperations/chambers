@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import ScopeLabel from '@/app/_components/scope-label'
 import { resolveMeetingTime } from '@/lib/meeting-time'
 import type { BookingScope, Division } from '@/lib/booking-scope'
+import { resolveOccurrenceStatus, statusPillClasses } from '@/lib/booking-status'
 
 /**
  * A booking, read only, for an admin who may look and not touch (issue #225).
@@ -109,21 +110,6 @@ export type BookingDetailsTarget =
       }
     }
 
-export const statusColors: Record<string, string> = {
-  'Reserved': 'bg-[#0f3d20] text-[#4ade80]',
-  'Alternate Room': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Alternate Time': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Alternate Room and Time': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Waitlisted': 'bg-[#3d0f0f] text-[#f87171]',
-  'Unavailable': 'bg-[#3d0f0f] text-[#f87171]',
-  'Pending Cancellation': 'bg-[#3d2200] text-[#fb923c]',
-  'Cancelled': 'bg-[#2a1042] text-[#c084fc]',
-  'Virtual': 'bg-[#062f3b] text-[#22d3ee]',
-  'Missed': 'bg-[#1a1a2e] text-[#a78bfa]',
-  'Repurposed': 'bg-[#1a1a1a] text-white',
-  'Tentative': 'bg-[#2d2800] text-[#fef08a]',
-}
-
 function formatTime(time: string) {
   const [h, m] = time.split(':')
   const hour = parseInt(h)
@@ -140,7 +126,7 @@ function formatDate(date: string) {
 
 function StatusPill({ status }: { status: string }) {
   return (
-    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[status] || 'bg-[#184073] text-[#93b8d8]'}`}>
+    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusPillClasses[status] || 'bg-[#184073] text-[#93b8d8]'}`}>
       {status}
     </span>
   )
@@ -295,7 +281,7 @@ function WeeklyDetails({ booking, occurrenceDate }: {
           const startTime = o.start_time ?? w.start_time
           const endTime = o.end_time ?? w.end_time
           const meetingTime = resolveMeetingTime(o.meeting_time, w.meeting_time, o.start_time, w.start_time)
-          const status = o.status ?? w.status
+          const status = resolveOccurrenceStatus(o.status, w.status)
           const room = o.room_name ?? w.room_name
           const code = o.reservation_code ?? w.reservation_code
           const purpose = o.purpose ?? booking.purpose

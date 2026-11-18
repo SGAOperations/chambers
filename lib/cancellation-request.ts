@@ -1,6 +1,7 @@
 import type { Db } from './db/data-api'
 import { cancellationRequestTarget, insertAuditRows } from './audit'
 import { queueBookingRequestAlert } from './admin-slack-alerts'
+import { PENDING_CANCELLATION } from './booking-status'
 
 /**
  * Filing a cancellation request, factored out of app/api/cancellation-requests
@@ -137,20 +138,20 @@ export async function fileCancellationRequest(
     if (bookingType === 'One-Time Room') {
       const { error } = await adminSupabase
         .from('one_time_room_bookings')
-        .update({ status: 'Pending Cancellation' })
+        .update({ status: PENDING_CANCELLATION })
         .eq('id', occurrence_id)
       if (error) return { error: error.message }
     } else if (bookingType === 'Tabling') {
       const { error } = await adminSupabase
         .from('tabling_sessions')
-        .update({ status: 'Pending Cancellation' })
+        .update({ status: PENDING_CANCELLATION })
         .eq('id', occurrence_id)
       if (error) return { error: error.message }
     } else {
       // Weekly Room — update the specific occurrence
       const { error } = await adminSupabase
         .from('weekly_room_occurrences')
-        .update({ status: 'Pending Cancellation' })
+        .update({ status: PENDING_CANCELLATION })
         .eq('id', occurrence_id)
       if (error) return { error: error.message }
     }
@@ -159,12 +160,12 @@ export async function fileCancellationRequest(
     if (bookingType === 'One-Time Room') {
       await adminSupabase
         .from('one_time_room_bookings')
-        .update({ status: 'Pending Cancellation' })
+        .update({ status: PENDING_CANCELLATION })
         .eq('booking_id', booking_id)
     } else if (bookingType === 'Weekly Room') {
       await adminSupabase
         .from('weekly_room_bookings')
-        .update({ status: 'Pending Cancellation' })
+        .update({ status: PENDING_CANCELLATION })
         .eq('booking_id', booking_id)
     } else if (bookingType === 'Tabling') {
       const { data: tablingBooking } = await adminSupabase
@@ -176,7 +177,7 @@ export async function fileCancellationRequest(
       if (tablingBooking) {
         await adminSupabase
           .from('tabling_sessions')
-          .update({ status: 'Pending Cancellation' })
+          .update({ status: PENDING_CANCELLATION })
           .eq('tabling_booking_id', tablingBooking.id)
       }
     }
@@ -197,15 +198,15 @@ export async function fileCancellationRequest(
   await insertAuditRows(adminSupabase, [{
     booking_id,
     admin_id: requestedBy,
-    new_status: 'Pending Cancellation',
+    new_status: PENDING_CANCELLATION,
     target: cancellationRequestTarget(bookingType, scope),
     target_date: scope === 'occurrence' ? occurrenceDate : null,
     action: 'requested',
     // Omitted where the rows disagreed, and where they were already pending --
     // a second request over an unresolved one moves nothing, and "Pending
     // Cancellation -> Pending Cancellation" would read as though it had.
-    changes: previousStatus && previousStatus !== 'Pending Cancellation'
-      ? [{ label: 'Status', from: previousStatus, to: 'Pending Cancellation' }]
+    changes: previousStatus && previousStatus !== PENDING_CANCELLATION
+      ? [{ label: 'Status', from: previousStatus, to: PENDING_CANCELLATION }]
       : null,
   }])
 

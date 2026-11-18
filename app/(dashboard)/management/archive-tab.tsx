@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { getJson } from '@/lib/fetch-json'
 import { Skeleton } from '@/app/_components/skeleton'
+import { statusPillClasses } from '@/lib/booking-status'
 
 function ArchiveTabSkeleton() {
   return (
@@ -126,21 +127,6 @@ function formatDate(date: string) {
   return new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short', month: 'short', day: 'numeric'
   })
-}
-
-const statusColors: Record<string, string> = {
-  'Reserved': 'bg-[#0f3d20] text-[#4ade80]',
-  'Alternate Room': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Alternate Time': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Alternate Room and Time': 'bg-[#0e2f4f] text-[#4285f4]',
-  'Waitlisted': 'bg-[#3d0f0f] text-[#f87171]',
-  'Unavailable': 'bg-[#3d0f0f] text-[#f87171]',
-  'Pending Cancellation': 'bg-[#3d2200] text-[#fb923c]',
-  'Cancelled': 'bg-[#2a1042] text-[#c084fc]',
-  'Virtual': 'bg-[#062f3b] text-[#22d3ee]',
-  'Missed': 'bg-[#1a1a2e] text-[#a78bfa]',
-  'Repurposed': 'bg-[#1a1a1a] text-white',
-  'Tentative': 'bg-[#2d2800] text-[#fef08a]',
 }
 
 function AdminRoleBadge({ role }: { role: string | null | undefined }) {
@@ -367,7 +353,7 @@ export default function ArchiveTab() {
                     <div className="flex items-center gap-3">
                       <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
                       <NussoBadge bookedViaNusso={b.booked_via_nusso} />
-                      <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
+                      <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusPillClasses[firstSession.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {firstSession.status}
                       </span>
                       <span className="text-xs text-[#6a96bb] font-medium">One-Time Room</span>
@@ -400,7 +386,7 @@ export default function ArchiveTab() {
                     <div className="flex items-center gap-3">
                       <span className="hidden md:inline"><AdminRoleBadge role={b.creator_role} /></span>
                       <NussoBadge bookedViaNusso={b.booked_via_nusso} />
-                      <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
+                      <span className={`hidden md:inline text-xs font-semibold px-2.5 py-1 rounded-full ${statusPillClasses[w.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                         {w.status}
                       </span>
                       <span className="text-xs text-[#6a96bb] font-medium">Weekly Room</span>
@@ -433,7 +419,7 @@ export default function ArchiveTab() {
                   <div className="space-y-2">
                     {t.tabling_sessions.map((s, i) => (
                       <div key={i} className="flex items-center gap-3 text-sm text-[#93b8d8] bg-[#0f2a4a] rounded-lg px-3 py-2">
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusColors[s.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusPillClasses[s.status] || 'bg-[#184073] text-[#93b8d8]'}`}>
                           {s.status}
                         </span>
                         <span>{s.location}</span>

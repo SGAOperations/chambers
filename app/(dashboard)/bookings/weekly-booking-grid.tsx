@@ -2,6 +2,7 @@
 
 import { Fragment } from 'react'
 import { formatScopeLabel, type BookingScope, type Division } from '@/lib/booking-scope'
+import { isCancelled, resolveOccurrenceStatus, statusCellHex } from '@/lib/booking-status'
 
 interface WeeklyOccurrence {
   id: string
@@ -74,21 +75,6 @@ function getMondayKey(dateStr: string): string {
   return d.toISOString().slice(0, 10)
 }
 
-const statusCellHex: Record<string, string> = {
-  'Reserved': '#4ade80',
-  'Alternate Room': '#4285f4',
-  'Alternate Time': '#4285f4',
-  'Alternate Room and Time': '#4285f4',
-  'Waitlisted': '#f87171',
-  'Unavailable': '#f87171',
-  'Pending Cancellation': '#fb923c',
-  'Cancelled': '#c084fc',
-  'Virtual': '#22d3ee',
-  'Missed': '#a78bfa',
-  'Repurposed': '#ffffff',
-  'Tentative': '#fef08a',
-}
-
 function formatTime(time: string) {
   const [h, m] = time.split(':')
   const hour = parseInt(h)
@@ -99,7 +85,7 @@ function formatTime(time: string) {
 
 export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBookingGridProps) {
   const active = bookings
-    .filter(b => b.weekly_room_bookings?.[0]?.status !== 'Cancelled')
+    .filter(b => !isCancelled(b.weekly_room_bookings?.[0]?.status))
     .sort((a, b) => {
       const wa = a.weekly_room_bookings?.[0]
       const wb = b.weekly_room_bookings?.[0]
@@ -187,12 +173,13 @@ export default function WeeklyBookingGrid({ bookings, onBookingClick }: WeeklyBo
                   {weeks.map(wk => {
                     const occ = occMap.get(wk)
                     if (!occ) return <td key={wk} />
-                    const hex = statusCellHex[occ.status ?? w.status] ?? '#1e3a5f'
+                    const status = resolveOccurrenceStatus(occ.status, w.status)
+                    const hex = statusCellHex[status] ?? '#1e3a5f'
                     return (
                       <td key={wk} className="py-0.5">
                         <button
                           onClick={() => onBookingClick(b, occ.occurrence_date)}
-                          title={`${occ.occurrence_date}: ${occ.status ?? w.status}`}
+                          title={`${occ.occurrence_date}: ${status}`}
                           style={{ backgroundColor: hex }}
                           className="w-10 h-5 rounded hover:opacity-70 transition-opacity block"
                         />
